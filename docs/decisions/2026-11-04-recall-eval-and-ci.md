@@ -21,3 +21,15 @@ A single command, runnable without a browser or model, fails when recall selecti
 - The harness runs synthetic groups, not real store data; Phase 1 of the roadmap replaces the fixtures with a real dump.
 - CI has not executed on GitHub yet.
 - The other eight directions are designed, not implemented; each phase in the roadmap names its own check.
+
+## Phase 1 addendum (live fixtures and thresholds)
+
+Predicate: on ten real questions from the store, the pipeline injects the memory that answers each one, measured by `scripts/eval-live.mjs` against a running sidecar.
+
+- Baseline: 6/10, 805 characters, 94 ms.
+- Fix 1: the chat search result omitted `session_id`, so the session tier never matched. The bridge now enriches each row from a 60-second cached listing of the same user.
+- Fix 2: the keyword fallback ran only when every tier returned zero rows. One wrong low-score hit was enough to block it. The fallback now tops up whenever selection is under the item budget, and re-runs outright when nothing survives.
+- Fix 3: thresholds. minScore 0.32 to 0.56, maxChars 1600 to 1200, maxItems unchanged.
+- Result: 9/10, 941 characters, 149 ms. `npm test` 85/85.
+
+Open risks: ten fixtures from one store; a higher minScore pushes most Chinese recalls onto the keyword path, which suits the bundled English embedder but should be re-measured after Phase 2. The remaining miss is the loader-id question, which the keyword path ranks behind a longer unrelated memory.

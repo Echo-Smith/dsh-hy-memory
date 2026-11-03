@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   mode: 'pro',
   language: 'auto',
   tiers: { personal: true, project: true, session: true },
-  recall: { enabled: true, maxItems: 5, maxChars: 1600, minScore: 0.32 },
+  recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.56 },
   capture: { enabled: true, windowTurns: 3, idleFlushMs: 180000, includeToolCalls: true, toolResultChars: 1200, productivity: false },
   promotion: { enabled: true, everyTurns: 8, onSessionEnd: true },
   llm: { source: 'dsh', provider: '', model: '', baseURL: '' },

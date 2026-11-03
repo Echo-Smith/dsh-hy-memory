@@ -1,0 +1,12 @@
+[
+  { "name": "update check is notify only", "query": "检查更新为什么不自动安装？", "expect": "自动安装" },
+  { "name": "MemHub sync is wired not rebuilt", "query": "MemHub 自带同步要怎么处理", "expect": "对接" },
+  { "name": "poteto skill task scope", "query": "peteto skill 让我完成什么", "expect": "11 项改动" },
+  { "name": "readme bilingual requirement", "query": "README 要怎么写", "expect": "双语" },
+  { "name": "plugin compatibility with ds-bot", "query": "使用 ds-bot 这类插件记忆还生效吗", "expect": "ds-bot" },
+  { "name": "screenshot cropping requirement", "query": "截图有什么要求", "expect": "只截取" },
+  { "name": "memory token visibility", "query": "记忆注入的 token 怎么显示", "expect": "tokens" },
+  { "name": "session and project namespace", "query": "项目记忆和会话记忆是一份存储吗", "expect": "agent_id" },
+  { "name": "working and coding need workspace id", "query": "working 和 coding 场景凭什么检索", "expect": "workspace_id" },
+  { "name": "loader id mismatch error", "query": "loader id 和包名不一致怎么修", "expect": "loader id" }
+]

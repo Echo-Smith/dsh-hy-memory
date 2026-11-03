@@ -394,7 +394,31 @@ export function createRecall(deps) {
       if (!client) return decision
       const context = contextOf(payload, session)
       const groups = await search(client, query, context)
-      const merged = selectRecall(groups, config.recall ?? {})
+      let merged = selectRecall(groups, config.recall ?? {})
+      // A weak embedder can leave the turn short even though keyword matches
+      // exist. Top up with the token-overlap path whenever selection comes in
+      // under the item budget, and retry it outright when nothing survived.
+      const budgetItems = Math.max(1, Number(config.recall?.maxItems) || 5)
+      if (merged.items.length < budgetItems) {
+        try {
+          const hits = await withDeadline(
+            () => lexicalHits(client, query, context, resolveUser(config)),
+            Math.max(300, Math.min(timeoutMs(), 1500)),
+            new AbortController(),
+          )
+          if (Array.isArray(hits) && hits.length > 0) {
+            const seen = new Set(merged.items.map((item) => item.content))
+            const extra = hits.filter((hit) => !seen.has(hit.content))
+            const merged_groups = [
+              ...groups,
+              { tier: 'session', projectKey: context.projectKey, sessionId: context.sessionId, items: extra },
+            ]
+            merged = selectRecall(merged_groups, config.recall ?? {})
+          }
+        } catch (error) {
+          log('lexical recall failed', error)
+        }
+      }
       if (typeof onInjected === 'function') {
         onInjected({ items: merged.items.length, chars: merged.text.length, tiers: merged.items.map((item) => item.tier) })
       }

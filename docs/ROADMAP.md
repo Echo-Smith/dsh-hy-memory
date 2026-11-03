@@ -10,12 +10,16 @@ Sequenced from the audit that followed the first public release. Each phase is i
 | Recall budget fix (truncate an oversize first item instead of injecting it whole) | same harness, plus `npm test` 85/85 |
 | CI on GitHub Actions (syntax, host tests, panel smoke, recall eval) | workflow file, all four steps run locally |
 
-## Phase 1: recall quality
+## Phase 1: recall quality (done)
 
-1. Extend the eval harness with real fixtures exported from a working store (`bridge/v1/export` style dump) so the numbers describe real recall, not synthetic groups.
-2. Record a baseline: hit rate, noise rate, injected characters per turn, latency.
-3. Tune `recall.minScore` / `maxChars` against the baseline, one change per commit.
-4. Only then decide whether the embedder needs replacing.
+`scripts/eval-live.mjs` drives the real pipeline against a running sidecar. Fixtures hold queries and expected keywords only, never memory text.
+
+- Baseline with the shipped defaults (minScore 0.32, maxChars 1600, maxItems 5): 6/10 hits, 805 average injected characters, 94 ms average latency.
+- Two real defects surfaced. Search results carried no `session_id`, so the session tier could never match; the bridge now enriches rows from one cached listing. The lexical fallback only ran when every tier came back empty, so a single wrong low-score hit suppressed keyword recall; it now tops up whenever selection lands under the item budget.
+- Tuned defaults (minScore 0.56, maxChars 1200, maxItems 5): 9/10 hits, 941 average characters, 149 ms latency.
+- Caveat: ten fixtures from one store. The threshold is tuned for a Chinese user on an English embedder, where most recalls now resolve through the keyword path. Re-measure after changing the embedder.
+
+Remaining Phase 1 work: fixtures from other projects, an English-only fixture set, and a separate measurement of wrong-but-plausible items.
 
 ## Phase 2: embeddings
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import traceback
 
 LOCAL_MODEL_DIMS = 384
@@ -146,6 +147,62 @@ def install_bridge_routes() -> None:
         kwargs["scene"] = body.get("scene") or "all"
         return client.list_memories(**kwargs)
 
+    _session_map = {"at": 0.0, "map": {}}
+
+    def _session_map_refresh(client, user_ids):
+        """memory_id to session_id, refreshed once a minute.
+
+        The chat search returns rows without their session id, so the session
+        tier could never match. One listing of the same user fills the gap; it
+        is cached because searches are frequent and sessions change slowly.
+        """
+        now = time.time()
+        cached = _session_map
+        if now - cached["at"] < 60 and cached["map"]:
+            return cached["map"]
+        mapping = {}
+        try:
+            page = client.list_memories(user_ids=user_ids, limit=500, offset=0, scene="chat")
+            rows = page.get("memories") if isinstance(page, dict) else page
+            if isinstance(rows, dict):
+                rows = rows.get("memories") or rows.get("normal") or []
+            if isinstance(page, dict) and isinstance(page.get("vdb"), dict):
+                rows = page["vdb"].get("memories") or rows
+            for row in rows or []:
+                if not isinstance(row, dict):
+                    continue
+                memory_id = row.get("memory_id") or row.get("id")
+                session_id = row.get("session_id")
+                if memory_id and session_id:
+                    mapping[str(memory_id)] = str(session_id)
+        except Exception:
+            mapping = cached["map"]
+        _session_map["at"] = now
+        _session_map["map"] = mapping
+        return mapping
+
+    def _enrich_sessions(client, body, result):
+        memory = result.get("memories") if isinstance(result, dict) else None
+        if not isinstance(memory, dict):
+            return result
+        rows = []
+        for key in ("normal", "proactive", "schema"):
+            value = memory.get(key)
+            if isinstance(value, list):
+                rows.extend(value)
+        if not rows:
+            return result
+        user_ids = _names(body, "user_ids", "user_id")
+        mapping = _session_map_refresh(client, user_ids or [""])
+        for row in rows:
+            if not isinstance(row, dict) or row.get("session_id"):
+                continue
+            memory_id = str(row.get("memory_id") or row.get("id") or "")
+            session_id = mapping.get(memory_id)
+            if session_id:
+                row["session_id"] = session_id
+        return result
+
     def _search(client, body):
         query = body.get("query")
         if not query:
@@ -170,7 +227,12 @@ def install_bridge_routes() -> None:
             kwargs["branch"] = str(body["branch"])
         if body.get("min_score") is not None:
             kwargs["min_score"] = float(body["min_score"])
-        return client.search(query, **kwargs)
+        result = client.search(query, **kwargs)
+        try:
+            result = _enrich_sessions(client, body, result)
+        except Exception:
+            pass
+        return result
 
     def _complete(body):
         """Plain completion through the same endpoint the SDK uses.
