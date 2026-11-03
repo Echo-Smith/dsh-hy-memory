@@ -557,6 +557,7 @@ function createScheduler() {
 
 function createFetch(fetchCalls, options = {}) {
   const sessionPanel = options.sessionPanel !== false
+  const memhubDetected = options.memhubDetected !== false
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
   const settings = { enabled: true }
   let activityPolls = 0
@@ -566,7 +567,14 @@ function createFetch(fetchCalls, options = {}) {
     const verb = target.startsWith(marker) ? target.slice(marker.length) : target.slice(target.lastIndexOf('/') + 1)
     fetchCalls.push({ url: target, options: callOptions })
     if (verb === 'status' || verb === 'start') {
-      return jsonResponse({ ok: true, data: { ...STATUS, enabled: settings.enabled } })
+      return jsonResponse({
+        ok: true,
+        data: {
+          ...STATUS,
+          enabled: settings.enabled,
+          memhub: memhubDetected ? STATUS.memhub : { detected: false, path: '', sizeBytes: 0 },
+        },
+      })
     }
     if (verb === 'settings/get') {
       return jsonResponse({ ok: true, data: { settings: { enabled: settings.enabled, ui: { sessionPanel } } } })
@@ -674,7 +682,7 @@ function createDocumentStub() {
   }
 }
 
-function createHarness({ withPrimitives, sessionPanel = true, memhubErrors = false }) {
+function createHarness({ withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true }) {
   const slotRegistrations = []
   const tabRegistrations = []
   const localeRegistrations = []
@@ -686,7 +694,7 @@ function createHarness({ withPrimitives, sessionPanel = true, memhubErrors = fal
   const primitives = createFakePrimitives(mini.lib)
   const scheduler = createScheduler()
   const documentStub = createDocumentStub()
-  const fetchImpl = createFetch(fetchCalls, { sessionPanel, memhubErrors })
+  const fetchImpl = createFetch(fetchCalls, { sessionPanel, memhubErrors, memhubDetected })
 
   const requireStub = (specifier) => {
     if (specifier === 'react' || specifier === 'react-dom' || specifier === 'react/jsx-runtime') return mini.lib
@@ -889,8 +897,8 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
   }
 }
 
-async function run({ withPrimitives, label, sessionPanel = true, memhubErrors = false }) {
-  const harness = createHarness({ withPrimitives, sessionPanel, memhubErrors })
+async function run({ withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true }) {
+  const harness = createHarness({ withPrimitives, sessionPanel, memhubErrors, memhubDetected })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
   assert.ok(exported.inject.includes('slots') && exported.inject.includes('locale'), `${label}: required services`)
@@ -1143,7 +1151,9 @@ async function exerciseMasterSwitch(harness) {
   const nodesAtMount = hostsOf(harness)
   const switchIndex = nodesAtMount.findIndex((node) => (node.props ?? {}).role === 'switch')
   const tabIndex = nodesAtMount.findIndex((node) => node.type === 'button' && harness.mini.textOf(node) === t('tabs.personal'))
-  assert.ok(switchIndex > tabIndex, 'the switch sits in the tab row, after the tabs')
+  assert.ok(switchIndex < tabIndex, 'the switch sits in the header block, above the tab row')
+  assert.equal(nodesAtMount.filter((node) => String(node.props?.className ?? '') === 'hm-headerSwitch').length, 1,
+    'the header carries the switch in its own right-edge cell')
   assert.equal(nodesAtMount.filter((node) => String(node.props?.className ?? '') === 'hm-tabsRow').length, 1,
     'the tab row exists')
   assert.equal(toggle.props['aria-checked'], 'true', 'the switch reflects status.enabled')
@@ -1193,6 +1203,8 @@ async function exerciseWorkspaceBlocks(harness) {
   const filesHead = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-filesHead')
   assert.ok(filesHead !== undefined && harness.mini.textOf(filesHead).includes(t('files.title')),
     '文件 sits in the same header row as the search field')
+  const personalRefresh = findByLabel(harness, t('files.refresh'))
+  assert.ok(personalRefresh !== undefined, '个人 keeps the refresh button in the 文件 header')
   assert.ok(hostsOf(harness).indexOf(searchBox) > hostsOf(harness).indexOf(filesHead),
     '个人 keeps the search inside the 文件 header')
 
@@ -1205,6 +1217,10 @@ async function exerciseWorkspaceBlocks(harness) {
   const pill = findByLabel(harness, t('project.select'))
   assert.ok(workspaceNodes.indexOf(workspaceSearch) > workspaceNodes.indexOf(pill),
     'the search sits to the right of the project pill on the same row')
+  const workspaceRefresh = findByLabel(harness, t('files.refresh'))
+  assert.ok(workspaceRefresh !== undefined, 'the refresh button renders on 项目与会话 too')
+  assert.ok(workspaceNodes.indexOf(workspaceRefresh) > workspaceNodes.indexOf(workspaceSearch),
+    'the refresh button sits right of the inline search')
   assert.equal(pill.props['aria-expanded'], 'false', 'the picker starts closed')
   assert.ok(harness.mini.textOf(pill).includes(STATUS.project.title), 'the picker shows the current project')
 
@@ -1371,6 +1387,20 @@ async function exercisePersonalDelete(harness) {
   assertPost(harness, '/api/hy-memory/delete', { tier: 'personal', id: PERSONAL_ITEM.id })
 }
 
+async function exerciseMemhubMissing(harness) {
+  const t = await mountSection(harness, 'zh')
+  const text = harness.mini.text()
+  assert.ok(text.includes(t('memhub.title')), 'the MemHub card still renders when MemHub is absent')
+  assert.ok(text.includes(t('memhub.missing')), 'the absent card states MemHub is not installed')
+  assert.equal(findButton(harness, t('memhub.export')), undefined, 'export is hidden when MemHub is absent')
+  assert.equal(findButton(harness, t('memhub.pull')), undefined, 'pull is hidden when MemHub is absent')
+  assert.equal(findButton(harness, t('memhub.import')), undefined, 'import is hidden when MemHub is absent')
+  assert.equal(hostsOf(harness).filter((node) => String(node.props?.className ?? '').includes('hm-cardMissing')).length, 1,
+    'the absent card uses the dashed variant')
+  assert.equal(findButtons(harness, t('common.details')).length, 1,
+    'only the diagnostics card keeps its details toggle')
+}
+
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
 const withoutSeed = await run({ withPrimitives: false, label: 'without host primitives (fallbacks)' })
 const sessionPanelOff = await run({ withPrimitives: true, label: 'session panel disabled', sessionPanel: false })
@@ -1423,6 +1453,10 @@ const deleted = await run({ withPrimitives: true, label: 'personal delete' })
 await exercisePersonalDelete(deleted)
 deleted.mini.unmount()
 
+const absent = await run({ withPrimitives: true, label: 'memhub absent', memhubDetected: false })
+await exerciseMemhubMissing(absent)
+absent.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1438,5 +1472,6 @@ console.log(`  file rows: derived title/date/actions verified, copy wrote ${file
 console.log(`  session grouping: sessions POST verified, all-session groups + picker filter verified`)
 console.log(`  pagination: limit/offset verified for 个人, 项目记忆 and 会话记忆 independently (10/20/50)`)
 console.log(`  personal delete: menu 删除 + confirmation + POST /delete {tier:'personal'} verified`)
+console.log(`  memhub absent: dashed card, short not-installed line, all three actions hidden`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)
