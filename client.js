@@ -507,11 +507,11 @@ function pick(name, fallback) {
   const candidate = seed?.[name];
   return typeof candidate === "function" ? candidate : fallback;
 }
-function FallbackButton({ variant = "ghost", size: size2 = "md", icon, children, className, type, ...rest }) {
+function FallbackButton({ variant = "ghost", size = "md", icon, children, className, type, ...rest }) {
   return h("button", {
     ...rest,
     type: type ?? "button",
-    className: `hm-btn hm-btn-${variant} hm-btn-${size2}${className ? ` ${className}` : ""}`
+    className: `hm-btn hm-btn-${variant} hm-btn-${size}${className ? ` ${className}` : ""}`
   }, icon != null ? h("span", { className: "hm-btnIcon", "aria-hidden": "true" }, icon) : null, children);
 }
 function FallbackInput({ icon, className, ...rest }) {
@@ -629,15 +629,15 @@ var ICON_PATHS = {
 };
 function Icon(props) {
   const name = props.name;
-  const size2 = typeof props.size === "number" ? props.size : 16;
+  const size = typeof props.size === "number" ? props.size : 16;
   const strokeWidth = typeof props.strokeWidth === "number" ? props.strokeWidth : 1.6;
   const paths = ICON_PATHS[name] ?? [];
   return h("svg", {
     className: props.className,
     style: props.style,
     viewBox: "0 0 24 24",
-    width: size2,
-    height: size2,
+    width: size,
+    height: size,
     fill: "none",
     stroke: "currentColor",
     strokeWidth,
@@ -835,11 +835,11 @@ function timeText(t, at, now = Date.now()) {
   const relative = ui.relativeTime(value, now);
   return t(`time.${relative.unit}`, { n: relative.n });
 }
-function formatBytes(size2) {
-  if (typeof size2 !== "number" || !Number.isFinite(size2) || size2 < 0) return "";
-  if (size2 < 1024) return `${size2} B`;
+function formatBytes(size) {
+  if (typeof size !== "number" || !Number.isFinite(size) || size < 0) return "";
+  if (size < 1024) return `${size} B`;
   const units = ["KB", "MB", "GB", "TB"];
-  let value = size2 / 1024;
+  let value = size / 1024;
   let index = 0;
   while (value >= 1024 && index < units.length - 1) {
     value /= 1024;
@@ -1222,6 +1222,7 @@ function MemhubCard(props) {
   const detected = memhub !== null && memhub.detected === true;
   const detectedPath = typeof memhub?.path === "string" ? memhub.path : "";
   const detectedSize = formatBytes(memhub?.sizeBytes);
+  if (memhub === null) return null;
   if (detected !== true) {
     return h(
       "section",
@@ -1386,12 +1387,12 @@ function MemhubCard(props) {
       h("span", { className: "hm-fieldValue hm-mono" }, detectedPath)
     ));
   }
-  if (size !== "" && (detected || asNumber(memhub?.sizeBytes) > 0)) {
+  if (detectedSize !== "" && asNumber(memhub?.sizeBytes) > 0) {
     details.push(h(
       "div",
       { key: "size", className: "hm-field" },
       h("span", { className: "hm-fieldLabel" }, t("memhub.size")),
-      h("span", { className: "hm-fieldValue" }, size)
+      h("span", { className: "hm-fieldValue" }, detectedSize)
     ));
   }
   return h(
@@ -1653,8 +1654,8 @@ function SettingsSection(props) {
     };
   }, [tab, projectKey, refreshTick, masterOff]);
   const listRequest = (key, extra) => {
-    const { page, size: size2 } = paging[key];
-    const request2 = { limit: size2, offset: (page - 1) * size2, ...extra };
+    const { page, size } = paging[key];
+    const request2 = { limit: size, offset: (page - 1) * size, ...extra };
     return searchQuery === "" ? api.list(request2) : api.list({ ...request2, query: searchQuery });
   };
   React2.useEffect(() => {
@@ -1986,10 +1987,10 @@ function SettingsSection(props) {
     h("span", { className: "hm-meta" }, t("count.items", { n: count }))
   );
   const renderPager = (key, list) => {
-    const { page, size: size2 } = paging[key];
+    const { page, size } = paging[key];
     const total = asNumber(list.total);
     if (total <= 0) return null;
-    const pages = Math.max(1, Math.ceil(total / size2));
+    const pages = Math.max(1, Math.ceil(total / size));
     const changePage = (next) => {
       setPaging((prev) => ({ ...prev, [key]: { ...prev[key], page: next } }));
     };
@@ -2028,7 +2029,7 @@ function SettingsSection(props) {
         h("span", null, t("pager.size")),
         h("select", {
           className: "hm-select",
-          value: String(size2),
+          value: String(size),
           "aria-label": t("pager.size"),
           onChange: (event) => {
             const next = Number(event.target.value);
@@ -2327,7 +2328,7 @@ function SettingsSection(props) {
     const model = status?.model ?? null;
     const embedding = status?.embedding ?? null;
     const dir = dataDirPath(status);
-    const size2 = dataDirSize(status);
+    const size = dataDirSize(status);
     const modelText = model?.ready ? [model.provider, model.model].filter(Boolean).join(" / ") || t("diag.ready") : t("diag.notReady");
     const embeddingText = `${embedding?.mode === "remote" ? t("diag.remote") : embedding?.mode === "local" ? t("diag.local") : embedding?.mode ?? t("diag.unknown")} · ${embedding?.ready ? t("diag.ready") : t("diag.notReady")}`;
     const details = [
@@ -2380,12 +2381,12 @@ function SettingsSection(props) {
         h("span", { className: "hm-fieldValue hm-mono" }, dir)
       ));
     }
-    if (size2 !== "") {
+    if (size !== "") {
       details.push(h(
         "div",
         { key: "size", className: "hm-field" },
         h("span", { className: "hm-fieldLabel" }, t("diag.dataSize")),
-        h("span", { className: "hm-fieldValue" }, size2)
+        h("span", { className: "hm-fieldValue" }, size)
       ));
     }
     return h(

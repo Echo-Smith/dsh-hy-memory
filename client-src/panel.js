@@ -232,6 +232,9 @@ function MemhubCard(props) {
   const detectedPath = typeof memhub?.path === 'string' ? memhub.path : ''
   const detectedSize = formatBytes(memhub?.sizeBytes)
 
+  // While status is still unknown, say nothing rather than claim "not installed".
+  if (memhub === null) return null
+
   // MemHub is not installed: a dashed card with one short line and no controls.
   if (detected !== true) {
     return h('section', { className: 'hm-card hm-cardMissing' },
@@ -373,10 +376,10 @@ function MemhubCard(props) {
       h('span', { className: 'hm-fieldLabel' }, t('memhub.path')),
       h('span', { className: 'hm-fieldValue hm-mono' }, detectedPath)))
   }
-  if (size !== '' && (detected || asNumber(memhub?.sizeBytes) > 0)) {
+  if (detectedSize !== '' && asNumber(memhub?.sizeBytes) > 0) {
     details.push(h('div', { key: 'size', className: 'hm-field' },
       h('span', { className: 'hm-fieldLabel' }, t('memhub.size')),
-      h('span', { className: 'hm-fieldValue' }, size)))
+      h('span', { className: 'hm-fieldValue' }, detectedSize)))
   }
 
   return h('section', { className: 'hm-card' },

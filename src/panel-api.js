@@ -77,6 +77,7 @@ export function createPanelApi(deps) {
   const describeModel = deps.describeModel
   const contextOf = deps.contextOf
   const memhub = deps.memhub ?? null
+  const contextUsage = typeof deps.contextUsage === 'function' ? deps.contextUsage : () => null
   const onSettingsChange = deps.onSettingsChange ?? (() => {})
 
   function contextOfRequest(body) {
@@ -127,6 +128,17 @@ export function createPanelApi(deps) {
       project,
       session: { id: context.sessionId ?? '', title: sessionTitle },
       memhub: detectMemHubStatus(),
+      context: (() => {
+        const usage = contextUsage()
+        if (!usage) return null
+        return {
+          memoryTokens: usage.lastTokens ?? 0,
+          memoryItems: usage.lastItems ?? 0,
+          lastAt: usage.lastAt ?? 0,
+          totalTokens: usage.totalTokens ?? 0,
+          totalItems: usage.totalItems ?? 0,
+        }
+      })(),
     }
   }
 

@@ -386,6 +386,9 @@ export function createRecall(deps) {
       const context = contextOf(payload, session)
       const groups = await search(client, query, context)
       const merged = selectRecall(groups, config.recall ?? {})
+      if (typeof onInjected === 'function') {
+        onInjected({ items: merged.items.length, chars: merged.text.length, tiers: merged.items.map((item) => item.tier) })
+      }
       if (!merged.text) return decision
       const message = createMemoryMessage(merged.text)
       const claimed = Array.isArray(payload.messages) ? payload.messages : []

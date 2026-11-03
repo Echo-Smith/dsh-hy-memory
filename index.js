@@ -356,7 +356,23 @@ function createRuntime(ctx, config) {
         projectKeys: () => Object.keys(state?.data?.projects ?? {}),
         log,
       })
-      recall = createRecall({ settings: settingsNow, activity, getClient, contextOf, log })
+      const memoryContext = { lastTokens: 0, lastItems: 0, lastTiers: [], lastAt: 0, totalTokens: 0, totalItems: 0 }
+      recall = createRecall({
+        settings: settingsNow,
+        activity,
+        getClient,
+        contextOf,
+        log,
+        onInjected: (info) => {
+          const tokens = Math.ceil((info?.chars ?? 0) / 2.2)
+          memoryContext.lastTokens = tokens
+          memoryContext.lastItems = info?.items ?? 0
+          memoryContext.lastTiers = info?.tiers ?? []
+          memoryContext.lastAt = Date.now()
+          memoryContext.totalTokens += tokens
+          memoryContext.totalItems += info?.items ?? 0
+        },
+      })
       capture = createCapture({
         settings: settingsNow,
         state,
@@ -383,6 +399,7 @@ function createRuntime(ctx, config) {
       registerPanelApi(ctx, {
         settings: settingsNow,
         sidecar,
+        contextUsage: () => memoryContext,
         ops,
         activity,
         state,
