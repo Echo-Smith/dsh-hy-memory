@@ -395,6 +395,8 @@ export function createRecall(deps) {
       const context = contextOf(payload, session)
       const groups = await search(client, query, context)
       let merged = selectRecall(groups, config.recall ?? {})
+      const semanticUsed = merged.items.length > 0
+      let lexicalUsed = false
       // A weak embedder can leave the turn short even though keyword matches
       // exist. Top up with the token-overlap path whenever selection comes in
       // under the item budget, and retry it outright when nothing survived.
@@ -407,6 +409,7 @@ export function createRecall(deps) {
             new AbortController(),
           )
           if (Array.isArray(hits) && hits.length > 0) {
+            lexicalUsed = true
             const seen = new Set(merged.items.map((item) => item.content))
             const extra = hits.filter((hit) => !seen.has(hit.content))
             const merged_groups = [
@@ -420,7 +423,12 @@ export function createRecall(deps) {
         }
       }
       if (typeof onInjected === 'function') {
-        onInjected({ items: merged.items.length, chars: merged.text.length, tiers: merged.items.map((item) => item.tier) })
+        onInjected({
+          items: merged.items.length,
+          chars: merged.text.length,
+          tiers: merged.items.map((item) => item.tier),
+          source: lexicalUsed ? (semanticUsed ? 'both' : 'lexical') : 'semantic',
+        })
       }
       if (!merged.text) return decision
       const message = createMemoryMessage(merged.text)

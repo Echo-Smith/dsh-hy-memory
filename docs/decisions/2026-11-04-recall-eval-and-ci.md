@@ -33,3 +33,13 @@ Predicate: on ten real questions from the store, the pipeline injects the memory
 - Result: 9/10, 941 characters, 149 ms. `npm test` 85/85.
 
 Open risks: ten fixtures from one store; a higher minScore pushes most Chinese recalls onto the keyword path, which suits the bundled English embedder but should be re-measured after Phase 2. The remaining miss is the loader-id question, which the keyword path ranks behind a longer unrelated memory.
+
+## Phase 2 addendum (remote embeddings)
+
+Predicate: remote mode indexes and searches through an OpenAI-compatible endpoint without a network dependency in the test.
+
+- `scripts/mock-embeddings.mjs` serves deterministic 1024-dimension vectors.
+- A sidecar started with `HY_MEMORY_LOCAL_EMBED=0`, `MEMORY_EMBEDDER_BASE_URL=http://127.0.0.1:19700/v1`, `MEMORY_EMBEDDING_DIMS=1024` accepted a write (`success: true`) and returned the exact stored text from search with score 1.0. VERIFIED for the wiring.
+- NOT VERIFIED: recall quality against a real multilingual model, and any dimension migration. A 1024-dimension store and the existing 384-dimension store cannot be queried together.
+
+Also added: the host now counts recall turns that resolved through the keyword path and the live harness prints that rate, so the fallback is a measured number rather than a claim.

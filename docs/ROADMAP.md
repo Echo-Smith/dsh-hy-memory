@@ -21,11 +21,11 @@ Sequenced from the audit that followed the first public release. Each phase is i
 
 Remaining Phase 1 work: fixtures from other projects, an English-only fixture set, and a separate measurement of wrong-but-plausible items.
 
-## Phase 2: embeddings
+## Phase 2: embeddings (partly done)
 
-- Verify `embedding.mode: remote` end to end against a multilingual endpoint.
-- Ship a re-embedding command (`scripts/reembed.mjs`) that walks the store, recomputes vectors with the new model and reports dimension mismatch before writing.
-- Keep the lexical fallback as the safety net; measure how often it fires.
+- Verified `embedding.mode: remote` end to end with `scripts/mock-embeddings.mjs`: a 1024-dimension OpenAI-compatible endpoint, a sidecar indexing against it, and a query of the stored text returning score 1.0. No multilingual provider was available to test against, so the quality claim is still open.
+- Lexical fallback rate is now measured: the host counts how many recall turns resolved through the keyword path, exposed as `status.context.lexicalTurns / turns`, and the live harness prints the percentage.
+- Still open: a re-embedding command that exports text, re-ingests with the new model, and refuses to run without a backup and an explicit confirmation; dimension mismatch detection before any write.
 
 ## Phase 3: memory lifecycle
 

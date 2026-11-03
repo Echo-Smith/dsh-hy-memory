@@ -143,6 +143,8 @@ export function createPanelApi(deps) {
           lastAt: usage.lastAt ?? 0,
           totalTokens: usage.totalTokens ?? 0,
           totalItems: usage.totalItems ?? 0,
+          lexicalTurns: usage.lexicalTurns ?? 0,
+          turns: usage.turns ?? 0,
         }
       })(),
     }

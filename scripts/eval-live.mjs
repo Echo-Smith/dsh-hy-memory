@@ -41,6 +41,7 @@ async function post(path, body) {
 }
 
 const cache = new Map()
+const sources = new Map()
 const client = {
   async bridgeSearch(payload) {
     const key = JSON.stringify(payload)
@@ -71,6 +72,7 @@ function makeRecall(options) {
     activity: { record() {} },
     getClient: () => client,
     contextOf: () => ({ user, projectKey, sessionId, projectPath, sessionTitle: '' }),
+    onInjected: (info) => sources.set(options.minScore + ':' + options.maxItems, (sources.get(options.minScore + ':' + options.maxItems) ?? []).concat(info.source ?? 'unknown')),
     log: () => {},
   })
 }
@@ -96,16 +98,18 @@ async function runAll(options) {
   return rows
 }
 
-function summarize(rows) {
+function summarize(rows, options = baseline) {
   const hits = rows.filter((row) => row.injected.includes(row.fixture.expect)).length
   const chars = rows.reduce((sum, row) => sum + row.chars, 0)
   const latency = rows.reduce((sum, row) => sum + row.latencyMs, 0) / rows.length
-  return { hits, cases: rows.length, avgChars: chars / rows.length, latencyMs: latency }
+  const list = sources.get(options.minScore + ':' + options.maxItems) ?? []
+  const lexical = list.filter((source) => source === 'lexical' || source === 'both').length
+  return { hits, cases: rows.length, avgChars: chars / rows.length, latencyMs: latency, lexicalRate: list.length ? lexical / list.length : 0 }
 }
 
 const baselineRows = await runAll(baseline)
 const baselineReport = summarize(baselineRows)
-console.log(`baseline: hits ${baselineReport.hits}/${baselineReport.cases}, avg injected chars ${baselineReport.avgChars.toFixed(0)}, avg latency ${baselineReport.latencyMs.toFixed(0)}ms, ${JSON.stringify(baseline)}`)
+console.log(`baseline: hits ${baselineReport.hits}/${baselineReport.cases}, avg injected chars ${baselineReport.avgChars.toFixed(0)}, avg latency ${baselineReport.latencyMs.toFixed(0)}ms, lexical ${(baselineReport.lexicalRate * 100).toFixed(0)}%, ${JSON.stringify(baseline)}`)
 
 if (args.includes('--verbose')) {
   for (const row of baselineRows) {
@@ -121,7 +125,7 @@ if (args.includes('--grid')) {
     for (const maxItems of [4, 5]) {
       for (const maxChars of [1200, 1600]) {
         const options = { minScore, maxItems, maxChars }
-        rows.push({ ...summarize(await runAll(options)), options })
+        rows.push({ ...summarize(await runAll(options), options), options })
       }
     }
   }

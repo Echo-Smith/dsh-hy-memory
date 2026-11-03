@@ -368,6 +368,9 @@ function createRuntime(ctx, config) {
           memoryContext.lastTokens = tokens
           memoryContext.lastItems = info?.items ?? 0
           memoryContext.lastTiers = info?.tiers ?? []
+          memoryContext.lastSource = info?.source ?? 'semantic'
+          if (info?.source === 'lexical' || info?.source === 'both') memoryContext.lexicalTurns = (memoryContext.lexicalTurns ?? 0) + 1
+          memoryContext.turns = (memoryContext.turns ?? 0) + 1
           memoryContext.lastAt = Date.now()
           memoryContext.totalTokens += tokens
           memoryContext.totalItems += info?.items ?? 0
