@@ -75,6 +75,19 @@ MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 - During a model outage, reconcile fails; writes retry with backoff, and a final failure keeps the raw text in the lite layer with an activity entry.
 - The bundled embedder is English-first; Chinese recall leans on a token-overlap fallback. A remote multilingual embedder removes that fallback.
 
+## Verifying a change
+
+```bash
+npm run check         # syntax of entry points and the built bundle
+npm test              # 85 host tests
+npm run test:smoke    # panel smoke, reads the built client.js
+npm run eval:recall   # recall fixtures: hit, noise, budget, injected size
+```
+
+CI runs the same four commands on every push and pull request. The recall harness already paid for itself: it caught a case where one oversize memory ignored `maxChars` and was injected whole.
+
+What is planned next, in order, is in [docs/ROADMAP.md](docs/ROADMAP.md): real-data recall fixtures, multilingual embeddings, lifecycle and dedupe, explainable recall, privacy controls, MemHub's own sync path, scene verification, and operations.
+
 ## Contributing
 
 Issues and pull requests are welcome. A reproduction with the version, the steps and the relevant part of `$DSH_HOME/integrations/hy-memory/sidecar.log` saves time; changes should come with a test or a reproducible verification.

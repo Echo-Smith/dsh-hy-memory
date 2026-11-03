@@ -59,5 +59,11 @@
   "bugs": {
     "url": "https://github.com/Echo-Smith/hy-memory4dsh/issues"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:smoke": "node test/panel-smoke.mjs",
+    "eval:recall": "node scripts/eval-recall.mjs",
+    "check": "node --check index.js && node --check src/panel-api.js && node --check src/capture.js && node --check client.js"
+  }
 }

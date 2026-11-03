@@ -62,6 +62,19 @@ MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 - 模型故障期间 reconcile 会失败，写入会重试；彻底失败时把原文留在原始层并在活动里记录。
 - 本地嵌入是英文模型，中文检索靠语义加词面兜底；换远端多语言嵌入会更好。
 
+## 怎么验证改动
+
+```bash
+npm run check         # 入口与构建产物的语法检查
+npm test              # 85 个宿主测试
+npm run test:smoke    # 面板冒烟，读取构建后的 client.js
+npm run eval:recall   # 召回夹具：命中、噪声、预算、注入体积
+```
+
+CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一个真实问题：单条超长记忆会绕过 `maxChars` 被整条注入。
+
+后续计划按顺序写在 [docs/ROADMAP.md](docs/ROADMAP.md)：真实数据夹具、多语言嵌入、生命周期与去重、可解释召回、隐私开关、MemHub 自带同步、场景验证与运维。
+
 ## 参与
 
 欢迎提 issue 和 PR。复现步骤、版本、日志（`$DSH_HOME/integrations/hy-memory/sidecar.log`）能省很多时间；改动请附带测试或可复现的验证方式。

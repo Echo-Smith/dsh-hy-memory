@@ -218,10 +218,19 @@ export function selectRecall(groups, options = {}) {
   let used = 0
   for (const item of unique) {
     if (items.length >= maxItems) break
-    const cost = item.content.length + 16
-    if (items.length > 0 && used + cost > maxChars) continue
+    const overhead = 16
+    const available = maxChars - used - overhead
+    if (available <= 0) break
+    // A single memory larger than the whole budget is truncated instead of
+    // being injected whole, otherwise maxChars is not actually enforced.
+    if (item.content.length > available) {
+      if (available < 24) break
+      items.push({ ...item, content: `${item.content.slice(0, available - 1)}…` })
+      used = maxChars
+      continue
+    }
     items.push(item)
-    used += cost
+    used += item.content.length + overhead
   }
   return { items, text: renderRecall(items) }
 }
