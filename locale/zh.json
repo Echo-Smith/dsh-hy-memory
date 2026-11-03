@@ -166,5 +166,7 @@
   "update.behind": "发现新版本 v{version}",
   "update.open": "查看",
   "update.failed": "检查更新失败，请稍后再试",
-  "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok"
+  "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok",
+  "update.newVersion": "新版本 v{version}",
+  "update.manualHint": "安装需手动进行"
 }

@@ -141,7 +141,8 @@ var api = {
   // one project. Both are read-only views (docs/CONTRACT.md panel routes).
   projects: () => request("projects"),
   // Update check: the host compares the installed version with GitHub releases.
-  updateCheck: () => request("update/check"),
+  // Without force the host answers from its 12 h cache; force always refetches.
+  updateCheck: (force) => request("update/check", typeof force === "boolean" ? { force } : {}),
   sessions: (projectKey) => request("sessions", typeof projectKey === "string" && projectKey !== "" ? { projectKey } : {}),
   // MemHub link (docs/CONTRACT.md addendum). Import/pull always target the
   // personal tier on the host; the panel only chooses the source.
@@ -319,7 +320,9 @@ var zh_default = {
   "update.behind": "发现新版本 v{version}",
   "update.open": "查看",
   "update.failed": "检查更新失败，请稍后再试",
-  "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok"
+  "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok",
+  "update.newVersion": "新版本 v{version}",
+  "update.manualHint": "安装需手动进行"
 };
 
 // locale/en.json
@@ -491,7 +494,9 @@ var en_default = {
   "update.behind": "New version v{version}",
   "update.open": "View",
   "update.failed": "Update check failed, try again later",
-  "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total"
+  "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total",
+  "update.newVersion": "v{version} available",
+  "update.manualHint": "Install manually"
 };
 
 // client-src/locale.js
@@ -952,6 +957,11 @@ var PANEL_CSS = `
 .hm-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding-top:2px; }
 .hm-footerLink { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; flex:none; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-secondary); text-decoration:none; }
 .hm-footerLink:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.hm-footerLeft { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.hm-updateNotice { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+.hm-updatePill { display:inline-flex; align-items:center; padding:2px 8px; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-link); font-size:11px; text-decoration:none; }
+.hm-updatePill:hover { background:var(--dsw-alias-interactive-bg-hover); }
+.hm-updateHint { font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-footerRight { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
 .hm-footerResult { font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
@@ -1076,6 +1086,7 @@ var ACTIVITY_INTERVAL_MS = 3e3;
 var PAGE_SIZES = [10, 20, 50];
 var DEFAULT_PAGE_SIZE = 20;
 var PAGED_LISTS = ["personal", "project", "session"];
+var autoUpdateChecked = false;
 var COPY_FEEDBACK_MS = 2e3;
 function emptyList() {
   return { loading: true, error: "", items: [], total: 0, fallback: false };
@@ -1611,6 +1622,7 @@ function SettingsSection(props) {
   const [sessionChoice, setSessionChoice] = React2.useState(null);
   const [checking, setChecking] = React2.useState(false);
   const [updateResult, setUpdateResult] = React2.useState(null);
+  const [autoUpdate, setAutoUpdate] = React2.useState(null);
   const [masterBusy, setMasterBusy] = React2.useState(false);
   const [masterError, setMasterError] = React2.useState("");
   const [copiedId, setCopiedId] = React2.useState("");
@@ -1649,6 +1661,24 @@ function SettingsSection(props) {
   const projectKey = typeof projectChoice === "string" && projectChoice !== "" ? projectChoice : statusProjectKey;
   const sessionFilter = typeof sessionChoice === "string" ? sessionChoice : "";
   const masterOff = status?.enabled === false;
+  React2.useEffect(() => {
+    if (masterOff || autoUpdateChecked) return void 0;
+    autoUpdateChecked = true;
+    let cancelled = false;
+    void api.updateCheck(false).then((data) => {
+      if (cancelled || data === null || typeof data !== "object") return;
+      setAutoUpdate({
+        latest: typeof data.latest === "string" ? data.latest : "",
+        behind: data.behind === true,
+        url: typeof data.url === "string" ? data.url : "",
+        error: typeof data.error === "string" ? data.error : ""
+      });
+    }).catch(() => {
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [masterOff]);
   React2.useEffect(() => {
     const timer = setTimeout(() => {
       setSearchQuery(query.trim());
@@ -1907,7 +1937,8 @@ function SettingsSection(props) {
     if (checking) return;
     setChecking(true);
     try {
-      const data = await api.updateCheck();
+      const data = await api.updateCheck(true);
+      setAutoUpdate(null);
       setUpdateResult({
         current: typeof data?.current === "string" ? data.current : "",
         latest: typeof data?.latest === "string" ? data.latest : "",
@@ -2493,6 +2524,21 @@ function SettingsSection(props) {
     const raw = typeof status?.package?.repoUrl === "string" ? status.package.repoUrl : "";
     return raw.replace(/\.git$/, "");
   })();
+  const renderAutoNotice = () => {
+    if (autoUpdate === null || autoUpdate.behind !== true || autoUpdate.latest === "") return null;
+    const version = t("update.newVersion", { version: autoUpdate.latest });
+    return h(
+      "div",
+      { className: "hm-updateNotice", role: "status" },
+      autoUpdate.url !== "" ? h("a", {
+        className: "hm-updatePill",
+        href: autoUpdate.url,
+        target: "_blank",
+        rel: "noopener noreferrer"
+      }, version) : h("span", { className: "hm-updatePill" }, version),
+      h("span", { className: "hm-updateHint" }, t("update.manualHint"))
+    );
+  };
   const renderUpdateResult = () => {
     if (checking || updateResult === null) return null;
     if (updateResult.error !== "") {
@@ -2516,14 +2562,19 @@ function SettingsSection(props) {
   const renderFooter = () => h(
     "footer",
     { className: "hm-footer" },
-    repoUrl !== "" ? h("a", {
-      className: "hm-footerLink",
-      href: repoUrl,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      "aria-label": t("update.repo"),
-      title: repoUrl
-    }, h(GitHubMark, { size: 16 })) : null,
+    h(
+      "div",
+      { className: "hm-footerLeft" },
+      repoUrl !== "" ? h("a", {
+        className: "hm-footerLink",
+        href: repoUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        "aria-label": t("update.repo"),
+        title: repoUrl
+      }, h(GitHubMark, { size: 16 })) : null,
+      renderAutoNotice()
+    ),
     h(
       "div",
       { className: "hm-footerRight" },

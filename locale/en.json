@@ -166,5 +166,7 @@
   "update.behind": "New version v{version}",
   "update.open": "View",
   "update.failed": "Update check failed, try again later",
-  "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total"
+  "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total",
+  "update.newVersion": "v{version} available",
+  "update.manualHint": "Install manually"
 }

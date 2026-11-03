@@ -131,7 +131,8 @@ export const api = {
   // one project. Both are read-only views (docs/CONTRACT.md panel routes).
   projects: () => request('projects'),
   // Update check: the host compares the installed version with GitHub releases.
-  updateCheck: () => request('update/check'),
+  // Without force the host answers from its 12 h cache; force always refetches.
+  updateCheck: (force) => request('update/check', typeof force === 'boolean' ? { force } : {}),
   sessions: (projectKey) => request('sessions', typeof projectKey === 'string' && projectKey !== '' ? { projectKey } : {}),
   // MemHub link (docs/CONTRACT.md addendum). Import/pull always target the
   // personal tier on the host; the panel only chooses the source.

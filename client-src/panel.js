@@ -26,6 +26,13 @@ const ACTIVITY_INTERVAL_MS = 3000
 const PAGE_SIZES = [10, 20, 50]
 const DEFAULT_PAGE_SIZE = 20
 const PAGED_LISTS = ['personal', 'project', 'session']
+
+/**
+ * One automatic update check per page load. The host caches the answer for 12 h,
+ * and the manual 检查更新 button is the force-refresh path; this guard keeps tab
+ * switches and re-mounts from asking again.
+ */
+let autoUpdateChecked = false
 const COPY_FEEDBACK_MS = 2000
 
 function emptyList() {
@@ -541,6 +548,7 @@ export function SettingsSection(props) {
   const [sessionChoice, setSessionChoice] = React.useState(null)
   const [checking, setChecking] = React.useState(false)
   const [updateResult, setUpdateResult] = React.useState(null)
+  const [autoUpdate, setAutoUpdate] = React.useState(null)
   const [masterBusy, setMasterBusy] = React.useState(false)
   const [masterError, setMasterError] = React.useState('')
   const [copiedId, setCopiedId] = React.useState('')
@@ -580,6 +588,23 @@ export function SettingsSection(props) {
   // '' means every session of the workspace; any other value filters the list.
   const sessionFilter = typeof sessionChoice === 'string' ? sessionChoice : ''
   const masterOff = status?.enabled === false
+
+  // The one automatic check: no force, so the host may answer from its cache.
+  React.useEffect(() => {
+    if (masterOff || autoUpdateChecked) return undefined
+    autoUpdateChecked = true
+    let cancelled = false
+    void api.updateCheck(false).then((data) => {
+      if (cancelled || data === null || typeof data !== 'object') return
+      setAutoUpdate({
+        latest: typeof data.latest === 'string' ? data.latest : '',
+        behind: data.behind === true,
+        url: typeof data.url === 'string' ? data.url : '',
+        error: typeof data.error === 'string' ? data.error : '',
+      })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [masterOff])
 
   React.useEffect(() => {
     const timer = setTimeout(() => { setSearchQuery(query.trim()) }, 300)
@@ -860,7 +885,9 @@ export function SettingsSection(props) {
     if (checking) return
     setChecking(true)
     try {
-      const data = await api.updateCheck()
+      const data = await api.updateCheck(true)
+      // The manual result line takes over from the quiet auto notice.
+      setAutoUpdate(null)
       setUpdateResult({
         current: typeof data?.current === 'string' ? data.current : '',
         latest: typeof data?.latest === 'string' ? data.latest : '',
@@ -1356,6 +1383,22 @@ export function SettingsSection(props) {
     return raw.replace(/\.git$/, '')
   })()
 
+  // Quiet notice from the automatic check: only when a newer release exists.
+  const renderAutoNotice = () => {
+    if (autoUpdate === null || autoUpdate.behind !== true || autoUpdate.latest === '') return null
+    const version = t('update.newVersion', { version: autoUpdate.latest })
+    return h('div', { className: 'hm-updateNotice', role: 'status' },
+      autoUpdate.url !== ''
+        ? h('a', {
+          className: 'hm-updatePill',
+          href: autoUpdate.url,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        }, version)
+        : h('span', { className: 'hm-updatePill' }, version),
+      h('span', { className: 'hm-updateHint' }, t('update.manualHint')))
+  }
+
   const renderUpdateResult = () => {
     if (checking || updateResult === null) return null
     if (updateResult.error !== '') {
@@ -1374,16 +1417,18 @@ export function SettingsSection(props) {
   }
 
   const renderFooter = () => h('footer', { className: 'hm-footer' },
-    repoUrl !== ''
-      ? h('a', {
-        className: 'hm-footerLink',
-        href: repoUrl,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        'aria-label': t('update.repo'),
-        title: repoUrl,
-      }, h(GitHubMark, { size: 16 }))
-      : null,
+    h('div', { className: 'hm-footerLeft' },
+      repoUrl !== ''
+        ? h('a', {
+          className: 'hm-footerLink',
+          href: repoUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          'aria-label': t('update.repo'),
+          title: repoUrl,
+        }, h(GitHubMark, { size: 16 }))
+        : null,
+      renderAutoNotice()),
     h('div', { className: 'hm-footerRight' },
       renderUpdateResult(),
       h(ui.Button, {

@@ -164,7 +164,21 @@ export function createPanelApi(deps) {
   }
 
   /** Latest published version of this plugin, compared with the installed one. */
-  async function checkUpdate() {
+  /** Cached for the client's automatic check; a manual click bypasses the cache. */
+  const UPDATE_TTL_MS = 12 * 60 * 60 * 1000
+
+  async function checkUpdate(body = {}) {
+    const force = body?.force === true
+    const cached = state?.data?.updateCheck
+    if (!force && cached && typeof cached.at === 'number' && Date.now() - cached.at < UPDATE_TTL_MS) {
+      return { ...cached.result, cached: true }
+    }
+    const result = await fetchUpdate()
+    if (state?.data) state.data.updateCheck = { at: Date.now(), result }
+    return result
+  }
+
+  async function fetchUpdate() {
     const pkg = readPackage()
     const current = String(pkg?.version ?? '0.0.0')
     const repoUrl = typeof pkg?.repository?.url === 'string' ? pkg.repository.url : ''
@@ -315,7 +329,7 @@ export function createPanelApi(deps) {
         return jsonResponse(await statusPayload())
       }
       case 'update/check':
-        return jsonResponse(await checkUpdate())
+        return jsonResponse(await checkUpdate(body))
       case 'projects':
         return jsonResponse(await listProjects())
       case 'sessions':

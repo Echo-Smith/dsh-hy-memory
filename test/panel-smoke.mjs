@@ -561,6 +561,7 @@ function createFetch(fetchCalls, options = {}) {
   const sessionPanel = options.sessionPanel !== false
   const memhubDetected = options.memhubDetected !== false
   const withContext = options.context !== false
+  const autoUpdate = options.autoUpdate ?? 'current'
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
   const settings = { enabled: true }
   let activityPolls = 0
@@ -591,13 +592,17 @@ function createFetch(fetchCalls, options = {}) {
     }
     if (verb === 'projects') return jsonResponse({ ok: true, data: WORKSPACES })
     if (verb === 'update/check') {
-      if (options.updateCheck === 'error') {
+      const body = JSON.parse(callOptions.body ?? '{}')
+      // The automatic (non-force) read answers from the host cache; the button
+      // forces a fresh fetch, so the two can differ in a test.
+      const mode = body.force === true ? options.updateCheck : autoUpdate
+      if (mode === 'error') {
         return jsonResponse({
           ok: true,
           data: { current: '0.1.0', latest: '', behind: false, url: '', checkedAt: 1, error: 'github 404' },
         })
       }
-      if (options.updateCheck === 'behind') {
+      if (mode === 'behind') {
         return jsonResponse({
           ok: true,
           data: {
@@ -712,7 +717,7 @@ function createDocumentStub() {
 
 function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', context = true,
+  updateCheck = 'current', autoUpdate = 'current', context = true,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -725,7 +730,9 @@ function createHarness({
   const primitives = createFakePrimitives(mini.lib)
   const scheduler = createScheduler()
   const documentStub = createDocumentStub()
-  const fetchImpl = createFetch(fetchCalls, { sessionPanel, memhubErrors, memhubDetected, updateCheck, context })
+  const fetchImpl = createFetch(fetchCalls, {
+    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, context,
+  })
 
   const requireStub = (specifier) => {
     if (specifier === 'react' || specifier === 'react-dom' || specifier === 'react/jsx-runtime') return mini.lib
@@ -930,9 +937,11 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
 
 async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', context = true,
+  updateCheck = 'current', autoUpdate = 'current', context = true,
 }) {
-  const harness = createHarness({ withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, context })
+  const harness = createHarness({
+    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, context,
+  })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
   assert.ok(exported.inject.includes('slots') && exported.inject.includes('locale'), `${label}: required services`)
@@ -1452,18 +1461,27 @@ async function exerciseFooterAndTokens(harness) {
   assert.ok(text.includes(t('diag.memoryTokens', { round: 120, total: 3400 })),
     'the diagnostics card shows the memory token line')
 
-  // Update check: only the button triggers it.
+  // The automatic check: exactly one, without force, before any click.
+  const updateCalls = () => harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check')
+  assert.equal(updateCalls().length, 1, 'mounting the panel runs exactly one automatic update check')
+  assert.deepEqual(JSON.parse(updateCalls()[0].options.body), { force: false },
+    'the automatic check asks for the cached answer')
+  assert.equal(hostsOf(harness).filter((node) => String(node.props?.className ?? '') === 'hm-updatePill').length, 0,
+    'a current install shows no update notice')
+
+  // Manual 检查更新 is the force-refresh path.
   assert.ok(findButton(harness, t('update.check')) !== undefined, 'the update check button renders')
-  assert.equal(lastCall(harness, '/api/hy-memory/update/check'), undefined, 'no update check runs before the click')
   await click(harness, t('update.check'))
-  assertPost(harness, '/api/hy-memory/update/check', {})
+  assertPost(harness, '/api/hy-memory/update/check', { force: true })
   assert.ok(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })),
     'a current install reports 已是最新 vX.Y.Z')
 
-  const checks = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check').length
+  // A tab switch and a full re-mount never re-run the automatic check.
   await click(harness, t('tabs.workspace'))
-  assert.equal(harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check').length, checks,
-    'a re-render does not re-run the update check')
+  assert.equal(updateCalls().length, 2, 'switching tabs does not re-run the update check')
+  harness.mini.unmount()
+  await mountSection(harness, 'zh')
+  assert.equal(updateCalls().length, 2, 're-mounting the panel does not re-run the automatic check')
 }
 
 async function exerciseUpdateBehind(harness) {
@@ -1486,6 +1504,28 @@ async function exerciseUpdateError(harness) {
     'a failed check makes no up-to-date claim')
   assert.equal(harness.mini.text().includes(t('diag.memoryTokens', { round: 120, total: 3400 })), false,
     'the token line is hidden when status.context is absent')
+}
+
+async function exerciseAutoUpdateNotice(harness) {
+  const t = await mountSection(harness, 'zh')
+  const pills = () => hostsOf(harness).filter((node) => String(node.props?.className ?? '') === 'hm-updatePill')
+  assert.equal(pills().length, 1, 'a behind:true automatic result renders one quiet notice pill')
+  const pill = pills()[0]
+  assert.equal(harness.mini.textOf(pill), t('update.newVersion', { version: '0.2.0' }),
+    'the pill names the new version')
+  assert.equal(pill.type, 'a', 'the pill links to the release')
+  assert.equal(pill.props.href, 'https://github.com/example/hy-memory4dsh/releases/tag/v0.2.0')
+  assert.equal(pill.props.target, '_blank', 'the release pill opens in a new tab')
+  assert.ok(String(pill.props.rel).includes('noopener'), 'the release pill uses rel=noopener')
+  assert.ok(harness.mini.text().includes(t('update.manualHint')),
+    'the notice says installation is manual')
+
+  // The forced manual check takes over from the quiet notice.
+  await click(harness, t('update.check'))
+  assertPost(harness, '/api/hy-memory/update/check', { force: true })
+  assert.equal(pills().length, 0, 'the manual result clears the automatic notice')
+  assert.ok(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })),
+    'the manual result renders its own line')
 }
 
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
@@ -1556,6 +1596,10 @@ const updateErrorRun = await run({ withPrimitives: true, label: 'update error', 
 await exerciseUpdateError(updateErrorRun)
 updateErrorRun.mini.unmount()
 
+const noticeRun = await run({ withPrimitives: true, label: 'auto update notice', autoUpdate: 'behind' })
+await exerciseAutoUpdateNotice(noticeRun)
+noticeRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1574,5 +1618,6 @@ console.log(`  personal delete: menu 删除 + confirmation + POST /delete {tier:
 console.log(`  memhub absent: dashed card, short not-installed line, all three actions hidden`)
 console.log(`  footer: repo link (rel=noopener) + update/check POST with 已是最新 / 发现新版本 / failure states`)
 console.log(`  memory tokens: diagnostics line reads status.context.memoryTokens/totalTokens`)
+console.log(`  auto update: one force:false check per page load, quiet notice only when behind, button forces`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)
