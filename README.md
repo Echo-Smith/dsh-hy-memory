@@ -1,8 +1,18 @@
-# Hy-Memory for DSH
+# hy-memory4dsh
 
 Hy-Memory 2.0 as a native DSH memory component. Three tiers, three scenes, automatic recall before
 each model step, automatic capture after each turn, and a manager panel under Settings > Memory.
 No sidebar tab, no extra app, no configuration required for the default path.
+
+```bash
+dsh plugin --profile desktop add link:$(pwd)
+```
+
+Then open Settings > 记忆. The sidecar bootstraps its own Python environment on first use, and the
+model route is read from your existing DSH provider settings.
+
+**Keywords for store search:** `dsh-plugin`, `deepseek-harness`, `memory`, `agent-memory`,
+`long-term-memory`, `hy-memory`, `memhub`, `three-tier-memory`, `personalization`, `context`.
 
 ## What it does
 
