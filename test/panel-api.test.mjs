@@ -63,10 +63,11 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/memhub/pull',
     '/api/hy-memory/projects',
     '/api/hy-memory/sessions',
+    '/api/hy-memory/update/check',
   ])
-  assert.equal(PANEL_ROUTE_DEFS.length, 14)
+  assert.equal(PANEL_ROUTE_DEFS.length, 15)
   const { api } = harness()
-  assert.equal(api.routes.length, 14)
+  assert.equal(api.routes.length, 15)
   for (const route of api.routes) {
     assert.deepEqual(route.methods, ['POST'])
     assert.equal(route.requestBody, 'buffered')

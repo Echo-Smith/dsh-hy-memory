@@ -2,6 +2,7 @@
  * Panel HTTP surface: exact Fetch routes below `/api`, owner-only by the
  * connection carrier. Every route answers JSON, including failures.
  */
+import { readFileSync } from 'node:fs'
 import { MemHubError } from './memhub.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
 
@@ -24,6 +25,7 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'memhub/pull', request: '{}' },
   { name: 'projects', request: '{}' },
   { name: 'sessions', request: '{ projectKey? }' },
+  { name: 'update/check', request: '{}' },
 ])
 
 export const PANEL_ROUTE_PATHS = Object.freeze(PANEL_ROUTE_DEFS.map((def) => `${PANEL_PREFIX}/${def.name}`))
@@ -128,6 +130,10 @@ export function createPanelApi(deps) {
       project,
       session: { id: context.sessionId ?? '', title: sessionTitle },
       memhub: detectMemHubStatus(),
+      package: (() => {
+        const pkg = readPackage() ?? {}
+        return { name: String(pkg.name ?? ''), version: String(pkg.version ?? ''), repoUrl: String(pkg.repository?.url ?? '') }
+      })(),
       context: (() => {
         const usage = contextUsage()
         if (!usage) return null
@@ -155,6 +161,63 @@ export function createPanelApi(deps) {
   function requireMemHub() {
     if (memhub) return memhub
     throw new MemHubError('memhub_unavailable', 'the MemHub link is not wired in this host build', 503)
+  }
+
+  /** Latest published version of this plugin, compared with the installed one. */
+  async function checkUpdate() {
+    const pkg = readPackage()
+    const current = String(pkg?.version ?? '0.0.0')
+    const repoUrl = typeof pkg?.repository?.url === 'string' ? pkg.repository.url : ''
+    const match = /github\.com[/:]([^/]+)\/([^/.]+)/.exec(repoUrl)
+    if (!match) return { current, latest: '', behind: false, url: '', checkedAt: Date.now(), error: 'repository_unknown' }
+    const [, owner, repo] = match
+    const getJson = deps.fetchJson ?? defaultFetchJson
+    const api = `https://api.github.com/repos/${owner}/${repo}`
+    try {
+      let latest = ''
+      let url = ''
+      const release = await getJson(`${api}/releases/latest`)
+      if (release && typeof release.tag_name === 'string') {
+        latest = release.tag_name
+        url = typeof release.html_url === 'string' ? release.html_url : ''
+      } else {
+        const tags = await getJson(`${api}/tags?per_page=1`)
+        if (Array.isArray(tags) && tags.length > 0) {
+          latest = String(tags[0].name ?? '')
+          url = `https://github.com/${owner}/${repo}/releases`
+        }
+      }
+      const clean = (value) => String(value).replace(/^v/i, '')
+      const behind = latest !== '' && compareVersions(clean(latest), clean(current)) > 0
+      return { current, latest: clean(latest), behind, url, checkedAt: Date.now() }
+    } catch (error) {
+      return { current, latest: '', behind: false, url: `https://github.com/${owner}/${repo}`, checkedAt: Date.now(), error: String(error?.message ?? error) }
+    }
+  }
+
+  function compareVersions(left, right) {
+    const parse = (value) => String(value).split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0)
+    const a = parse(left)
+    const b = parse(right)
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+      const delta = (a[index] ?? 0) - (b[index] ?? 0)
+      if (delta !== 0) return delta
+    }
+    return 0
+  }
+
+  function readPackage() {
+    try {
+      return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    } catch {
+      return null
+    }
+  }
+
+  async function defaultFetchJson(url) {
+    const response = await fetch(url, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'hy-memory4dsh' } })
+    if (!response.ok) throw new Error(`github ${response.status}`)
+    return response.json()
   }
 
   /** Projects known to the plugin, each with its project and session tier counts. */
@@ -251,6 +314,8 @@ export function createPanelApi(deps) {
         await ops.start()
         return jsonResponse(await statusPayload())
       }
+      case 'update/check':
+        return jsonResponse(await checkUpdate())
       case 'projects':
         return jsonResponse(await listProjects())
       case 'sessions':
