@@ -25,7 +25,8 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 
 - Verified `embedding.mode: remote` end to end with `scripts/mock-embeddings.mjs`: a 1024-dimension OpenAI-compatible endpoint, a sidecar indexing against it, and a query of the stored text returning score 1.0. No multilingual provider was available to test against, so the quality claim is still open.
 - Lexical fallback rate is now measured: the host counts how many recall turns resolved through the keyword path, exposed as `status.context.lexicalTurns / turns`, and the live harness prints the percentage.
-- Still open: a re-embedding command that exports text, re-ingests with the new model, and refuses to run without a backup and an explicit confirmation; dimension mismatch detection before any write.
+- Migration tool shipped: `scripts/migrate-embeddings.mjs` reads a source sidecar, writes a timestamped backup, and re-adds text to a second sidecar. Dry run by default; writing needs `--apply --confirm YES-MIGRATE`. Verified with three memories across two pro stores (3 written, 0 failed; target search returned the migrated text; source totals unchanged).
+- Still open: a real multilingual provider to measure quality, and workspace-scope preservation for coding and working rows (the list route does not return it).
 
 ## Phase 3: memory lifecycle
 

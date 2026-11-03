@@ -60,7 +60,17 @@ MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 - 项目记忆绑定项目；会话记忆跟随它创建时所在的项目，换项目看不到。
 - working / coding 的存储只有带 workspace id 的检索才可见，因此捕获默认走 chat 库，只有显式打开 productivity 才分流。
 - 模型故障期间 reconcile 会失败，写入会重试；彻底失败时把原文留在原始层并在活动里记录。
-- 本地嵌入是英文模型，中文检索靠语义加词面兜底；远端模式已端到端验证：`scripts/mock-embeddings.mjs` 提供确定性的 1024 维 OpenAI 兼容端点，指向它的 sidecar 能正常写入与检索，用原文查询得分 1.0。换嵌入会改变向量维度，已有 store 必须从文本重建，目前还没有自动迁移。
+- 本地嵌入是英文模型，中文检索靠语义加词面兜底；远端模式已端到端验证：`scripts/mock-embeddings.mjs` 提供确定性的 1024 维 OpenAI 兼容端点，指向它的 sidecar 能正常写入与检索，用原文查询得分 1.0。换嵌入会改变向量维度，向量不能直接拷贝，已有 store 必须从文本重建：
+
+```bash
+node scripts/migrate-embeddings.mjs --source 19527 --target 19528              # 预演，同时写备份
+node scripts/migrate-embeddings.mjs --source 19527 --target 19528 \
+  --apply --confirm YES-MIGRATE                                                # 重新写入目标库
+```
+
+它不删除任何东西。先读源 sidecar、写一份带时间戳的 JSON 备份，再把同样的文本写进运行新嵌入的第二个
+sidecar，旧库原样保留，删不删由你决定。预演会先报源行数与目标库当前计数。coding 与 working 行在拷贝
+时拿不到 workspace 作用域，因为列表接口不返回它，这些行要等下一次捕获才会重新可检索。
 
 ## 怎么验证改动
 

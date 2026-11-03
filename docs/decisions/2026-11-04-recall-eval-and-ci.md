@@ -43,3 +43,11 @@ Predicate: remote mode indexes and searches through an OpenAI-compatible endpoin
 - NOT VERIFIED: recall quality against a real multilingual model, and any dimension migration. A 1024-dimension store and the existing 384-dimension store cannot be queried together.
 
 Also added: the host now counts recall turns that resolved through the keyword path and the live harness prints that rate, so the fallback is a measured number rather than a claim.
+
+## Phase 2 addendum: migration tool
+
+Predicate: move memories from a store built for one embedder into a store built for another without touching the source and without unaudited writes.
+
+- `scripts/migrate-embeddings.mjs` exports the source, writes a timestamped backup, prints source and target totals, and only writes with `--apply --confirm YES-MIGRATE`.
+- Verified across two pro stores on the same machine: dry run reported 102 source rows and an empty target; applying three memories wrote 3 and failed 0, the target grew to 6 rows (pro reconcile splits), a search for the first memory returned it, and the source totals stayed at 84 chat, 3 working, 15 coding. VERIFIED for the mechanics.
+- Not verified: a real embedder change (both stores used the bundled 384-dimension model), workspace scope for productivity rows, and any run at full store size.
