@@ -101,6 +101,18 @@ falls back to a token-overlap scan in that case. Switching to a multilingual rem
 need for that fallback. Nothing else in the plugin requires the ONNX model: capture, promotion, tiers and
 the panel work without it, and a machine that never downloads it still gets lexical recall.
 
+## Footer, updates and token accounting
+
+The panel bottom carries a GitHub link and a 检查更新 button. The host route
+`/api/hy-memory/update/check` reads this package's `version` and `repository.url`, asks the GitHub
+releases API (falling back to tags), and compares the two with a simple semver compare, so the button
+answers "已是最新 vX.Y.Z" or "发现新版本 vA.B.C" with a link to the release.
+
+Each successful recall also records how much text it injected; the panel's diagnostics line shows
+`记忆占用 · 本轮约 N tok，累计 M tok`. DSH's own context-occupancy popover exposes only three buckets
+(system, tools, messages) and no plugin slot, so memory is reported inside DSH's message bucket; the
+panel line is where its own share is visible.
+
 ## Where data lives
 
 ```
