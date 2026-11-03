@@ -38,6 +38,15 @@ Then open Settings > 记忆. First use bootstraps the Python environment; the mo
 
 Requirements: DSH 0.2 preview, Python 3.10+ (installed into the plugin directory on first use), optional git for workspace ids.
 
+## Dependencies
+
+This repository ships the DSH side only: the host plugin, the client panel, the bridge scripts, and docs. The Hy-Memory 2.0 framework itself is **not vendored here**. On first use the plugin creates a Python virtual environment under `$DSH_HOME/integrations/hy-memory/venv` and installs the PyPI package `hy-memory` into it; the bridge then imports `hy_memory` from that environment.
+
+- Network access is needed once, for that install (and for the optional local embedding model download).
+- The package is installed by name, so a fresh install resolves to the latest available version. Set `HY_MEMORY_SDK_PACKAGE=hy-memory==<version>` when installing to pin it.
+- Upstream code and its license belong to the Hy-Memory project; this repository only depends on it and does not redistribute it.
+- Everything else in this repository is MIT.
+
 ## Configuration
 
 Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edits the same object.

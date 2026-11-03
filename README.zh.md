@@ -28,6 +28,15 @@ DSH 本身没有长期记忆。`AGENTS.md` 是手写的静态规则，会话历�
 - 手动记忆：`memory_add` 按内容自动判断写个人还是项目，也能显式指定层级。
 - 检查更新与 GitHub 入口在面板底部。
 
+## 依赖
+
+本仓库只包含 DSH 这一侧：宿主插件、客户端面板、bridge 脚本与文档。**Hy-Memory 2.0 框架本体不在仓库里**。首次使用时，插件会在 `$DSH_HOME/integrations/hy-memory/venv` 下创建 Python 环境，并把 PyPI 包 `hy-memory` 装进去，bridge 再从该环境导入 `hy_memory`。
+
+- 需要联网一次完成安装（可选开启的本地嵌入模型也需要下载）。
+- 按包名安装，新环境默认取当时最新版；安装时设置 `HY_MEMORY_SDK_PACKAGE=hy-memory==<版本>` 可以锁定版本。
+- 上游代码及其许可归 Hy-Memory 项目所有，本仓库只依赖、不重分发。
+- 本仓库其余部分的许可是 MIT。
+
 ## 安装
 
 ```bash
