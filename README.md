@@ -174,6 +174,8 @@ Real captures from a running DSH instance (`docs/screenshots/`):
 ![Personal tier](docs/screenshots/panel-personal.png)
 ![Project tier](docs/screenshots/panel-project.png)
 ![Session tier](docs/screenshots/panel-session.png)
+![MemHub absent](docs/screenshots/panel-memhub-absent.png)
+![Update check](docs/screenshots/panel-update.png)
 
 ## Verifying it works
 
