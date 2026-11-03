@@ -1,0 +1,1343 @@
+/**
+ * Settings > Memory: the three-tier memory manager.
+ *
+ * The view is mounted by the Host's `settings.section` slot, so it may assume
+ * the settings shell around it. Shape: one header (brain mark, title, master
+ * switch), the paused/sidecar banners, a workspace bar (project pill, count,
+ * file search), the tier tabs and one file list with rounded memory cards. Each
+ * card opens a small action menu (copy / edit / delete); the whole surface is
+ * read-only while the master switch is off.
+ *
+ * Every list has a loading, empty and error face; the sidecar's state is
+ * surfaced as a banner with a start action instead of leaving the panel blank
+ * when memory is not running.
+ */
+import * as React from 'react'
+import { api } from './api.js'
+import {
+  h, ui, Icon, useLocaleSubscription, errorMessage, asArray, asNumber, normalizeItem,
+  shortId, stateLabel, dotState, timeText, memoryTitle, copyToClipboard, dataDirPath, dataDirSize,
+  formatBytes, panelStyles,
+} from './ui.js'
+
+const TIERS = ['personal', 'project', 'session']
+const ACTIVITY_LIMIT = 60
+const ACTIVITY_INTERVAL_MS = 3000
+const PAGE_SIZES = [10, 20, 50]
+const DEFAULT_PAGE_SIZE = 20
+const PAGED_LISTS = ['personal', 'project', 'session']
+const COPY_FEEDBACK_MS = 2000
+
+function emptyList() {
+  return { loading: true, error: '', items: [], total: 0, fallback: false }
+}
+
+function emptyLists() {
+  return { personal: emptyList(), project: emptyList(), session: emptyList() }
+}
+
+function emptyPicker() {
+  return { loading: true, error: '', items: [] }
+}
+
+/** One row of `POST /api/hy-memory/projects`: the key and the label it shows. */
+function normalizeProject(item) {
+  const source = item !== null && typeof item === 'object' ? item : {}
+  return {
+    key: typeof source.key === 'string' ? source.key : String(source.key ?? ''),
+    title: typeof source.title === 'string' ? source.title : '',
+  }
+}
+
+/** One row of `POST /api/hy-memory/sessions`: the id the tier is keyed by. */
+function normalizeSession(item) {
+  const source = item !== null && typeof item === 'object' ? item : {}
+  return {
+    sessionId: typeof source.sessionId === 'string' ? source.sessionId : String(source.sessionId ?? ''),
+  }
+}
+
+function normalizeEvent(event) {
+  const source = event !== null && typeof event === 'object' ? event : {}
+  return {
+    at: source.at ?? null,
+    kind: typeof source.kind === 'string' ? source.kind : 'error',
+    tier: typeof source.tier === 'string' ? source.tier : '',
+    summary: typeof source.summary === 'string' ? source.summary : '',
+    detail: typeof source.detail === 'string' ? source.detail : '',
+    ok: source.ok !== false,
+  }
+}
+
+function kindLabel(t, kind) {
+  const key = `activity.kind.${kind}`
+  const value = t(key)
+  return value === key ? kind : value
+}
+
+function tierLabel(t, tier) {
+  if (!TIERS.includes(tier)) return tier
+  return t(`tabs.${tier}`)
+}
+
+function activityTierLabel(t, tier) {
+  if (tier !== 'personal' && tier !== 'project' && tier !== 'session') return ''
+  return t(`activity.tier.${tier}`)
+}
+
+function mergeNewEvents(current, incoming) {
+  if (incoming.length === 0) return current
+  const seen = new Set(current.map((event) => `${String(event.at)}|${event.kind}|${event.summary}`))
+  const fresh = incoming.filter((event) => !seen.has(`${String(event.at)}|${event.kind}|${event.summary}`))
+  return [...fresh, ...current].slice(0, ACTIVITY_LIMIT)
+}
+
+/**
+ * The write-activity disclosure.
+ *
+ * It owns both its data and its 3 s poll. Keeping the poll here (instead of in
+ * the section) means a tick re-renders this subtree only: the tier lists, the
+ * search box, an open inline editor and the section's scroll position are never
+ * touched by polling, so an in-progress edit cannot be lost to a tick.
+ */
+function ActivityPanel(props) {
+  const t = props.t
+  const [events, setEvents] = React.useState([])
+  const [error, setError] = React.useState('')
+  const [loading, setLoading] = React.useState(true)
+  const [open, setOpen] = React.useState(false)
+  const [tick, setTick] = React.useState(0)
+  // The poll refreshes this clock too, so relative times in this list stay live
+  // without re-rendering the rest of the section.
+  const [now, setNow] = React.useState(() => Date.now())
+
+  React.useEffect(() => {
+    let cancelled = false
+    let timer = null
+    let cursor
+    const poll = async () => {
+      if (cancelled) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      try {
+        const data = await api.activity(cursor)
+        if (cancelled) return
+        cursor = typeof data?.cursor === 'string' || typeof data?.cursor === 'number' ? data.cursor : cursor
+        const incoming = asArray(data?.events).map(normalizeEvent)
+        setEvents((prev) => mergeNewEvents(prev, incoming))
+        setError('')
+        setLoading(false)
+        setNow(Date.now())
+      } catch (pollError) {
+        if (cancelled) return
+        setError(errorMessage(pollError))
+        setLoading(false)
+      }
+    }
+    void poll()
+    timer = setInterval(() => { void poll() }, ACTIVITY_INTERVAL_MS)
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') void poll()
+    }
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      if (timer !== null) clearInterval(timer)
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [tick])
+
+  const rows = events.map((event, index) => h('div', {
+    key: `${String(event.at)}|${event.kind}|${index}`,
+    className: 'hm-activityRow',
+  },
+  h(ui.StateDot, { state: event.ok ? dotState(event.kind === 'error' ? 'error' : 'done') : 'error' }),
+  h('div', null,
+    h('div', { className: 'hm-activitySummary' },
+      h(ui.Tag, { tone: event.kind === 'error' || !event.ok ? 'danger' : 'outline' }, kindLabel(t, event.kind)),
+      ' ',
+      event.tier !== '' ? h(ui.Tag, { tone: 'quiet' }, activityTierLabel(t, event.tier)) : null,
+      ' ',
+      event.summary),
+    event.detail !== '' ? h('p', { className: 'hm-activityDetail' }, event.detail) : null),
+  h('span', { className: 'hm-activityTime' }, timeText(t, event.at, now))))
+
+  let body
+  if (loading) {
+    body = h('div', { className: 'hm-state' }, h(ui.StateDot, { state: 'ongoing' }), t('common.loading'))
+  } else if (error !== '') {
+    body = h('div', { className: 'hm-empty', role: 'alert' },
+      h('p', { className: 'hm-error' }, t('activity.error', { message: error })),
+      h('div', { className: 'hm-row' },
+        h(ui.Button, { size: 'sm', variant: 'outline', onClick: () => { setTick((value) => value + 1) } }, t('common.retry'))))
+  } else if (rows.length === 0) {
+    body = h('div', { className: 'hm-empty' }, t('activity.empty'))
+  } else {
+    body = h('div', { className: 'hm-activity' }, rows)
+  }
+  return h(ui.DisclosureRow, {
+    icon: h(ui.StateDot, { state: error !== '' ? 'error' : events.length > 0 ? 'done' : 'idle' }),
+    title: events.length > 0 ? `${t('activity.title')} (${events.length})` : t('activity.title'),
+    open,
+    expandable: true,
+    onToggle: () => { setOpen((value) => !value) },
+    headerAccessory: h('span', { className: 'hm-meta' }, t('activity.hint')),
+  }, body)
+}
+
+/** `error.code` values the MemHub routes use for a user-facing explanation. */
+const MEMHUB_ERROR_KEYS = Object.freeze({
+  memhub_locked: 'memhub.error.memhub_locked',
+  embedding_mismatch: 'memhub.error.embedding_mismatch',
+  not_found: 'memhub.error.not_found',
+  // The host's import/pull routes use these codes for the same two situations.
+  import_missing: 'memhub.error.import_missing',
+  memhub_not_detected: 'memhub.error.memhub_not_detected',
+})
+
+function isAbsolutePath(value) {
+  if (typeof value !== 'string' || value === '') return false
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value)
+}
+
+/** A known MemHub failure gets its own sentence; anything else keeps the host message. */
+function memhubErrorText(t, error) {
+  const code = typeof error?.code === 'string' ? error.code : ''
+  const key = MEMHUB_ERROR_KEYS[code]
+  if (key !== undefined) {
+    const text = t(key)
+    if (typeof text === 'string' && text !== key) return text
+  }
+  return t('memhub.error.generic', { message: errorMessage(error) })
+}
+
+/**
+ * The MemHub link card.
+ *
+ * MemHub is a separate product: this card reads its detection state from the
+ * status payload, exports our store to JSON, and imports (or pulls) MemHub's
+ * memories into the personal tier. Nothing here writes into MemHub's directory.
+ */
+function MemhubCard(props) {
+  const t = props.t
+  const memhub = props.memhub ?? null
+  const onImported = props.onImported
+  const [busy, setBusy] = React.useState('')
+  const [result, setResult] = React.useState(null)
+  const [importOpen, setImportOpen] = React.useState(false)
+  const [importPath, setImportPath] = React.useState('')
+  const [pathError, setPathError] = React.useState(false)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+
+  const detected = memhub !== null && memhub.detected === true
+  const detectedPath = typeof memhub?.path === 'string' ? memhub.path : ''
+  const detectedSize = formatBytes(memhub?.sizeBytes)
+
+  // MemHub is not installed: a dashed card with one short line and no controls.
+  if (detected !== true) {
+    return h('section', { className: 'hm-card hm-cardMissing' },
+      h('div', { className: 'hm-cardHead' },
+        h('h2', { className: 'hm-h2' }, t('memhub.title'))),
+      h('p', { className: 'hm-muted' }, t('memhub.missing')))
+  }
+
+  const run = async (kind) => {
+    if (busy !== '') return
+    if (kind === 'import') {
+      const target = importPath.trim()
+      if (isAbsolutePath(target) === false) {
+        setPathError(true)
+        return
+      }
+      setPathError(false)
+      setBusy(kind)
+      setResult(null)
+      try {
+        const data = await api.memhubImport(target)
+        setResult({ kind, data: data ?? {} })
+        setImportOpen(false)
+        setImportPath('')
+        if (typeof onImported === 'function') onImported()
+      } catch (error) {
+        setResult({ kind, error })
+      } finally {
+        setBusy('')
+      }
+      return
+    }
+    setBusy(kind)
+    setResult(null)
+    try {
+      const data = kind === 'export' ? await api.memhubExport() : await api.memhubPull()
+      setResult({ kind, data: data ?? {} })
+      if (kind === 'pull' && typeof onImported === 'function') onImported()
+    } catch (error) {
+      setResult({ kind, error })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const renderResult = () => {
+    if (result === null) return null
+    if (result.error !== undefined) {
+      return h('p', { className: 'hm-error', role: 'alert' }, memhubErrorText(t, result.error))
+    }
+    const data = result.data ?? {}
+    if (result.kind === 'export') {
+      const bytes = formatBytes(data.bytes)
+      return h('div', { className: 'hm-memhubResult' },
+        h('p', { className: 'hm-muted', role: 'status' }, t('memhub.result.export', {
+          count: asNumber(data.count),
+          path: typeof data.path === 'string' ? data.path : '',
+        })),
+        bytes !== '' ? h('span', { className: 'hm-meta' }, bytes) : null)
+    }
+    return h('div', { className: 'hm-memhubResult' },
+      h('p', { className: 'hm-muted', role: 'status' }, t(
+        result.kind === 'pull' ? 'memhub.result.pull' : 'memhub.result.import',
+        {
+          imported: asNumber(data.imported),
+          skipped: asNumber(data.skipped),
+          failed: asNumber(data.failed),
+        },
+      )),
+      typeof data.path === 'string' && data.path !== ''
+        ? h('span', { className: 'hm-meta hm-mono' }, t('memhub.result.path', { path: data.path }))
+        : null)
+  }
+
+  const actionButton = (kind, label, busyLabel, onClick, variant) => h(ui.Button, {
+    key: kind,
+    size: 'sm',
+    variant,
+    disabled: busy !== '',
+    onClick,
+  }, busy === kind ? busyLabel : label)
+
+  const actions = h('div', { className: 'hm-memhubActions' },
+    actionButton('export', t('memhub.export'), t('memhub.exporting'), () => { void run('export') }, 'outline'),
+    actionButton('pull', t('memhub.pull'), t('memhub.pulling'), () => { void run('pull') }, 'outline'),
+    h(ui.Button, {
+      key: 'import',
+      size: 'sm',
+      variant: importOpen ? 'ghost' : 'outline',
+      disabled: busy !== '',
+      onClick: () => {
+        setPathError(false)
+        setImportOpen((value) => !value)
+      },
+    }, t('memhub.import')))
+
+  const importForm = importOpen
+    ? h('div', { className: 'hm-memhubImport' },
+      h('div', { className: 'hm-memhubImportField' },
+        h('span', { className: 'hm-fieldLabel' }, t('memhub.importPath')),
+        h(ui.Input, {
+          type: 'text',
+          value: importPath,
+          placeholder: t('memhub.importPathPlaceholder'),
+          'aria-label': t('memhub.importPath'),
+          onChange: (event) => {
+            setImportPath(event.target.value)
+            setPathError(false)
+          },
+        })),
+      h(ui.Button, {
+        size: 'sm',
+        variant: 'primary',
+        disabled: busy !== '',
+        onClick: () => { void run('import') },
+      }, busy === 'import' ? t('memhub.importing') : t('memhub.importConfirm')),
+      h(ui.Button, {
+        size: 'sm',
+        variant: 'ghost',
+        onClick: () => {
+          setImportOpen(false)
+          setPathError(false)
+        },
+      }, t('memhub.importCancel')))
+    : null
+
+  // Status and the three controls stay visible; the store path, its size and
+  // the explanatory prose are one disclosure away.
+  const fields = [
+    h('div', { key: 'state', className: 'hm-field' },
+      h('span', { className: 'hm-fieldLabel' }, t('memhub.state')),
+      h('span', { className: 'hm-fieldValue' },
+        h(ui.StateDot, { state: 'done' }),
+        t('memhub.detected'))),
+  ]
+  const details = []
+  if (detectedPath !== '') {
+    details.push(h('div', { key: 'path', className: 'hm-field' },
+      h('span', { className: 'hm-fieldLabel' }, t('memhub.path')),
+      h('span', { className: 'hm-fieldValue hm-mono' }, detectedPath)))
+  }
+  if (size !== '' && (detected || asNumber(memhub?.sizeBytes) > 0)) {
+    details.push(h('div', { key: 'size', className: 'hm-field' },
+      h('span', { className: 'hm-fieldLabel' }, t('memhub.size')),
+      h('span', { className: 'hm-fieldValue' }, size)))
+  }
+
+  return h('section', { className: 'hm-card' },
+    h('div', { className: 'hm-cardHead' },
+      h('h2', { className: 'hm-h2' }, t('memhub.title')),
+      h(ui.Button, {
+        size: 'sm',
+        variant: 'ghost',
+        onClick: () => { setDetailsOpen((value) => !value) },
+      }, detailsOpen ? t('common.hideDetails') : t('common.details'))),
+    h('dl', { className: 'hm-grid' }, fields),
+    actions,
+    importForm,
+    pathError ? h('p', { className: 'hm-error', role: 'alert' }, t('memhub.pathRequired')) : null,
+    renderResult(),
+    detailsOpen
+      ? h(React.Fragment, null,
+        h('p', { className: 'hm-muted' }, t('memhub.explain')),
+        details.length > 0 ? h('dl', { className: 'hm-grid' }, details) : null)
+      : null)
+}
+
+/** Close an open popover on Escape; the guard keeps unit tests without a DOM safe. */
+function useEscapeToClose(open, close) {
+  React.useEffect(() => {
+    if (open !== true) return undefined
+    if (typeof document === 'undefined') return undefined
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [open, close])
+}
+
+/**
+ * A pill that opens the one popover card used by both pickers (workspaces and
+ * sessions): a title line, one row per item with a trailing check on the
+ * selected one, and nothing else.
+ */
+function PickerPill(props) {
+  const [open, setOpen] = React.useState(false)
+  const close = React.useCallback(() => { setOpen(false) }, [])
+  useEscapeToClose(open, close)
+
+  const rows = props.items.map((item) => {
+    const selected = item.key === props.selected
+    return h('button', {
+      key: item.key,
+      type: 'button',
+      role: 'menuitemradio',
+      'aria-checked': selected ? 'true' : 'false',
+      className: 'hm-menuItem',
+      onClick: () => {
+        setOpen(false)
+        props.onSelect(item.key)
+      },
+    },
+    h('span', { className: 'hm-menuItemIcon' }, h(Icon, { name: props.icon, size: 15 })),
+    h('span', { className: 'hm-menuItemLabel' }, item.title),
+    selected ? h('span', { className: 'hm-menuItemCheck' }, h(Icon, { name: 'check', size: 14 })) : null)
+  })
+
+  return h('div', { className: 'hm-picker' },
+    h('button', {
+      type: 'button',
+      className: 'hm-pill',
+      'aria-haspopup': 'menu',
+      'aria-expanded': open ? 'true' : 'false',
+      'aria-label': props.ariaLabel,
+      onClick: () => { setOpen((value) => !value) },
+    },
+    h('span', { className: 'hm-pillIcon' }, h(Icon, { name: props.icon, size: 15 })),
+    h('span', { className: 'hm-pillLabel' }, props.label),
+    h('span', { className: 'hm-pillChevron' }, h(Icon, { name: 'chevronDown', size: 14 }))),
+    open
+      ? h('div', { className: 'hm-menuCard', role: 'menu', 'aria-label': props.title },
+        h('div', { className: 'hm-menuTitle' }, props.title),
+        rows.length > 0 ? rows : h('div', { className: 'hm-menuEmpty' }, props.emptyText))
+      : null)
+}
+
+/**
+ * One memory as a rounded file card: derived title, muted date line and the
+ * action menu button. The menu owns its open state, so a re-render of the
+ * section (a poll tick, a search keystroke) never reopens or loses it.
+ */
+function FileRow(props) {
+  const t = props.t
+  const [open, setOpen] = React.useState(false)
+  const close = React.useCallback(() => { setOpen(false) }, [])
+  useEscapeToClose(open, close)
+
+  const meta = []
+  if (props.date !== '') meta.push(h('span', { key: 'date' }, props.date))
+  if (props.status !== '') meta.push(h('span', { key: 'status', className: 'hm-fileStatus', role: 'status' }, props.status))
+
+  return h('li', { className: 'hm-file' },
+    h('span', { className: 'hm-fileIcon', 'aria-hidden': 'true' }, h(Icon, { name: 'file', size: 17 })),
+    h('div', { className: 'hm-fileText' },
+      h('p', { className: 'hm-fileTitle', title: props.title }, props.title),
+      meta.length > 0 ? h('p', { className: 'hm-fileDate' }, meta) : null),
+    h('div', { className: 'hm-fileActions' },
+      h('button', {
+        type: 'button',
+        className: 'hm-fileAction',
+        'aria-label': t('row.actions'),
+        'aria-haspopup': 'menu',
+        'aria-expanded': open ? 'true' : 'false',
+        onClick: () => { setOpen((value) => !value) },
+      }, h(Icon, { name: 'chevronDown', size: 16 })),
+      open
+        ? h('div', { className: 'hm-menuCard', role: 'menu' },
+          props.actions.map((action) => h('button', {
+            key: action.key,
+            type: 'button',
+            role: 'menuitem',
+            className: `hm-actionItem${action.danger === true ? ' hm-actionItem-danger' : ''}`,
+            onClick: () => {
+              setOpen(false)
+              action.onSelect()
+            },
+          }, action.label)))
+        : null))
+}
+
+/** The settings section body. Stable module-level component: never recreate the type. */
+export function SettingsSection(props) {
+  const t = typeof props.t === 'function' ? props.t : typeof props.translate === 'function' ? props.translate : (key) => key
+  useLocaleSubscription(props)
+
+  const [tab, setTab] = React.useState('personal')
+  const [status, setStatus] = React.useState(null)
+  const [statusLoading, setStatusLoading] = React.useState(true)
+  const [statusError, setStatusError] = React.useState('')
+  const [starting, setStarting] = React.useState(false)
+  const [startError, setStartError] = React.useState('')
+  const [query, setQuery] = React.useState('')
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const [lists, setLists] = React.useState(emptyLists)
+  const [refreshTick, setRefreshTick] = React.useState(0)
+  // Every list carries its own page window: changing one never moves another.
+  const [paging, setPaging] = React.useState(() => ({
+    personal: { page: 1, size: DEFAULT_PAGE_SIZE },
+    project: { page: 1, size: DEFAULT_PAGE_SIZE },
+    session: { page: 1, size: DEFAULT_PAGE_SIZE },
+  }))
+  const [editing, setEditing] = React.useState(null)
+  const [savingId, setSavingId] = React.useState('')
+  const [savedId, setSavedId] = React.useState('')
+  const [rowError, setRowError] = React.useState(null)
+  const [deleteTarget, setDeleteTarget] = React.useState(null)
+  const [deleting, setDeleting] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState('')
+  const [diagOpen, setDiagOpen] = React.useState(false)
+  const [projects, setProjects] = React.useState(emptyPicker)
+  const [projectChoice, setProjectChoice] = React.useState(null)
+  const [sessions, setSessions] = React.useState(emptyPicker)
+  const [sessionChoice, setSessionChoice] = React.useState(null)
+  const [masterBusy, setMasterBusy] = React.useState(false)
+  const [masterError, setMasterError] = React.useState('')
+  const [copiedId, setCopiedId] = React.useState('')
+  const [copyFailedId, setCopyFailedId] = React.useState('')
+  const savedTimer = React.useRef(null)
+  const copyTimer = React.useRef(null)
+  const now = Date.now()
+
+  const refresh = React.useCallback(() => { setRefreshTick((value) => value + 1) }, [])
+
+  React.useEffect(() => () => {
+    if (savedTimer.current !== null) clearTimeout(savedTimer.current)
+    if (copyTimer.current !== null) clearTimeout(copyTimer.current)
+  }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setStatusLoading(true)
+    setStatusError('')
+    const read = refreshTick === 0 ? api.loadStatus() : api.readStatus()
+    read.then((data) => {
+      if (cancelled) return
+      setStatus(data ?? null)
+      setStatusLoading(false)
+    }).catch((error) => {
+      if (cancelled) return
+      setStatusError(errorMessage(error))
+      setStatusLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [refreshTick])
+
+  const statusProjectKey = typeof status?.project?.key === 'string' ? status.project.key : ''
+  const statusProjectTitle = typeof status?.project?.title === 'string' ? status.project.title : ''
+  const currentSessionId = typeof status?.session?.id === 'string' ? status.session.id : ''
+  const projectKey = typeof projectChoice === 'string' && projectChoice !== '' ? projectChoice : statusProjectKey
+  // '' means every session of the workspace; any other value filters the list.
+  const sessionFilter = typeof sessionChoice === 'string' ? sessionChoice : ''
+  const masterOff = status?.enabled === false
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => { setSearchQuery(query.trim()) }, 300)
+    return () => { clearTimeout(timer) }
+  }, [query])
+
+  // Workspaces: read once per refresh, then keep the selection unless the user
+  // already chose one. A failed read leaves the pill on the status project.
+  React.useEffect(() => {
+    if (masterOff) return undefined
+    let cancelled = false
+    setProjects((prev) => ({ ...prev, loading: true, error: '' }))
+    api.projects().then((data) => {
+      if (cancelled) return
+      const items = asArray(data?.items).map(normalizeProject).filter((item) => item.key !== '')
+      const current = typeof data?.current === 'string' ? data.current : ''
+      setProjects({ loading: false, error: '', items })
+      setProjectChoice((prev) => (typeof prev === 'string' && prev !== '' ? prev : current))
+    }).catch((error) => {
+      if (cancelled) return
+      setProjects({ loading: false, error: errorMessage(error), items: [] })
+    })
+    return () => { cancelled = true }
+  }, [refreshTick, masterOff])
+
+  // Sessions of the selected workspace, read while the workspace tab is open:
+  // they feed the picker and the group headers of the session list.
+  React.useEffect(() => {
+    if (masterOff || tab !== 'project') return undefined
+    if (projectKey === '') {
+      setSessions({ loading: false, error: '', items: [] })
+      return undefined
+    }
+    let cancelled = false
+    setSessions((prev) => ({ ...prev, loading: true, error: '' }))
+    api.sessions(projectKey).then((data) => {
+      if (cancelled) return
+      const items = asArray(data?.items).map(normalizeSession).filter((item) => item.sessionId !== '')
+      setSessions({ loading: false, error: '', items })
+    }).catch((error) => {
+      if (cancelled) return
+      setSessions({ loading: false, error: errorMessage(error), items: [] })
+    })
+    return () => { cancelled = true }
+  }, [tab, projectKey, refreshTick, masterOff])
+
+  /** One page of one list: the page window plus the shared search query. */
+  const listRequest = (key, extra) => {
+    const { page, size } = paging[key]
+    const request = { limit: size, offset: (page - 1) * size, ...extra }
+    return searchQuery === '' ? api.list(request) : api.list({ ...request, query: searchQuery })
+  }
+
+  React.useEffect(() => {
+    if (masterOff || tab !== 'personal') return undefined
+    let cancelled = false
+    setLists((prev) => ({ ...prev, personal: { ...prev.personal, loading: true, error: '', fallback: false } }))
+    void (async () => {
+      try {
+        const data = await listRequest('personal', { tier: 'personal' })
+        if (cancelled) return
+        const items = asArray(data?.items).map(normalizeItem)
+        setLists((prev) => ({
+          ...prev,
+          personal: { loading: false, error: '', items, total: asNumber(data?.total, items.length), fallback: false },
+        }))
+      } catch (error) {
+        if (cancelled) return
+        setLists((prev) => ({
+          ...prev,
+          personal: { loading: false, error: errorMessage(error), items: [], total: 0, fallback: false },
+        }))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [tab, masterOff, searchQuery, refreshTick, paging.personal])
+
+  React.useEffect(() => {
+    if (masterOff || tab !== 'project') return undefined
+    let cancelled = false
+    const scope = projectKey === '' ? {} : { projectKey }
+    setLists((prev) => ({ ...prev, project: { ...prev.project, loading: true, error: '', fallback: false } }))
+    void (async () => {
+      try {
+        const data = await listRequest('project', { tier: 'project', ...scope })
+        if (cancelled) return
+        const items = asArray(data?.items).map(normalizeItem)
+        setLists((prev) => ({
+          ...prev,
+          project: { loading: false, error: '', items, total: asNumber(data?.total, items.length), fallback: false },
+        }))
+      } catch (error) {
+        if (cancelled) return
+        setLists((prev) => ({
+          ...prev,
+          project: { loading: false, error: errorMessage(error), items: [], total: 0, fallback: false },
+        }))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [tab, masterOff, searchQuery, refreshTick, projectKey, paging.project])
+
+  React.useEffect(() => {
+    if (masterOff || tab !== 'project') return undefined
+    let cancelled = false
+    const scope = projectKey === '' ? {} : { projectKey }
+    setLists((prev) => ({ ...prev, session: { ...prev.session, loading: true, error: '', fallback: false } }))
+    void (async () => {
+      try {
+        // sessionFilter '' spans the workspace; any other value scopes the read
+        // to that session, so its pagination stays exact.
+        const data = await listRequest('session', { tier: 'session', sessionId: sessionFilter, ...scope })
+        if (cancelled) return
+        const items = asArray(data?.items).map(normalizeItem)
+        setLists((prev) => ({
+          ...prev,
+          session: { loading: false, error: '', items, total: asNumber(data?.total, items.length), fallback: false },
+        }))
+      } catch (error) {
+        if (cancelled) return
+        setLists((prev) => ({
+          ...prev,
+          session: { loading: false, error: errorMessage(error), items: [], total: 0, fallback: false },
+        }))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [tab, masterOff, searchQuery, refreshTick, projectKey, sessionFilter, paging.session])
+
+  // A shrinking page (delete, search, picker) falls back to the last real page.
+  React.useEffect(() => {
+    for (const key of PAGED_LISTS) {
+      const pages = Math.max(1, Math.ceil(asNumber(lists[key].total) / paging[key].size))
+      if (paging[key].page > pages) {
+        setPaging((prev) => ({ ...prev, [key]: { ...prev[key], page: pages } }))
+        return
+      }
+    }
+  }, [lists, paging])
+
+  // Switching the master switch off is documented as read-only: drop an open
+  // editor so it cannot be saved behind the banner's back.
+  React.useEffect(() => {
+    if (masterOff) setEditing(null)
+  }, [masterOff])
+
+  const startSidecar = React.useCallback(async () => {
+    if (starting) return
+    setStarting(true)
+    setStartError('')
+    try {
+      const data = await api.start()
+      if (data !== null && typeof data === 'object') {
+        setStatus(data)
+        setStatusError('')
+        setStatusLoading(false)
+      }
+      setRefreshTick((value) => value + 1)
+    } catch (error) {
+      setStartError(errorMessage(error))
+    } finally {
+      setStarting(false)
+    }
+  }, [starting])
+
+  /**
+   * Flip the master switch. The host merges `enabled` into the persisted
+   * settings and recall/capture/tools read it on their next event, so no
+   * restart is involved; the panel mirrors the returned value.
+   */
+  const setMaster = async (next) => {
+    if (masterBusy) return
+    const value = typeof next === 'boolean' ? next : !masterOff
+    setMasterBusy(true)
+    setMasterError('')
+    try {
+      const data = await api.setSettings({ enabled: value })
+      const applied = data?.settings?.enabled
+      setStatus((prev) => ({ ...(prev ?? {}), enabled: typeof applied === 'boolean' ? applied : value }))
+    } catch (error) {
+      setMasterError(errorMessage(error))
+    } finally {
+      setMasterBusy(false)
+    }
+  }
+
+  const onMasterChange = (next) => { void setMaster(next) }
+  const closeEditor = React.useCallback(() => {
+    setEditing(null)
+    setRowError(null)
+  }, [])
+
+  const startEditing = (item) => {
+    if (masterOff) return
+    setRowError(null)
+    setEditing({ id: item.id, draft: item.content })
+  }
+
+  const saveEditing = async () => {
+    if (editing === null || masterOff) return
+    const content = editing.draft.trim()
+    if (content === '') {
+      setRowError({ id: editing.id, message: t('row.emptyContent') })
+      return
+    }
+    const id = editing.id
+    setSavingId(id)
+    setRowError(null)
+    try {
+      const data = await api.update({ tier: 'personal', id, content })
+      const updated = normalizeItem(data?.item ?? {})
+      setLists((prev) => ({
+        ...prev,
+        personal: {
+          ...prev.personal,
+          items: prev.personal.items.map((item) => (
+            item.id === id ? { ...item, ...updated, id, content } : item
+          )),
+        },
+      }))
+      setEditing(null)
+      setSavedId(id)
+      if (savedTimer.current !== null) clearTimeout(savedTimer.current)
+      savedTimer.current = setTimeout(() => {
+        savedTimer.current = null
+        setSavedId('')
+      }, 2000)
+    } catch (error) {
+      setRowError({ id, message: errorMessage(error) })
+    } finally {
+      setSavingId('')
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (deleteTarget === null || deleting || masterOff) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await api.delete({ tier: deleteTarget.tier, id: deleteTarget.id })
+      setLists((prev) => {
+        const list = prev[deleteTarget.tier]
+        const items = list.items.filter((item) => item.id !== deleteTarget.id)
+        return {
+          ...prev,
+          [deleteTarget.tier]: { ...list, items, total: Math.max(0, list.total - 1) },
+        }
+      })
+      setDeleteTarget(null)
+      setRefreshTick((value) => value + 1)
+    } catch (error) {
+      setDeleteError(errorMessage(error))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const copyItem = async (item) => {
+    const ok = await copyToClipboard(item.content)
+    if (copyTimer.current !== null) {
+      clearTimeout(copyTimer.current)
+      copyTimer.current = null
+    }
+    setCopiedId(ok ? item.id : '')
+    setCopyFailedId(ok ? '' : item.id)
+    copyTimer.current = setTimeout(() => {
+      copyTimer.current = null
+      setCopiedId('')
+      setCopyFailedId('')
+    }, COPY_FEEDBACK_MS)
+  }
+
+  const sidecar = status?.sidecar ?? null
+  const sidecarReady = sidecar?.state === 'ready'
+  const workspaceCount = asNumber(lists.project.total) + asNumber(lists.session.total)
+
+  const memoryDate = (item) => {
+    const at = item.updatedAt ?? item.createdAt
+    const text = timeText(t, at, now)
+    return text === '' ? '' : t('row.updatedAt', { time: text })
+  }
+
+  const rowActions = (tier, item) => {
+    const actions = [{ key: 'copy', label: t('row.copy'), onSelect: () => { void copyItem(item) } }]
+    // Edit is personal-only; every tier can be deleted once the host allows it.
+    if (!masterOff && tier === 'personal') {
+      actions.push({ key: 'edit', label: t('row.edit'), onSelect: () => { startEditing(item) } })
+    }
+    if (!masterOff) {
+      actions.push({
+        key: 'delete',
+        label: t('row.delete'),
+        danger: true,
+        onSelect: () => {
+          setDeleteError('')
+          setDeleteTarget({ tier, id: item.id })
+        },
+      })
+    }
+    return actions
+  }
+
+  // Title + description on the left, the master switch on the right edge of the
+  // same block, vertically centred (the 通用 settings row layout).
+  const renderHeader = () => h('header', { className: 'hm-header' },
+    h('div', { className: 'hm-headerMain' },
+      h('div', null,
+        h('h1', { className: 'hm-title' }, t('section.title')),
+        h('p', { className: 'hm-subtitle' }, t('section.subtitle')))),
+    h('div', { className: 'hm-headerSwitch' },
+      h(ui.Switch, {
+        checked: !masterOff,
+        label: t('master.label'),
+        disabled: masterBusy,
+        onChange: onMasterChange,
+      }),
+      masterError !== ''
+        ? h('p', { className: 'hm-error', role: 'alert' }, t('master.error', { message: masterError }))
+        : null))
+
+  const renderSidecarBanner = () => {
+    if (masterOff) return null
+    // Keep the last known banner visible across a refresh instead of flickering
+    // away while the status read is in flight.
+    if (statusLoading && status === null) return null
+    if (sidecarReady && statusError === '') return null
+    const title = t('banner.notReady.title')
+    const body = statusError !== ''
+      ? t('banner.error', { message: statusError })
+      : t('banner.notReady.body', { state: stateLabel(t, sidecar?.state) })
+    const children = [
+      h('div', { key: 'text', className: 'hm-bannerText' },
+        h('strong', null, title),
+        h('p', null, body),
+        sidecar?.lastError ? h('p', { className: 'hm-error' }, t('banner.lastError', { message: sidecar.lastError })) : null,
+        startError !== '' ? h('p', { className: 'hm-error' }, startError) : null),
+    ]
+    const actions = [h(ui.Button, {
+      key: 'start',
+      size: 'sm',
+      variant: 'primary',
+      disabled: starting,
+      onClick: startSidecar,
+    }, starting ? t('banner.starting') : t('banner.start'))]
+    if (statusError !== '') {
+      actions.push(h(ui.Button, { key: 'retry', size: 'sm', variant: 'outline', onClick: refresh }, t('common.retry')))
+    }
+    children.push(h('div', { key: 'actions', className: 'hm-bannerActions' }, actions))
+    return h('section', { className: 'hm-banner', role: 'status' }, children)
+  }
+
+  const workspaceLabel = () => {
+    const active = projects.items.find((item) => item.key === projectKey) ?? null
+    return active?.title || statusProjectTitle || (projectKey !== '' ? shortId(projectKey) : t('project.none'))
+  }
+
+  // The workspace row selects the project and nothing else; the two memory
+  // stores render as separate blocks underneath.
+  const renderWorkspaceBar = () => h('div', { className: 'hm-projectBar' },
+    h(PickerPill, {
+      t,
+      icon: 'folder',
+      label: workspaceLabel(),
+      title: t('project.workspace'),
+      ariaLabel: t('project.select'),
+      emptyText: t('project.empty'),
+      items: projects.items.map((project) => ({
+        key: project.key,
+        title: project.title !== '' ? project.title : shortId(project.key),
+      })),
+      selected: projectKey,
+      onSelect: (key) => {
+        setProjectChoice(key)
+        setSessionChoice(null)
+        setLists(emptyLists())
+        setPaging((prev) => ({
+          ...prev,
+          project: { ...prev.project, page: 1 },
+          session: { ...prev.session, page: 1 },
+        }))
+      },
+    }),
+    h('span', { className: 'hm-divider', 'aria-hidden': 'true' }),
+    h('span', { className: 'hm-projectCount' }, t('count.memories', { n: workspaceCount })),
+    renderSearchField(),
+    renderRefreshButton())
+
+  const renderBlockHead = (title, count) => h('div', { className: 'hm-blockHead' },
+    h('h3', { className: 'hm-blockTitle' }, title),
+    h('span', { className: 'hm-meta' }, t('count.items', { n: count })))
+
+  /** One list's footer: total, page navigation and the page-size selector. */
+  const renderPager = (key, list) => {
+    const { page, size } = paging[key]
+    const total = asNumber(list.total)
+    if (total <= 0) return null
+    const pages = Math.max(1, Math.ceil(total / size))
+    const changePage = (next) => {
+      setPaging((prev) => ({ ...prev, [key]: { ...prev[key], page: next } }))
+    }
+    return h('div', { className: 'hm-pager' },
+      h('span', { className: 'hm-pagerTotal' }, t('pager.total', { n: total })),
+      h('div', { className: 'hm-pagerNav' },
+        h('button', {
+          type: 'button',
+          className: 'hm-pageButton',
+          'aria-label': t('pager.prev'),
+          title: t('pager.prev'),
+          disabled: page <= 1,
+          onClick: () => { changePage(page - 1) },
+        }, h(Icon, { name: 'chevronLeft', size: 14 })),
+        h('span', { className: 'hm-pagerStatus' }, t('pager.page', { page, pages })),
+        h('button', {
+          type: 'button',
+          className: 'hm-pageButton',
+          'aria-label': t('pager.next'),
+          title: t('pager.next'),
+          disabled: page >= pages,
+          onClick: () => { changePage(page + 1) },
+        }, h(Icon, { name: 'chevronRight', size: 14 }))),
+      h('label', { className: 'hm-pagerSize' },
+        h('span', null, t('pager.size')),
+        h('select', {
+          className: 'hm-select',
+          value: String(size),
+          'aria-label': t('pager.size'),
+          onChange: (event) => {
+            const next = Number(event.target.value)
+            setPaging((prev) => ({
+              ...prev,
+              [key]: { page: 1, size: PAGE_SIZES.includes(next) ? next : DEFAULT_PAGE_SIZE },
+            }))
+          },
+        }, PAGE_SIZES.map((value) => h('option', { key: value, value: String(value) }, String(value))))))
+  }
+
+  // 项目记忆: the project tier on its own, no merge, no badge.
+  const renderProjectBlock = () => h('section', { className: 'hm-block' },
+    renderBlockHead(t('project.memories'), lists.project.total),
+    renderListFace('project', (list) => h(React.Fragment, null,
+      renderRows('project', list.items),
+      renderPager('project', list)), 'empty.project'))
+
+  // 会话记忆: the session tier grouped by session, with its own picker.
+  const renderSessionBlock = () => h('section', { className: 'hm-block' },
+    renderBlockHead(t('session.memories'), lists.session.total),
+    renderSessionPicker(),
+    renderSessionArea())
+
+  // The tab row carries only the tabs; the switch lives in the header.
+  const renderTabsRow = () => h('div', { className: 'hm-tabsRow' }, renderTabs())
+
+  const renderTabs = () => h(ui.SegmentedTabs, {
+    items: [
+      { value: 'personal', label: t('tabs.personal'), id: 'hy-memory-tab-personal', panelId: 'hy-memory-panel-personal' },
+      { value: 'project', label: t('tabs.workspace'), id: 'hy-memory-tab-project', panelId: 'hy-memory-panel-project' },
+    ],
+    value: tab,
+    onChange: (value) => { setTab(value) },
+    label: t('tabs.label'),
+    size: 'sm',
+  })
+
+  const renderSearchField = () => h('label', { className: 'hm-searchField' },
+    h(Icon, { name: 'search', size: 14 }),
+    h('input', {
+      type: 'search',
+      className: 'hm-searchInput',
+      value: query,
+      placeholder: t('search.placeholder'),
+      'aria-label': t('search.placeholder'),
+      onChange: (event) => { setQuery(event.target.value) },
+    }))
+
+  const renderRefreshButton = () => h('button', {
+    type: 'button',
+    className: 'hm-iconButton',
+    'aria-label': t('files.refresh'),
+    title: t('files.refresh'),
+    onClick: refresh,
+  }, h(Icon, { name: 'refresh', size: 14 }))
+
+  // 个人 keeps the 文件 header (label + search + refresh); the workspace tab has
+  // no such header, but keeps the same search + refresh pair in its workspace row.
+  const renderFilesHead = () => h('div', { className: 'hm-filesHead' },
+    h('h2', { className: 'hm-filesTitle' }, t('files.title')),
+    renderSearchField(),
+    renderRefreshButton())
+
+  const renderListFace = (tier, body, emptyKey) => {
+    const list = lists[tier]
+    if (list.loading && list.items.length === 0) {
+      return h('div', { className: 'hm-state', role: 'status' },
+        h(ui.StateDot, { state: 'ongoing' }),
+        h('span', null, t('common.loading')))
+    }
+    if (list.error !== '') {
+      return h('div', { className: 'hm-empty', role: 'alert' },
+        h('p', { className: 'hm-error' }, t('list.error', { message: list.error })),
+        h('div', { className: 'hm-row' },
+          h(ui.Button, { size: 'sm', variant: 'outline', onClick: refresh }, t('common.retry'))))
+    }
+    if (list.items.length === 0) {
+      return h('div', { className: 'hm-empty' },
+        h('span', null, searchQuery !== ''
+          ? t('empty.search', { query: searchQuery })
+          : t(emptyKey ?? `empty.${tier}`)),
+        searchQuery === '' ? h('span', { className: 'hm-emptyHint' }, t('empty.hint')) : null)
+    }
+    return h(React.Fragment, null,
+      list.fallback ? h('p', { className: 'hm-muted' }, t('list.fallback')) : null,
+      body(list))
+  }
+
+  const renderFileRow = (tier, item) => {
+    const statusText = savedId === item.id
+      ? t('row.saved')
+      : copiedId === item.id
+        ? t('row.copied')
+        : copyFailedId === item.id ? t('row.copyFailed') : ''
+    return h(FileRow, {
+      key: item.id,
+      t,
+      title: memoryTitle(item.content, t('row.untitled')),
+      date: memoryDate(item),
+      status: statusText,
+      actions: rowActions(tier, item),
+    })
+  }
+
+  const renderEditorRow = (item) => h('li', { key: item.id, className: 'hm-file hm-fileEditor' },
+    h('textarea', {
+      className: 'hm-textarea',
+      rows: 3,
+      value: editing.draft,
+      'aria-label': t('row.edit'),
+      onChange: (event) => { setEditing({ id: item.id, draft: event.target.value }) },
+    }),
+    rowError !== null && rowError.id === item.id
+      ? h('p', { className: 'hm-error' }, t('row.saveFailed', { message: rowError.message }))
+      : null,
+    h('div', { className: 'hm-fileEditorActions' },
+      h(ui.Button, {
+        size: 'sm', variant: 'primary', disabled: savingId === item.id, onClick: saveEditing,
+      }, savingId === item.id ? t('row.saving') : t('row.save')),
+      h(ui.Button, { size: 'sm', variant: 'ghost', onClick: closeEditor }, t('row.cancel'))))
+
+  const renderRows = (tier, items) => h('ul', { className: 'hm-files' },
+    items.map((item) => (
+      editing !== null && editing.id === item.id && tier === 'personal'
+        ? renderEditorRow(item)
+        : renderFileRow(tier, item)
+    )))
+
+  const renderPersonal = () => renderListFace('personal', (list) => h(React.Fragment, null,
+    renderRows('personal', list.items),
+    renderPager('personal', list)))
+
+  // The session picker doubles as a filter: '' keeps every session group.
+  const renderSessionPicker = () => {
+    const items = [
+      { key: '', title: t('session.all') },
+      ...sessions.items.map((entry) => ({ key: entry.sessionId, title: shortId(entry.sessionId) })),
+    ]
+    return h('div', { className: 'hm-sessionBar' },
+      h(PickerPill, {
+        t,
+        icon: 'hash',
+        label: sessionFilter === '' ? t('session.all') : shortId(sessionFilter),
+        title: t('session.picker'),
+        ariaLabel: t('session.select'),
+        emptyText: t('session.emptyPicker'),
+        items,
+        selected: sessionFilter,
+        onSelect: (key) => {
+          setSessionChoice(key)
+          setPaging((prev) => ({ ...prev, session: { ...prev.session, page: 1 } }))
+        },
+      }))
+  }
+
+  /** Session rows grouped by session id, current session first. */
+  const sessionGroups = () => {
+    const groups = new Map()
+    for (const item of lists.session.items) {
+      if (!groups.has(item.sessionId)) groups.set(item.sessionId, [])
+      groups.get(item.sessionId).push(item)
+    }
+    return [...groups.entries()]
+      .map(([key, rows]) => ({
+        key,
+        rows,
+        updatedAt: rows.reduce((max, row) => Math.max(max, asNumber(row.updatedAt)), 0),
+      }))
+      .sort((left, right) => {
+        if (left.key === currentSessionId) return -1
+        if (right.key === currentSessionId) return 1
+        return right.updatedAt - left.updatedAt
+      })
+  }
+
+  const renderSessionArea = () => {
+    const list = lists.session
+    if (list.loading && list.items.length === 0) {
+      return h('div', { className: 'hm-state', role: 'status' },
+        h(ui.StateDot, { state: 'ongoing' }),
+        h('span', null, t('common.loading')))
+    }
+    if (list.error !== '') {
+      return h('div', { className: 'hm-empty', role: 'alert' },
+        h('p', { className: 'hm-error' }, t('list.error', { message: list.error })),
+        h('div', { className: 'hm-row' },
+          h(ui.Button, { size: 'sm', variant: 'outline', onClick: refresh }, t('common.retry'))))
+    }
+    const groups = sessionGroups()
+    if (groups.length === 0) {
+      return h('div', { className: 'hm-empty' },
+        h('span', null, searchQuery !== ''
+          ? t('empty.search', { query: searchQuery })
+          : sessionFilter !== '' ? t('empty.session') : t('empty.sessions')))
+    }
+    return h(React.Fragment, null,
+      groups.map((group) => h('section', {
+        key: group.key === '' ? '__ungrouped__' : group.key,
+        className: 'hm-group',
+      },
+      h('div', { className: 'hm-groupHead' },
+        h('h4', { className: 'hm-groupLabel' },
+          h(Icon, { name: 'hash', size: 13 }),
+          group.key === '' ? t('row.ungrouped') : shortId(group.key)),
+        h('span', { className: 'hm-meta' }, t('count.items', { n: group.rows.length }))),
+      renderRows('session', group.rows))),
+      renderPager('session', list))
+  }
+
+  // 个人 has no workspace scope at all: the file header (with search) starts the
+  // panel. 项目与会话 scopes to a workspace, then shows 项目记忆 and 会话记忆 as
+  // two independent blocks.
+  const renderPersonalBody = () => h(React.Fragment, null, renderFilesHead(), renderPersonal())
+
+  const renderWorkspaceBody = () => h(React.Fragment, null,
+    renderWorkspaceBar(),
+    renderProjectBlock(),
+    renderSessionBlock())
+
+  const renderTabBody = () => (tab === 'personal' ? renderPersonalBody() : renderWorkspaceBody())
+
+  const renderDeleteModal = () => h(ui.Modal, {
+    open: deleteTarget !== null,
+    onClose: () => {
+      if (deleting) return
+      setDeleteTarget(null)
+      setDeleteError('')
+    },
+    title: t('row.confirmDelete.title'),
+    closeLabel: t('common.close'),
+    footer: h('div', { className: 'hm-row' },
+      h(ui.Button, {
+        size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+        onClick: () => { setDeleteTarget(null); setDeleteError('') },
+      }, t('row.confirmDelete.cancel')),
+      h(ui.Button, { size: 'sm', variant: 'primary', disabled: deleting, onClick: confirmDelete },
+        deleting ? t('common.loading') : t('row.confirmDelete.confirm'))),
+  },
+  deleteTarget !== null
+    ? h('p', { className: 'hm-muted' }, t('row.confirmDelete.body', { tier: tierLabel(t, deleteTarget.tier) }))
+    : null,
+  deleteError !== '' ? h('p', { className: 'hm-error' }, t('row.deleteFailed', { message: deleteError })) : null)
+
+  // The activity poll lives in ActivityPanel; the section only seats it, so a
+  // tick never re-renders the lists, the search box or an open inline editor.
+  const renderActivity = () => h(ActivityPanel, { t })
+
+  // Diagnostics keeps the one field that must be visible — the sidecar state —
+  // plus its toggle; model, embedder, mode, scene and paths are one disclosure
+  // away.
+  const renderDiagnostics = () => {
+    const model = status?.model ?? null
+    const embedding = status?.embedding ?? null
+    const dir = dataDirPath(status)
+    const size = dataDirSize(status)
+    const modelText = model?.ready
+      ? [model.provider, model.model].filter(Boolean).join(' / ') || t('diag.ready')
+      : t('diag.notReady')
+    const embeddingText = `${embedding?.mode === 'remote' ? t('diag.remote') : embedding?.mode === 'local' ? t('diag.local') : embedding?.mode ?? t('diag.unknown')} · ${embedding?.ready ? t('diag.ready') : t('diag.notReady')}`
+    const details = [
+      h('div', { key: 'model', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.model')),
+        h('span', { className: 'hm-fieldValue' }, modelText)),
+      h('div', { key: 'embedding', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.embedding')),
+        h('span', { className: 'hm-fieldValue' }, embeddingText)),
+      h('div', { key: 'mode', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.mode')),
+        h('span', { className: 'hm-fieldValue' }, status?.mode ?? t('diag.unknown'))),
+      h('div', { key: 'scene', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.scene')),
+        h('span', { className: 'hm-fieldValue' }, status?.scene ?? t('diag.unknown'))),
+      h('div', { key: 'project', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.project')),
+        h('span', { className: 'hm-fieldValue' },
+          status?.project?.title || (projectKey !== '' ? shortId(projectKey) : t('diag.unknown')))),
+      h('div', { key: 'session', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.session')),
+        h('span', { className: 'hm-fieldValue' }, status?.session?.title || (currentSessionId !== '' ? shortId(currentSessionId) : t('diag.unknown')))),
+    ]
+    if (dir !== '') {
+      details.push(h('div', { key: 'dir', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.dataDir')),
+        h('span', { className: 'hm-fieldValue hm-mono' }, dir)))
+    }
+    if (size !== '') {
+      details.push(h('div', { key: 'size', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.dataSize')),
+        h('span', { className: 'hm-fieldValue' }, size)))
+    }
+    return h('section', { className: 'hm-card' },
+      h('div', { className: 'hm-cardHead' },
+        h('h2', { className: 'hm-h2' }, t('diag.title')),
+        h(ui.Button, {
+          size: 'sm', variant: 'ghost',
+          onClick: () => { setDiagOpen((value) => !value) },
+        }, diagOpen ? t('common.hideDetails') : t('common.details'))),
+      h('div', { className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.sidecar')),
+        h('span', { className: 'hm-fieldValue' },
+          h(ui.StateDot, { state: dotState(sidecar?.state) }),
+          stateLabel(t, sidecar?.state),
+          sidecar?.port ? h('span', { className: 'hm-mono' }, `:${sidecar.port}`) : null)),
+      diagOpen ? h('dl', { className: 'hm-grid' }, details) : null,
+      diagOpen ? h('pre', { className: 'hm-pre' }, JSON.stringify(status, null, 2)) : null)
+  }
+
+  // MemHub is a separate product; its card reads the detection folded into
+  // status and keeps all import state local to the card.
+  const renderMemhub = () => h(MemhubCard, {
+    t,
+    memhub: status?.memhub ?? null,
+    onImported: refresh,
+  })
+
+  // With the master switch off the whole body disappears; the header and its
+  // switch stay, so the panel can always be turned back on.
+  if (masterOff) {
+    return h('section', { className: 'hm-panel', 'aria-label': t('section.title') },
+      panelStyles(),
+      renderHeader())
+  }
+
+  return h('section', { className: 'hm-panel', 'aria-label': t('section.title') },
+    panelStyles(),
+    renderHeader(),
+    renderSidecarBanner(),
+    renderTabsRow(),
+    h('div', {
+      role: 'tabpanel',
+      id: `hy-memory-panel-${tab}`,
+      'aria-labelledby': `hy-memory-tab-${tab}`,
+      className: 'hm-panelBody',
+    },
+    renderTabBody()),
+    renderActivity(),
+    renderDiagnostics(),
+    renderMemhub(),
+    renderDeleteModal())
+}

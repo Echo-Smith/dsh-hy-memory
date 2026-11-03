@@ -1,0 +1,63 @@
+{
+  "name": "hy-memory4dsh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hy-Memory 2.0 as a native DeepSeek Harness memory component: three-tier memory (personal / project / session), three scenes (chat / working / coding), automatic recall and capture with tool traces, a Settings > Memory panel, and MemHub interoperability.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "src",
+    "bridge",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": false,
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "hy-memory",
+    "memhub",
+    "memory",
+    "agent-memory",
+    "long-term-memory",
+    "personalization",
+    "context",
+    "plugin",
+    "three-tier-memory"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Echo-Smith/hy-memory4dsh.git"
+  },
+  "homepage": "https://github.com/Echo-Smith/hy-memory4dsh#readme",
+  "bugs": {
+    "url": "https://github.com/Echo-Smith/hy-memory4dsh/issues"
+  },
+  "license": "MIT"
+}

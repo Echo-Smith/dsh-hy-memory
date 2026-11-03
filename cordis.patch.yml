@@ -1,0 +1,7 @@
+# Hy-Memory bundle: one Host row. The memory panel is part of the same package
+# (dsh.client) and needs no extra row.
+- insert:
+    - id: hy-memory
+      name: '@local/dsh-hy-memory'
+      config:
+        enabled: true

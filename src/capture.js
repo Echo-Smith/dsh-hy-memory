@@ -1,0 +1,813 @@
+/**
+ * Session capture: buffer user/assistant/tool events per session, flush a
+ * window of turns (or an idle period) into one hy_memory `add()` write, and
+ * promote durable material up the tier ladder with at most one model call per
+ * promotion.
+ *
+ * Every entry point is total: the session/event listener must never throw into
+ * the harness, so all work is wrapped and failures become activity records.
+ */
+import { randomUUID } from 'node:crypto'
+import { collectSearchItems, truncateChars } from './recall.js'
+import { projectAgentId, projectKey, projectTitleForPath, pickScene, resolveUser, workspaceIdFor, writeScope } from './tiers.js'
+
+export const MAX_BUFFER_EVENTS = 400
+export const MAX_QUEUE_JOBS = 60
+export const MAX_QUEUE_ATTEMPTS = 20
+export const BACKOFF_BASE_MS = 1000
+export const BACKOFF_CAP_MS = 600_000
+
+const ADD_TIMEOUT_MS = 240_000
+const SEARCH_TIMEOUT_MS = 15_000
+const PROMOTE_TIMEOUT_MS = 90_000
+const PROMPT_INPUT_CHARS = 6000
+const SESSION_TRACK_LIMIT = 200
+const MISSING_CLIENT_RETRY_MS = 15_000
+
+export function nextBackoff(attempt, base = BACKOFF_BASE_MS, cap = BACKOFF_CAP_MS) {
+  const exponent = Math.max(0, Math.min(10, (Number(attempt) || 1) - 1))
+  return Math.min(cap, base * 2 ** exponent)
+}
+
+export function isDuplicate(cursor, seq) {
+  return Number.isFinite(cursor) && Number.isFinite(seq) && seq <= cursor
+}
+
+function textOfBlocks(content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  const parts = []
+  for (const block of content) {
+    if (block && block.type === 'text' && typeof block.text === 'string') parts.push(block.text)
+  }
+  return parts.join('\n')
+}
+
+function parseArguments(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Turn the buffered events into the SDK's chat-message payload plus the scene
+ * that is actually safe to force.
+ */
+export function buildBatch(buffer, settings = {}) {
+  const includeTools = settings.capture?.includeToolCalls !== false
+  const resultChars = Number.isFinite(settings.capture?.toolResultChars) ? settings.capture.toolResultChars : 1200
+  const items = Array.isArray(buffer) ? buffer : Array.isArray(buffer?.items) ? buffer.items : []
+  const tools = Array.isArray(buffer?.tools) ? buffer.tools : []
+  const messages = []
+  for (const item of items) {
+    if (!item) continue
+    const content = typeof item.content === 'string' ? item.content.trim() : ''
+    if (!content) continue
+    if (item.role === 'tool') {
+      if (!includeTools) continue
+      const message = { role: 'tool', content: truncateChars(content, resultChars) }
+      if (item.name) message.tool_name = item.name
+      if (item.callId) message.tool_call_id = item.callId
+      messages.push(message)
+      continue
+    }
+    if (item.role === 'user' || item.role === 'assistant') messages.push({ role: item.role, content })
+  }
+  let scene = includeTools ? pickScene(tools) : 'chat'
+  if (scene !== 'chat' && !messages.some((message) => message.role === 'tool')) scene = 'chat'
+
+  if (!messages.some((message) => message.role === 'user' || message.role === 'assistant')) {
+    return { messages: [], scene: 'chat', writeScene: 'chat' }
+  }
+  return { messages, scene, writeScene: scene }
+}
+
+export function promotionLines(text) {
+  const value = typeof text === 'string' ? text : ''
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter((line) => line.length > 0 && !/^none\.?$/i.test(line) && !/^```/.test(line))
+    .map((line) => truncateChars(line, 400))
+    .slice(0, 8)
+}
+
+export function sessionToProjectPrompt(items) {
+  const material = items.map((item, index) => `${index + 1}. ${item}`).join('\n')
+  return [
+    'You maintain a project-level memory for a coding assistant.',
+    'Below are memories recorded during one work session in this project.',
+    'Extract only durable, project-scoped knowledge that will still help in a later session:',
+    'architecture decisions, conventions, build/test commands, non-obvious constraints, unresolved risks.',
+    'Exclude the user’s personal preferences, secrets, one-off debugging details, and anything already obvious from the code.',
+    'Return at most 5 lines, one self-contained statement per line, no numbering, no preamble.',
+    'Return exactly NONE when nothing is durable.',
+    '',
+    'SESSION MEMORIES:',
+    material,
+  ].join('\n')
+}
+
+export function projectToPersonalPrompt(items) {
+  const material = items.map((item, index) => `${index + 1}. ${item}`).join('\n')
+  return [
+    'You maintain a long-term user profile for a coding assistant.',
+    'Below are project-level memories recorded across this user’s projects.',
+    'Extract only stable facts about the user: preferred languages, tools, style, workflow, standing constraints.',
+    'Exclude project-specific details, secrets, and anything that will change soon.',
+    'Return at most 5 lines, one self-contained statement per line, no numbering, no preamble.',
+    'Return exactly NONE when nothing is stable.',
+    '',
+    'PROJECT MEMORIES:',
+    material,
+  ].join('\n')
+}
+
+export function createCapture(deps) {
+  const settings = deps.settings
+  const state = deps.state
+  const activity = deps.activity
+  const getClient = deps.getClient
+  const modelFor = deps.modelFor ?? (() => null)
+  const getLlm = deps.getLlm
+  const resolveModel = deps.resolveModel ?? (() => null)
+  const log = deps.log ?? (() => {})
+
+  const sessions = new Map()
+  let draining = false
+  let retryTimer = null
+  let promoting = false
+  let pendingPromotion = null
+  let disposed = false
+
+  function ensureState() {
+    const data = state.data
+    if (!data.capture || typeof data.capture !== 'object') data.capture = { sessions: {}, queue: [] }
+    if (!data.capture.sessions || typeof data.capture.sessions !== 'object') data.capture.sessions = {}
+    if (!Array.isArray(data.capture.queue)) data.capture.queue = []
+    if (!data.promotions || typeof data.promotions !== 'object') data.promotions = { sessions: {}, projects: {} }
+    if (!data.promotions.sessions || typeof data.promotions.sessions !== 'object') data.promotions.sessions = {}
+    if (!data.promotions.projects || typeof data.promotions.projects !== 'object') data.promotions.projects = {}
+    if (!data.projects || typeof data.projects !== 'object') data.projects = {}
+    return data
+  }
+
+  function entryFor(session) {
+    const data = ensureState()
+    const id = session.id
+    let entry = sessions.get(id)
+    if (entry) return entry
+    const stored = data.capture.sessions[id]
+    entry = {
+      id,
+      session,
+      cwd: typeof session.header?.cwd === 'string' ? session.header.cwd : '',
+      title: '',
+      cursor: Number.isFinite(stored?.cursor) ? stored.cursor : -1,
+      turnsSinceFlush: Number.isFinite(stored?.turnsSinceFlush) ? stored.turnsSinceFlush : 0,
+      turnsSincePromotion: 0,
+      turnsSincePersonal: 0,
+      turn: 0,
+      buffer: [],
+      tools: [],
+      pendingCalls: new Map(),
+      lastQuery: '',
+      lastActivityAt: Date.now(),
+      timer: null,
+      flushing: false,
+    }
+    sessions.set(id, entry)
+    pruneSessions(data)
+    return entry
+  }
+
+  function pruneSessions(data) {
+    const ids = Object.keys(data.capture.sessions)
+    if (ids.length <= SESSION_TRACK_LIMIT) return
+    const ordered = ids
+      .map((id) => ({ id, at: Number(data.capture.sessions[id]?.at) || 0 }))
+      .sort((left, right) => left.at - right.at)
+    for (const stale of ordered.slice(0, ids.length - SESSION_TRACK_LIMIT)) {
+      delete data.capture.sessions[stale.id]
+    }
+  }
+
+  function persistEntry(entry) {
+    const data = ensureState()
+    data.capture.sessions[entry.id] = {
+      cursor: entry.cursor,
+      turnsSinceFlush: entry.turnsSinceFlush,
+      at: Date.now(),
+    }
+    if (entry.cwd) {
+      const key = projectKey(entry.cwd)
+      if (key && !data.projects[key]) {
+        data.projects[key] = { path: entry.cwd, title: projectTitleForPath(entry.cwd) }
+        data.lastProject = key
+      }
+    }
+    state.save()
+  }
+
+  function armIdle(entry) {
+    const idleMs = settings()?.capture?.idleFlushMs
+    if (!(idleMs > 0)) return
+    if (entry.timer) clearTimeout(entry.timer)
+    entry.timer = setTimeout(() => {
+      entry.timer = null
+      void flush(entry, 'idle')
+    }, idleMs)
+    entry.timer.unref?.()
+  }
+
+  function push(entry, item) {
+    entry.buffer.push(item)
+    if (entry.buffer.length > MAX_BUFFER_EVENTS) entry.buffer.splice(0, entry.buffer.length - MAX_BUFFER_EVENTS)
+    entry.lastActivityAt = Date.now()
+  }
+
+  function handleSessionEvent(session, event) {
+    if (disposed) return
+    try {
+      const config = settings()
+      if (config?.enabled === false) return
+      if (!config?.capture?.enabled) return
+      if (!session?.id || !event || typeof event.type !== 'string') return
+      const entry = entryFor(session)
+      const seq = Number(event.seq)
+      if (isDuplicate(entry.cursor, seq)) return
+      if (Number.isFinite(seq)) entry.cursor = seq
+      const data = event.data ?? {}
+      switch (event.type) {
+        case 'user/message': {
+          if (data.source?.kind !== 'user') break
+          const text = textOfBlocks(data.content).trim()
+          if (!text) break
+          push(entry, { role: 'user', content: text, seq })
+          entry.lastQuery = truncateChars(text.replace(/\s+/g, ' ').trim(), 500)
+          break
+        }
+        case 'assistant/message': {
+          const text = textOfBlocks(data.message?.content).trim()
+          if (text) push(entry, { role: 'assistant', content: text, seq })
+          break
+        }
+        case 'tool/call': {
+          const name = typeof data.name === 'string' ? data.name : ''
+          if (!name) break
+          entry.pendingCalls.set(String(data.callId ?? ''), name)
+          entry.tools.push({ name, args: parseArguments(data.arguments) })
+          if (entry.tools.length > 60) entry.tools.splice(0, entry.tools.length - 60)
+          break
+        }
+        case 'tool/result': {
+          const callId = String(data.message?.toolCallId ?? '')
+          const text = textOfBlocks(data.message?.content).trim()
+          const name = entry.pendingCalls.get(callId) ?? ''
+          entry.pendingCalls.delete(callId)
+          if (text) push(entry, { role: 'tool', content: text, name, callId, seq })
+          break
+        }
+        case 'turn/end': {
+          entry.turn = Number(data.turn) || entry.turn
+          entry.turnsSinceFlush += 1
+          entry.turnsSincePromotion += 1
+          entry.turnsSincePersonal += 1
+          const windowTurns = Number(config.capture?.windowTurns) || 3
+          if (entry.turnsSinceFlush >= windowTurns) void flush(entry, 'window')
+          break
+        }
+        case 'session/title': {
+          if (typeof data.title === 'string') entry.title = data.title
+          break
+        }
+        default:
+          break
+      }
+      persistEntry(entry)
+      armIdle(entry)
+      if (event.type === 'turn/end') void maybePromote(entry, 'turn')
+    } catch (error) {
+      log('capture failed', error)
+      activity?.record({ kind: 'error', summary: 'capture failed', detail: String(error?.message ?? error), ok: false })
+    }
+  }
+
+  async function flush(entry, reason) {
+    if (disposed || !entry || entry.flushing) return
+    entry.flushing = true
+    try {
+      const config = settings()
+      const toolsSeen = entry.tools.map((tool) => tool.name)
+      const batch = buildBatch({ items: entry.buffer, tools: entry.tools }, config)
+      // Keep tools and text together: an idle flush can arrive when only tool
+      // calls are pending (between steps), and clearing then would downgrade the
+      // next text flush to the chat scene.
+      if (batch.messages.length === 0) return
+      if (state?.data) {
+        state.data.lastFlush = {
+          at: Date.now(),
+          reason,
+          scene: batch.scene,
+          tools: toolsSeen,
+          roles: batch.messages.map((message) => message.role),
+          productivity: config.capture?.productivity === true,
+        }
+      }
+      entry.buffer = []
+      entry.tools = []
+      entry.lastFlushedText = batch.messages.find((message) => message.role === 'user')?.content
+        ?? batch.messages[0]?.content
+        ?? entry.lastFlushedText
+        ?? ''
+      entry.turnsSinceFlush = 0
+      if (entry.timer) {
+        clearTimeout(entry.timer)
+        entry.timer = null
+      }
+      persistEntry(entry)
+      ensureState().lastScene = batch.scene
+      state.save()
+      if (batch.messages.length === 0) return
+      const key = projectKey(entry.cwd)
+      const job = {
+        id: randomUUID(),
+        sessionId: entry.id,
+        projectKey: key,
+        scene: batch.scene,
+        attempts: 0,
+        createdAt: Date.now(),
+        payload: {
+          // The HTTP add route ignores `scene` and re-derives it from tool
+          // messages, so routing to chat requires dropping them; the detected
+          // scene stays in the activity label.
+          data: config.capture?.productivity === true ? batch.messages : batch.messages.filter((message) => message.role !== 'tool'),
+          // The SDK's HTTP add route currently ignores `scene` and re-derives it
+          // from the payload; tool messages above are what actually select the
+          // productivity pipeline. Sending it keeps the intent explicit.
+          // Productivity stores are only reachable by search when the memory
+          // carries a workspace_id, so capture routes to chat unless the
+          // productivity pipeline is explicitly enabled. The detected scene
+          // stays as a label for the activity feed and the panel.
+          scene: config.capture?.productivity === true ? batch.scene : 'chat',
+          ...config.capture?.productivity === true && batch.scene !== 'chat'
+            ? { workspace_id: workspaceIdFor(entry.cwd) }
+            : {},
+          ...writeScope('session', { settings: config, projectKey: key, sessionId: entry.id }),
+        },
+      }
+      enqueue(job)
+      activity?.record({
+        kind: 'capture',
+        tier: 'session',
+        summary: `queued ${batch.messages.length} messages (${batch.scene}, ${reason})`,
+        detail: entry.title || entry.cwd,
+        ok: true,
+      })
+      void drain()
+    } catch (error) {
+      log('capture flush failed', error)
+      activity?.record({ kind: 'error', summary: 'capture flush failed', detail: String(error?.message ?? error), ok: false })
+    } finally {
+      entry.flushing = false
+    }
+  }
+
+  function enqueue(job) {
+    const data = ensureState()
+    const queue = data.capture.queue
+    queue.push(job)
+    if (queue.length > MAX_QUEUE_JOBS) {
+      const dropped = queue.splice(0, queue.length - MAX_QUEUE_JOBS)
+      activity?.record({ kind: 'error', summary: `dropped ${dropped.length} queued captures`, ok: false })
+    }
+    state.save()
+  }
+
+  function scheduleRetry(delayMs) {
+    if (disposed || retryTimer) return
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      void drain()
+    }, Math.max(250, delayMs))
+    retryTimer.unref?.()
+  }
+
+  async function drain() {
+    if (disposed || draining) return
+    draining = true
+    try {
+      const data = ensureState()
+      const queue = data.capture.queue
+      while (queue.length > 0 && !disposed) {
+        const job = queue[0]
+        const client = getClient()
+        if (!client) {
+          scheduleRetry(MISSING_CLIENT_RETRY_MS)
+          return
+        }
+        try {
+          // Productivity batches must go through the scene-aware route: the
+          // SDK's HTTP add re-derives the scene from the payload and would put a
+          // coding batch back into the chat store.
+          const addScene = typeof client.bridgeAddScene === 'function'
+            && job.scene !== 'chat'
+            && job.payload?.scene !== 'chat'
+            ? client.bridgeAddScene(job.payload, { timeoutMs: ADD_TIMEOUT_MS })
+            : client.add(job.payload, { timeoutMs: ADD_TIMEOUT_MS })
+          const result = await addScene
+          if (result?.success === false) {
+            const code = String(result?.agent_error_code ?? result?.error_code ?? 'unknown')
+            if (state?.data) {
+              state.data.lastAddError = { at: Date.now(), code, keys: Object.keys(result ?? {}).slice(0, 12), scene: job.scene }
+            }
+            // Retry before dequeuing: the job must stay queued for the backoff
+            // attempt, otherwise a transient reconcile failure drops the turn.
+            if (transientFailure(result) && (job.attempts ?? 0) < MAX_QUEUE_ATTEMPTS) {
+              job.attempts = (job.attempts ?? 0) + 1
+              state.save()
+              scheduleRetry(nextBackoff(job.attempts))
+              return
+            }
+            queue.shift()
+            state.save()
+            const kept = await fallbackToLite(client, job)
+            activity?.record({
+              kind: 'error',
+              summary: kept ? 'capture reconcile failed; raw text kept' : 'capture write rejected',
+              detail: code,
+              ok: false,
+            })
+          } else {
+            queue.shift()
+            state.save()
+            activity?.record({
+              kind: 'capture',
+              tier: 'session',
+              summary: `wrote ${job.payload.data.length} messages to session memory`,
+              detail: job.scene,
+              ok: true,
+            })
+          }
+        } catch (error) {
+          job.attempts = (job.attempts ?? 0) + 1
+          state.save()
+          const retryable = error?.retryable !== false && (error?.status === undefined || error.status === 0 || error.status === 429 || error.status >= 500)
+          if (!retryable || job.attempts >= MAX_QUEUE_ATTEMPTS) {
+            queue.shift()
+            state.save()
+            log('capture write dropped', error)
+            const kept = await fallbackToLite(client, job)
+            activity?.record({
+              kind: 'error',
+              summary: kept ? 'capture write dropped; raw text kept' : 'capture write dropped after retries',
+              detail: String(error?.message ?? error),
+              ok: false,
+            })
+          } else {
+            scheduleRetry(nextBackoff(job.attempts))
+            return
+          }
+        }
+      }
+    } catch (error) {
+      log('capture queue failed', error)
+    } finally {
+      draining = false
+    }
+  }
+
+  /** Reconcile and gateway failures are worth retrying; a bad payload is not. */
+  function transientFailure(result) {
+    const code = String(result?.agent_error_code ?? result?.error_code ?? '').toUpperCase()
+    if (code === '') return false
+    return /RECONCILE|EMPTY_RESPONSE|TIMEOUT|INTERNAL|RATE|OVERLOAD|UNAVAILABLE|502|503|504/.test(code)
+  }
+
+  /** Last resort: keep the raw text in the lite layer instead of losing the turn. */
+  async function fallbackToLite(client, job) {
+    if (typeof client?.bridgeAddLite !== 'function') return false
+    const data = Array.isArray(job?.payload?.data) ? job.payload.data : []
+    try {
+      await client.bridgeAddLite({
+        data,
+        user_id: job.payload?.user_id,
+        agent_id: job.payload?.agent_id,
+        session_id: job.payload?.session_id,
+      }, { timeoutMs: ADD_TIMEOUT_MS })
+      activity?.record({
+        kind: 'capture',
+        tier: 'session',
+        summary: 'kept the turn in the raw layer after reconcile failed',
+        detail: 'lite fallback',
+        ok: true,
+      })
+      return true
+    } catch (error) {
+      log('lite fallback failed', error)
+      return false
+    }
+  }
+
+  async function ask(model, prompt) {
+    // Prefer the sidecar's endpoint: it runs with the thinking channel disabled,
+    // while a gateway model reached through the host can answer with reasoning
+    // only and therefore an empty text body.
+    const client = getClient()
+    if (client && typeof client.bridgeComplete === 'function') {
+      try {
+        const result = await client.bridgeComplete({ prompt }, { timeoutMs: PROMOTE_TIMEOUT_MS })
+        const text = typeof result?.text === 'string' ? result.text : ''
+        if (text.trim()) return text
+      } catch (error) {
+        log('promotion completion through the sidecar failed', error)
+      }
+    }
+    const llm = getLlm()
+    if (!llm || typeof llm.stream !== 'function') return ''
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(new Error('promotion timeout')), PROMOTE_TIMEOUT_MS)
+    timer.unref?.()
+    let text = ''
+    let finish
+    try {
+      const stream = llm.stream({
+        provider: model.provider,
+        model: model.model,
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+        signal: controller.signal,
+        purpose: 'hy-memory-promotion',
+      })
+      for await (const chunk of stream) {
+        if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') text += chunk.text
+        else if (chunk?.type === 'finish') finish = chunk.reason
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+    const okKinds = new Set(['stop', 'completed', 'max-tokens'])
+    if (finish && !okKinds.has(finish.kind)) {
+      throw new Error(`promotion model call ended with ${finish.kind}`)
+    }
+    return text
+  }
+
+  function promotionRecordSessions() {
+    return ensureState().promotions.sessions
+  }
+
+  async function maybePromote(entry, reason) {
+    if (disposed) return
+    // Turns arrive faster than a promotion run: keep the latest request instead of
+    // dropping it, otherwise frequent turns starve the project and personal tiers.
+    if (promoting) {
+      pendingPromotion = { entry, reason }
+      return
+    }
+    const config = settings()
+    if (!config?.promotion?.enabled) return
+    const every = Math.max(1, Number(config.promotion.everyTurns) || 8)
+    const wantSession = entry.turnsSincePromotion >= every
+    const wantPersonal = entry.turnsSincePersonal >= every * 3
+    if (reason === 'session-end' && config.promotion.onSessionEnd !== false) {
+      if (entry.turnsSincePromotion > 0) await promoteSession(entry)
+      return
+    }
+    if (wantSession) {
+      entry.turnsSincePromotion = 0
+      await promoteSession(entry)
+    }
+    if (wantPersonal) {
+      entry.turnsSincePersonal = 0
+      await promoteProject(entry)
+    }
+  }
+
+  async function modelForEntry(entry) {
+    try {
+      // The session may not have recorded a model selection yet, and the host's
+      // route is resolved lazily; ask the host for both before giving up.
+      if (typeof resolveModel === 'function') {
+        const resolved = await resolveModel(entry.session)
+        if (resolved && typeof resolved.provider === 'string' && typeof resolved.model === 'string' && resolved.provider && resolved.model) return resolved
+      }
+      const model = modelFor(entry.session)
+      if (model && typeof model.provider === 'string' && typeof model.model === 'string' && model.provider && model.model) {
+        return model
+      }
+    } catch {}
+    return null
+  }
+
+  async function promoteSession(entry) {
+    const client = getClient()
+    if (!client) return
+    const records = promotionRecordSessions()
+    const record = records[entry.id]
+    if (record && record.seq === entry.cursor) return
+    const query = entry.lastQuery || entry.title || entry.lastFlushedText || lastBufferedText(entry)
+    if (!query) {
+      records[entry.id] = { at: Date.now(), seq: entry.cursor, skipped: 'no-query' }
+      state.save()
+      return
+    }
+    const model = await modelForEntry(entry)
+    if (!model) {
+      records[entry.id] = { at: Date.now(), seq: entry.cursor, skipped: 'no-model' }
+      state.save()
+      return
+    }
+    promoting = true
+    try {
+      const config = settings()
+      const key = projectKey(entry.cwd)
+      const response = await client.search({
+        query,
+        user_ids: [resolveUser(config)],
+        ...key ? { agent_ids: [projectAgentId(key)] } : {},
+        limit: 12,
+        min_score: 0,
+      }, { timeoutMs: SEARCH_TIMEOUT_MS })
+      const items = collectSearchItems(response)
+        .filter((raw) => !raw?.session_id || String(raw.session_id) === entry.id)
+        .map((raw) => truncateChars(String(raw?.content ?? '').trim(), 400))
+        .filter(Boolean)
+        .slice(0, 8)
+      records[entry.id] = { at: Date.now(), seq: entry.cursor, candidates: items.length }
+      state.save()
+      if (items.length < 2 || !key) return
+      const prompt = truncateChars(sessionToProjectPrompt(items), PROMPT_INPUT_CHARS)
+      const answer = await ask(model, prompt)
+      const lines = promotionLines(answer)
+      if (lines.length === 0) return
+      const result = await writePromotedWithRetry(client, {
+        data: [{ role: 'user', content: lines.join('\n') }],
+        ...writeScope('project', { settings: config, projectKey: key }),
+        scene: 'chat',
+      }, { timeoutMs: ADD_TIMEOUT_MS })
+      if (result?.success === false) throw new Error(String(result?.agent_error_code ?? 'promotion write failed'))
+      activity?.record({
+        kind: 'promote',
+        tier: 'project',
+        summary: `promoted ${lines.length} session memories to project`,
+        detail: entry.title || key,
+        ok: true,
+      })
+    } catch (error) {
+      log('session promotion failed', error)
+      activity?.record({ kind: 'error', summary: 'session promotion failed', detail: String(error?.message ?? error), ok: false })
+    } finally {
+      promoting = false
+      drainPendingPromotion()
+    }
+  }
+
+  /**
+   * A promoted write is a small, already-distilled batch, so a retry is cheap.
+   * The gateway intermittently answers the reconcile call with an empty body
+   * (502 / RECONCILE_FAILED); retrying once recovers those without dropping the
+   * promotion.
+   */
+  /** Last resort query for promotion: the newest buffered line. */
+  function lastBufferedText(entry) {
+    const buffer = Array.isArray(entry?.buffer) ? entry.buffer : []
+    for (let i = buffer.length - 1; i >= 0; i -= 1) {
+      const text = String(buffer[i]?.content ?? '').trim()
+      if (text) return text.slice(0, 200)
+    }
+    return ''
+  }
+
+  async function writePromotedWithRetry(client, payload) {
+    const first = await client.add(payload)
+    if (first?.success !== false) return first
+    const code = String(first?.agent_error_code ?? first?.error_code ?? '')
+    const retryable = /502|503|LLM_ERROR|RECONCILE_FAILED|EMPTY_RESPONSE/.test(code)
+    if (!retryable) return first
+    log(`promotion write retrying after ${code}`)
+    return client.add(payload)
+  }
+
+  function drainPendingPromotion() {
+    if (!pendingPromotion || disposed) return
+    const next = pendingPromotion
+    pendingPromotion = null
+    setTimeout(() => { void maybePromote(next.entry, next.reason) }, 0).unref?.()
+  }
+
+  async function promoteProject(entry) {
+    const client = getClient()
+    if (!client) return
+    const config = settings()
+    const key = projectKey(entry.cwd)
+    if (!key) return
+    const records = ensureState().promotions.projects
+    const record = records[key]
+    if (record && record.seq === entry.cursor) return
+    const model = await modelForEntry(entry)
+    if (!model) {
+      records[key] = { at: Date.now(), seq: entry.cursor, skipped: true }
+      state.save()
+      return
+    }
+    promoting = true
+    try {
+      const response = await client.list({
+        user_id: resolveUser(config),
+        agent_id: projectAgentId(key),
+        limit: 100,
+        offset: 0,
+        order: 'desc',
+      }, { timeoutMs: SEARCH_TIMEOUT_MS })
+      const items = (response?.vdb?.memories ?? [])
+        .filter((item) => String(item?.session_id ?? '') === 'project')
+        .map((item) => truncateChars(String(item?.content ?? '').trim(), 400))
+        .filter(Boolean)
+        .slice(0, 10)
+      records[key] = { at: Date.now(), seq: entry.cursor, candidates: items.length }
+      state.save()
+      if (items.length < 3) return
+      const prompt = truncateChars(projectToPersonalPrompt(items), PROMPT_INPUT_CHARS)
+      const answer = await ask(model, prompt)
+      const lines = promotionLines(answer)
+      if (lines.length === 0) return
+      const result = await writePromotedWithRetry(client, {
+        data: [{ role: 'user', content: lines.join('\n') }],
+        ...writeScope('personal', { settings: config }),
+        scene: 'chat',
+      }, { timeoutMs: ADD_TIMEOUT_MS })
+      if (result?.success === false) throw new Error(String(result?.agent_error_code ?? 'promotion write failed'))
+      activity?.record({
+        kind: 'promote',
+        tier: 'personal',
+        summary: `promoted ${lines.length} project memories to personal`,
+        detail: key,
+        ok: true,
+      })
+    } catch (error) {
+      log('project promotion failed', error)
+      activity?.record({ kind: 'error', summary: 'project promotion failed', detail: String(error?.message ?? error), ok: false })
+    } finally {
+      promoting = false
+      drainPendingPromotion()
+    }
+  }
+
+  function handleSessionDisposed(session) {
+    try {
+      if (!session?.id) return
+      const entry = sessions.get(session.id)
+      if (!entry) return
+      sessions.delete(session.id)
+      const finished = flush(entry, 'disposed')
+      if (settings()?.promotion?.onSessionEnd !== false) {
+        void finished.then(() => maybePromote(entry, 'session-end'))
+      }
+    } catch (error) {
+      log('session dispose handling failed', error)
+    }
+  }
+
+  async function flushAll(reason = 'shutdown') {
+    const entries = [...sessions.values()]
+    for (const entry of entries) await flush(entry, reason)
+  }
+
+  function dispose() {
+    disposed = true
+    if (retryTimer) {
+      clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    for (const entry of sessions.values()) {
+      if (entry.timer) {
+        clearTimeout(entry.timer)
+        entry.timer = null
+      }
+    }
+    sessions.clear()
+  }
+
+  function queueDepth() {
+    return ensureState().capture.queue.length
+  }
+
+  return {
+    handleSessionEvent,
+    handleSessionDisposed,
+    flushAll,
+    flushSession: (id) => {
+      const entry = sessions.get(id)
+      return entry ? flush(entry, 'manual') : Promise.resolve()
+    },
+    drain,
+    maybePromote,
+    dispose,
+    queueDepth,
+    sessionCount: () => sessions.size,
+  }
+}
