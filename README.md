@@ -54,7 +54,7 @@ Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edi
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | on | master switch; off pauses recall, capture and tools, and the panel becomes read-only |
-| `recall.maxItems` / `maxChars` | 5 / 1600 | recall budget per step |
+| `recall.maxItems` / `maxChars` / `minScore` | 5 / 1200 / 0.56 | recall budget and relevance floor per step |
 | `capture.windowTurns` | 3 | turns per captured batch |
 | `capture.productivity` | off | route batches to the working/coding stores instead of chat |
 | `promotion.everyTurns` | 8 | turns between promotion passes |
@@ -81,8 +81,16 @@ MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 npm run check         # syntax of entry points and the built bundle
 npm test              # 85 host tests
 npm run test:smoke    # panel smoke, reads the built client.js
-npm run eval:recall   # recall fixtures: hit, noise, budget, injected size
+npm run eval:recall   # offline fixtures: hit, noise, budget, injected size
 ```
+
+Against a running sidecar, the live harness drives the real pipeline and prints hit rate, injected size and latency:
+
+```bash
+npm run eval:live -- --port <sidecar port> [--grid]
+```
+
+Current numbers on ten real questions from a working store: 9/10 hits, 941 injected characters, 149 ms. Before the session-id enrichment and the budget-aware keyword top-up it was 6/10 at 805 characters.
 
 CI runs the same four commands on every push and pull request. The recall harness already paid for itself: it caught a case where one oversize memory ignored `maxChars` and was injected whole.
 

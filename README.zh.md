@@ -68,8 +68,16 @@ MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 npm run check         # 入口与构建产物的语法检查
 npm test              # 85 个宿主测试
 npm run test:smoke    # 面板冒烟，读取构建后的 client.js
-npm run eval:recall   # 召回夹具：命中、噪声、预算、注入体积
+npm run eval:recall   # 离线召回夹具：命中、噪声、预算、注入体积
 ```
+
+对着运行中的 sidecar 跑真实链路，输出命中率、注入体积与延迟：
+
+```bash
+npm run eval:live -- --port <sidecar 端口> [--grid]
+```
+
+当前在真实 store 的十个问题上：命中 9/10，平均注入 941 字，平均 149 毫秒。补上 session id 与会话层、以及预算感知的词面补齐之前，是 6/10、805 字。
 
 CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一个真实问题：单条超长记忆会绕过 `maxChars` 被整条注入。
 
