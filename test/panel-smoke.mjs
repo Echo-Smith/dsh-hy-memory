@@ -37,6 +37,8 @@ const STATUS = Object.freeze({
   dataDirSize: 4096,
   // Folded into status by the host; the card must render this verbatim.
   memhub: { detected: true, path: '/Users/test/.one-memory', sizeBytes: 20480 },
+  package: { name: '@local/dsh-hy-memory', version: '0.1.0', repoUrl: 'https://github.com/example/hy-memory4dsh.git' },
+  context: { memoryTokens: 120, memoryItems: 2, lastAt: 1, totalTokens: 3400, totalItems: 9 },
 })
 
 const PAGE_TOTAL = 45
@@ -558,6 +560,7 @@ function createScheduler() {
 function createFetch(fetchCalls, options = {}) {
   const sessionPanel = options.sessionPanel !== false
   const memhubDetected = options.memhubDetected !== false
+  const withContext = options.context !== false
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
   const settings = { enabled: true }
   let activityPolls = 0
@@ -573,6 +576,7 @@ function createFetch(fetchCalls, options = {}) {
           ...STATUS,
           enabled: settings.enabled,
           memhub: memhubDetected ? STATUS.memhub : { detected: false, path: '', sizeBytes: 0 },
+          context: withContext ? STATUS.context : null,
         },
       })
     }
@@ -586,6 +590,30 @@ function createFetch(fetchCalls, options = {}) {
       return jsonResponse({ ok: true, data: { settings: { enabled: settings.enabled, ui: { sessionPanel } } } })
     }
     if (verb === 'projects') return jsonResponse({ ok: true, data: WORKSPACES })
+    if (verb === 'update/check') {
+      if (options.updateCheck === 'error') {
+        return jsonResponse({
+          ok: true,
+          data: { current: '0.1.0', latest: '', behind: false, url: '', checkedAt: 1, error: 'github 404' },
+        })
+      }
+      if (options.updateCheck === 'behind') {
+        return jsonResponse({
+          ok: true,
+          data: {
+            current: '0.1.0',
+            latest: '0.2.0',
+            behind: true,
+            url: 'https://github.com/example/hy-memory4dsh/releases/tag/v0.2.0',
+            checkedAt: 1,
+          },
+        })
+      }
+      return jsonResponse({
+        ok: true,
+        data: { current: '0.1.0', latest: '0.1.0', behind: false, url: '', checkedAt: 1 },
+      })
+    }
     if (verb === 'sessions') {
       const body = JSON.parse(callOptions.body ?? '{}')
       return jsonResponse({
@@ -682,7 +710,10 @@ function createDocumentStub() {
   }
 }
 
-function createHarness({ withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true }) {
+function createHarness({
+  withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
+  updateCheck = 'current', context = true,
+}) {
   const slotRegistrations = []
   const tabRegistrations = []
   const localeRegistrations = []
@@ -694,7 +725,7 @@ function createHarness({ withPrimitives, sessionPanel = true, memhubErrors = fal
   const primitives = createFakePrimitives(mini.lib)
   const scheduler = createScheduler()
   const documentStub = createDocumentStub()
-  const fetchImpl = createFetch(fetchCalls, { sessionPanel, memhubErrors, memhubDetected })
+  const fetchImpl = createFetch(fetchCalls, { sessionPanel, memhubErrors, memhubDetected, updateCheck, context })
 
   const requireStub = (specifier) => {
     if (specifier === 'react' || specifier === 'react-dom' || specifier === 'react/jsx-runtime') return mini.lib
@@ -897,8 +928,11 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
   }
 }
 
-async function run({ withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true }) {
-  const harness = createHarness({ withPrimitives, sessionPanel, memhubErrors, memhubDetected })
+async function run({
+  withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
+  updateCheck = 'current', context = true,
+}) {
+  const harness = createHarness({ withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, context })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
   assert.ok(exported.inject.includes('slots') && exported.inject.includes('locale'), `${label}: required services`)
@@ -1401,6 +1435,59 @@ async function exerciseMemhubMissing(harness) {
     'only the diagnostics card keeps its details toggle')
 }
 
+async function exerciseFooterAndTokens(harness) {
+  const t = await mountSection(harness, 'zh')
+  const text = harness.mini.text()
+
+  // Repository link: status.package.repoUrl, made web-safe, opened in a new tab.
+  const link = hostsOf(harness).find((node) => (
+    node.type === 'a' && (node.props ?? {}).href === 'https://github.com/example/hy-memory4dsh'
+  ))
+  assert.ok(link !== undefined, 'the footer links the repository from status.package.repoUrl')
+  assert.equal(link.props.target, '_blank', 'the repository link opens in a new tab')
+  assert.ok(String(link.props.rel).includes('noopener'), 'the repository link uses rel=noopener')
+  assert.equal(link.props['aria-label'], t('update.repo'), 'the icon link carries an accessible name')
+
+  // Memory footprint line from status.context.
+  assert.ok(text.includes(t('diag.memoryTokens', { round: 120, total: 3400 })),
+    'the diagnostics card shows the memory token line')
+
+  // Update check: only the button triggers it.
+  assert.ok(findButton(harness, t('update.check')) !== undefined, 'the update check button renders')
+  assert.equal(lastCall(harness, '/api/hy-memory/update/check'), undefined, 'no update check runs before the click')
+  await click(harness, t('update.check'))
+  assertPost(harness, '/api/hy-memory/update/check', {})
+  assert.ok(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })),
+    'a current install reports 已是最新 vX.Y.Z')
+
+  const checks = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check').length
+  await click(harness, t('tabs.workspace'))
+  assert.equal(harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check').length, checks,
+    'a re-render does not re-run the update check')
+}
+
+async function exerciseUpdateBehind(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('update.check'))
+  assert.ok(harness.mini.text().includes(t('update.behind', { version: '0.2.0' })),
+    'a newer release renders 发现新版本 vA.B.C')
+  const release = hostsOf(harness).find((node) => (
+    node.type === 'a' && String((node.props ?? {}).href ?? '').includes('/releases/tag/v0.2.0')
+  ))
+  assert.ok(release !== undefined, 'the newer-version line links the release URL')
+  assert.equal(release.props.target, '_blank', 'the release link opens in a new tab')
+}
+
+async function exerciseUpdateError(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('update.check'))
+  assert.ok(harness.mini.text().includes(t('update.failed')), 'a failed check renders a short failure line')
+  assert.equal(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })), false,
+    'a failed check makes no up-to-date claim')
+  assert.equal(harness.mini.text().includes(t('diag.memoryTokens', { round: 120, total: 3400 })), false,
+    'the token line is hidden when status.context is absent')
+}
+
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
 const withoutSeed = await run({ withPrimitives: false, label: 'without host primitives (fallbacks)' })
 const sessionPanelOff = await run({ withPrimitives: true, label: 'session panel disabled', sessionPanel: false })
@@ -1457,6 +1544,18 @@ const absent = await run({ withPrimitives: true, label: 'memhub absent', memhubD
 await exerciseMemhubMissing(absent)
 absent.mini.unmount()
 
+const footerRun = await run({ withPrimitives: true, label: 'footer + tokens' })
+await exerciseFooterAndTokens(footerRun)
+footerRun.mini.unmount()
+
+const behindRun = await run({ withPrimitives: true, label: 'update behind', updateCheck: 'behind' })
+await exerciseUpdateBehind(behindRun)
+behindRun.mini.unmount()
+
+const updateErrorRun = await run({ withPrimitives: true, label: 'update error', updateCheck: 'error', context: false })
+await exerciseUpdateError(updateErrorRun)
+updateErrorRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1473,5 +1572,7 @@ console.log(`  session grouping: sessions POST verified, all-session groups + pi
 console.log(`  pagination: limit/offset verified for 个人, 项目记忆 and 会话记忆 independently (10/20/50)`)
 console.log(`  personal delete: menu 删除 + confirmation + POST /delete {tier:'personal'} verified`)
 console.log(`  memhub absent: dashed card, short not-installed line, all three actions hidden`)
+console.log(`  footer: repo link (rel=noopener) + update/check POST with 已是最新 / 发现新版本 / failure states`)
+console.log(`  memory tokens: diagnostics line reads status.context.memoryTokens/totalTokens`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)

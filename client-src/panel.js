@@ -15,7 +15,7 @@
 import * as React from 'react'
 import { api } from './api.js'
 import {
-  h, ui, Icon, useLocaleSubscription, errorMessage, asArray, asNumber, normalizeItem,
+  h, ui, Icon, GitHubMark, useLocaleSubscription, errorMessage, asArray, asNumber, normalizeItem,
   shortId, stateLabel, dotState, timeText, memoryTitle, copyToClipboard, dataDirPath, dataDirSize,
   formatBytes, panelStyles,
 } from './ui.js'
@@ -539,6 +539,8 @@ export function SettingsSection(props) {
   const [projectChoice, setProjectChoice] = React.useState(null)
   const [sessions, setSessions] = React.useState(emptyPicker)
   const [sessionChoice, setSessionChoice] = React.useState(null)
+  const [checking, setChecking] = React.useState(false)
+  const [updateResult, setUpdateResult] = React.useState(null)
   const [masterBusy, setMasterBusy] = React.useState(false)
   const [masterError, setMasterError] = React.useState('')
   const [copiedId, setCopiedId] = React.useState('')
@@ -848,6 +850,29 @@ export function SettingsSection(props) {
       setCopiedId('')
       setCopyFailedId('')
     }, COPY_FEEDBACK_MS)
+  }
+
+  /**
+   * Ask the host to compare the installed version with the published one. The
+   * request is raised by the button only: no effect re-checks on a re-render.
+   */
+  const checkUpdate = async () => {
+    if (checking) return
+    setChecking(true)
+    try {
+      const data = await api.updateCheck()
+      setUpdateResult({
+        current: typeof data?.current === 'string' ? data.current : '',
+        latest: typeof data?.latest === 'string' ? data.latest : '',
+        behind: data?.behind === true,
+        url: typeof data?.url === 'string' ? data.url : '',
+        error: typeof data?.error === 'string' ? data.error : '',
+      })
+    } catch (error) {
+      setUpdateResult({ current: '', latest: '', behind: false, url: '', error: errorMessage(error) })
+    } finally {
+      setChecking(false)
+    }
   }
 
   const sidecar = status?.sidecar ?? null
@@ -1294,6 +1319,9 @@ export function SettingsSection(props) {
         h('span', { className: 'hm-fieldLabel' }, t('diag.dataSize')),
         h('span', { className: 'hm-fieldValue' }, size)))
     }
+    const context = status?.context ?? null
+    const memoryTokens = asNumber(context?.memoryTokens)
+    const totalTokens = asNumber(context?.totalTokens)
     return h('section', { className: 'hm-card' },
       h('div', { className: 'hm-cardHead' },
         h('h2', { className: 'hm-h2' }, t('diag.title')),
@@ -1307,6 +1335,9 @@ export function SettingsSection(props) {
           h(ui.StateDot, { state: dotState(sidecar?.state) }),
           stateLabel(t, sidecar?.state),
           sidecar?.port ? h('span', { className: 'hm-mono' }, `:${sidecar.port}`) : null)),
+      context !== null && (memoryTokens > 0 || totalTokens > 0)
+        ? h('p', { className: 'hm-contextLine' }, t('diag.memoryTokens', { round: memoryTokens, total: totalTokens }))
+        : null,
       diagOpen ? h('dl', { className: 'hm-grid' }, details) : null,
       diagOpen ? h('pre', { className: 'hm-pre' }, JSON.stringify(status, null, 2)) : null)
   }
@@ -1318,6 +1349,49 @@ export function SettingsSection(props) {
     memhub: status?.memhub ?? null,
     onImported: refresh,
   })
+
+  /** The repository link the host reports (a trailing .git is not a web URL). */
+  const repoUrl = (() => {
+    const raw = typeof status?.package?.repoUrl === 'string' ? status.package.repoUrl : ''
+    return raw.replace(/\.git$/, '')
+  })()
+
+  const renderUpdateResult = () => {
+    if (checking || updateResult === null) return null
+    if (updateResult.error !== '') {
+      return h('span', { className: 'hm-footerResult hm-error', title: updateResult.error }, t('update.failed'))
+    }
+    if (updateResult.behind) {
+      return h('span', { className: 'hm-footerResult' },
+        t('update.behind', { version: updateResult.latest }),
+        ' ',
+        updateResult.url !== ''
+          ? h('a', { href: updateResult.url, target: '_blank', rel: 'noopener noreferrer' }, t('update.open'))
+          : null)
+    }
+    return h('span', { className: 'hm-footerResult' },
+      t('update.latest', { version: updateResult.latest || updateResult.current }))
+  }
+
+  const renderFooter = () => h('footer', { className: 'hm-footer' },
+    repoUrl !== ''
+      ? h('a', {
+        className: 'hm-footerLink',
+        href: repoUrl,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        'aria-label': t('update.repo'),
+        title: repoUrl,
+      }, h(GitHubMark, { size: 16 }))
+      : null,
+    h('div', { className: 'hm-footerRight' },
+      renderUpdateResult(),
+      h(ui.Button, {
+        size: 'sm',
+        variant: 'outline',
+        disabled: checking,
+        onClick: () => { void checkUpdate() },
+      }, checking ? t('update.checking') : t('update.check'))))
 
   // With the master switch off the whole body disappears; the header and its
   // switch stay, so the panel can always be turned back on.
@@ -1342,5 +1416,6 @@ export function SettingsSection(props) {
     renderActivity(),
     renderDiagnostics(),
     renderMemhub(),
+    renderFooter(),
     renderDeleteModal())
 }

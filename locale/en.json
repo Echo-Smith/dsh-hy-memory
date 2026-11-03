@@ -158,5 +158,13 @@
   "pager.prev": "Previous page",
   "pager.next": "Next page",
   "pager.size": "Per page",
-  "memhub.missing": "MemHub is not installed. Install it to sync memories here."
+  "memhub.missing": "MemHub is not installed. Install it to sync memories here.",
+  "update.repo": "GitHub repository",
+  "update.check": "Check for updates",
+  "update.checking": "Checking…",
+  "update.latest": "Up to date · v{version}",
+  "update.behind": "New version v{version}",
+  "update.open": "View",
+  "update.failed": "Update check failed, try again later",
+  "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total"
 }

@@ -158,5 +158,13 @@
   "pager.prev": "上一页",
   "pager.next": "下一页",
   "pager.size": "每页",
-  "memhub.missing": "未检测到 MemHub，安装后可在此同步。"
+  "memhub.missing": "未检测到 MemHub，安装后可在此同步。",
+  "update.repo": "GitHub 仓库",
+  "update.check": "检查更新",
+  "update.checking": "检查中…",
+  "update.latest": "已是最新 v{version}",
+  "update.behind": "发现新版本 v{version}",
+  "update.open": "查看",
+  "update.failed": "检查更新失败，请稍后再试",
+  "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok"
 }

@@ -131,6 +131,25 @@ const ICON_PATHS = {
   hash: ['M4 9h16M4 15h16M10 3 8 21M16 3l-2 18'],
 }
 
+/**
+ * The GitHub mark: a filled 16 px glyph, so it does not fit the stroked Icon
+ * grid. Path data is the Octicons `mark-github` mark (MIT).
+ */
+export function GitHubMark(props) {
+  const size = typeof props.size === 'number' ? props.size : 16
+  return h('svg', {
+    className: props.className,
+    viewBox: '0 0 16 16',
+    width: size,
+    height: size,
+    fill: 'currentColor',
+    'aria-hidden': 'true',
+    focusable: 'false',
+  }, h('path', {
+    d: 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z',
+  }))
+}
+
 /** One inline stroked icon; `size` scales the 24 px grid. */
 export function Icon(props) {
   const name = props.name
@@ -467,6 +486,14 @@ const PANEL_CSS = `
 .hm-pageButton:disabled { opacity:.45; cursor:default; }
 .hm-pagerStatus { min-width:56px; text-align:center; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-pagerSize { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dsw-alias-label-tertiary); }
+.hm-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding-top:2px; }
+.hm-footerLink { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; flex:none; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-secondary); text-decoration:none; }
+.hm-footerLink:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.hm-footerRight { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+.hm-footerResult { font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
+.hm-footerResult a:hover { text-decoration:underline; }
+.hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }

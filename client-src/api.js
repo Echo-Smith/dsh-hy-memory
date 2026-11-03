@@ -130,6 +130,8 @@ export const api = {
   // already knows, `sessions` the sessions that hold session-tier memories in
   // one project. Both are read-only views (docs/CONTRACT.md panel routes).
   projects: () => request('projects'),
+  // Update check: the host compares the installed version with GitHub releases.
+  updateCheck: () => request('update/check'),
   sessions: (projectKey) => request('sessions', typeof projectKey === 'string' && projectKey !== '' ? { projectKey } : {}),
   // MemHub link (docs/CONTRACT.md addendum). Import/pull always target the
   // personal tier on the host; the panel only chooses the source.

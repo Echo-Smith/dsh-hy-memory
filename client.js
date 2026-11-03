@@ -140,6 +140,8 @@ var api = {
   // already knows, `sessions` the sessions that hold session-tier memories in
   // one project. Both are read-only views (docs/CONTRACT.md panel routes).
   projects: () => request("projects"),
+  // Update check: the host compares the installed version with GitHub releases.
+  updateCheck: () => request("update/check"),
   sessions: (projectKey) => request("sessions", typeof projectKey === "string" && projectKey !== "" ? { projectKey } : {}),
   // MemHub link (docs/CONTRACT.md addendum). Import/pull always target the
   // personal tier on the host; the panel only chooses the source.
@@ -309,7 +311,15 @@ var zh_default = {
   "pager.prev": "上一页",
   "pager.next": "下一页",
   "pager.size": "每页",
-  "memhub.missing": "未检测到 MemHub，安装后可在此同步。"
+  "memhub.missing": "未检测到 MemHub，安装后可在此同步。",
+  "update.repo": "GitHub 仓库",
+  "update.check": "检查更新",
+  "update.checking": "检查中…",
+  "update.latest": "已是最新 v{version}",
+  "update.behind": "发现新版本 v{version}",
+  "update.open": "查看",
+  "update.failed": "检查更新失败，请稍后再试",
+  "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok"
 };
 
 // locale/en.json
@@ -473,7 +483,15 @@ var en_default = {
   "pager.prev": "Previous page",
   "pager.next": "Next page",
   "pager.size": "Per page",
-  "memhub.missing": "MemHub is not installed. Install it to sync memories here."
+  "memhub.missing": "MemHub is not installed. Install it to sync memories here.",
+  "update.repo": "GitHub repository",
+  "update.check": "Check for updates",
+  "update.checking": "Checking…",
+  "update.latest": "Up to date · v{version}",
+  "update.behind": "New version v{version}",
+  "update.open": "View",
+  "update.failed": "Update check failed, try again later",
+  "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total"
 };
 
 // client-src/locale.js
@@ -627,6 +645,20 @@ var ICON_PATHS = {
   refresh: ["M23 4v6h-6", "M20.49 15a9 9 0 1 1-2.12-9.36L23 10"],
   hash: ["M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"]
 };
+function GitHubMark(props) {
+  const size = typeof props.size === "number" ? props.size : 16;
+  return h("svg", {
+    className: props.className,
+    viewBox: "0 0 16 16",
+    width: size,
+    height: size,
+    fill: "currentColor",
+    "aria-hidden": "true",
+    focusable: "false"
+  }, h("path", {
+    d: "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+  }));
+}
 function Icon(props) {
   const name = props.name;
   const size = typeof props.size === "number" ? props.size : 16;
@@ -917,6 +949,14 @@ var PANEL_CSS = `
 .hm-pageButton:disabled { opacity:.45; cursor:default; }
 .hm-pagerStatus { min-width:56px; text-align:center; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-pagerSize { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dsw-alias-label-tertiary); }
+.hm-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding-top:2px; }
+.hm-footerLink { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; flex:none; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-secondary); text-decoration:none; }
+.hm-footerLink:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.hm-footerRight { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+.hm-footerResult { font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
+.hm-footerResult a:hover { text-decoration:underline; }
+.hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }
@@ -1569,6 +1609,8 @@ function SettingsSection(props) {
   const [projectChoice, setProjectChoice] = React2.useState(null);
   const [sessions, setSessions] = React2.useState(emptyPicker);
   const [sessionChoice, setSessionChoice] = React2.useState(null);
+  const [checking, setChecking] = React2.useState(false);
+  const [updateResult, setUpdateResult] = React2.useState(null);
   const [masterBusy, setMasterBusy] = React2.useState(false);
   const [masterError, setMasterError] = React2.useState("");
   const [copiedId, setCopiedId] = React2.useState("");
@@ -1860,6 +1902,24 @@ function SettingsSection(props) {
       setCopiedId("");
       setCopyFailedId("");
     }, COPY_FEEDBACK_MS);
+  };
+  const checkUpdate = async () => {
+    if (checking) return;
+    setChecking(true);
+    try {
+      const data = await api.updateCheck();
+      setUpdateResult({
+        current: typeof data?.current === "string" ? data.current : "",
+        latest: typeof data?.latest === "string" ? data.latest : "",
+        behind: data?.behind === true,
+        url: typeof data?.url === "string" ? data.url : "",
+        error: typeof data?.error === "string" ? data.error : ""
+      });
+    } catch (error) {
+      setUpdateResult({ current: "", latest: "", behind: false, url: "", error: errorMessage(error) });
+    } finally {
+      setChecking(false);
+    }
   };
   const sidecar = status?.sidecar ?? null;
   const sidecarReady = sidecar?.state === "ready";
@@ -2389,6 +2449,9 @@ function SettingsSection(props) {
         h("span", { className: "hm-fieldValue" }, size)
       ));
     }
+    const context = status?.context ?? null;
+    const memoryTokens = asNumber(context?.memoryTokens);
+    const totalTokens = asNumber(context?.totalTokens);
     return h(
       "section",
       { className: "hm-card" },
@@ -2416,6 +2479,7 @@ function SettingsSection(props) {
           sidecar?.port ? h("span", { className: "hm-mono" }, `:${sidecar.port}`) : null
         )
       ),
+      context !== null && (memoryTokens > 0 || totalTokens > 0) ? h("p", { className: "hm-contextLine" }, t("diag.memoryTokens", { round: memoryTokens, total: totalTokens })) : null,
       diagOpen ? h("dl", { className: "hm-grid" }, details) : null,
       diagOpen ? h("pre", { className: "hm-pre" }, JSON.stringify(status, null, 2)) : null
     );
@@ -2425,6 +2489,55 @@ function SettingsSection(props) {
     memhub: status?.memhub ?? null,
     onImported: refresh
   });
+  const repoUrl = (() => {
+    const raw = typeof status?.package?.repoUrl === "string" ? status.package.repoUrl : "";
+    return raw.replace(/\.git$/, "");
+  })();
+  const renderUpdateResult = () => {
+    if (checking || updateResult === null) return null;
+    if (updateResult.error !== "") {
+      return h("span", { className: "hm-footerResult hm-error", title: updateResult.error }, t("update.failed"));
+    }
+    if (updateResult.behind) {
+      return h(
+        "span",
+        { className: "hm-footerResult" },
+        t("update.behind", { version: updateResult.latest }),
+        " ",
+        updateResult.url !== "" ? h("a", { href: updateResult.url, target: "_blank", rel: "noopener noreferrer" }, t("update.open")) : null
+      );
+    }
+    return h(
+      "span",
+      { className: "hm-footerResult" },
+      t("update.latest", { version: updateResult.latest || updateResult.current })
+    );
+  };
+  const renderFooter = () => h(
+    "footer",
+    { className: "hm-footer" },
+    repoUrl !== "" ? h("a", {
+      className: "hm-footerLink",
+      href: repoUrl,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      "aria-label": t("update.repo"),
+      title: repoUrl
+    }, h(GitHubMark, { size: 16 })) : null,
+    h(
+      "div",
+      { className: "hm-footerRight" },
+      renderUpdateResult(),
+      h(ui.Button, {
+        size: "sm",
+        variant: "outline",
+        disabled: checking,
+        onClick: () => {
+          void checkUpdate();
+        }
+      }, checking ? t("update.checking") : t("update.check"))
+    )
+  );
   if (masterOff) {
     return h(
       "section",
@@ -2453,6 +2566,7 @@ function SettingsSection(props) {
     renderActivity(),
     renderDiagnostics(),
     renderMemhub(),
+    renderFooter(),
     renderDeleteModal()
   );
 }
