@@ -45,6 +45,26 @@ dsh plugin --profile desktop add link:$(pwd)
 
 然后打开 设置 > 记忆。首次使用会自动准备 Python 环境，模型沿用 DSH 已配的路由，不需要额外填 key。
 
+### 从 npm 安装
+
+已发布为 [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory)（0.1.1）。profile 需要两件事：把包作为依赖，
+以及把包名写进 `dsh.profile.bundles`；脚本两步都做，并验证装好的入口确实导出 `apply()`：
+
+```bash
+node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
+```
+
+之后重启或重载 DSH。手工等价于在 profile 里 `pnpm add dsh-hy-memory`，再把包名加进 `dsh.profile.bundles`。
+
+自己出包或本地验证时：
+
+```bash
+node scripts/prepare-publish.mjs                                  # 以公开包名暂存、打包、自检
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.1.tgz --apply
+```
+
+发布是需要你自己凭据的人工步骤：`npm publish ./dist/<tarball> --access public`。
+
 要求：DSH 0.2 预览版、Python 3.10+（首次会自动装到插件目录）、可选 git（用于取 workspace id）。
 
 ## 截图
@@ -86,7 +106,7 @@ sidecar，旧库原样保留，删不删由你决定。预演会先报源行数�
 
 ```bash
 npm run check         # 入口与构建产物的语法检查
-npm test              # 85 个宿主测试
+npm test              # 102 个宿主测试
 npm run test:smoke    # 面板冒烟，读取构建后的 client.js
 npm run eval:recall   # 离线召回夹具：命中、噪声、预算、注入体积
 ```
