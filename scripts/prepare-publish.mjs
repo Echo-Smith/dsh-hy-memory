@@ -58,7 +58,9 @@ stagedPkg.publishConfig = { access: 'public', ...(registry ? { registry } : {}) 
 stagedPkg.homepage = `https://www.npmjs.com/package/${name}`
 stagedPkg.scripts = {
   ...stagedPkg.scripts,
-  prepublishOnly: 'node build.mjs && node --check client.js',
+  // Staging already built (or patched) the bundle; the publish hook only
+  // verifies the artifact, because a publish machine may have no esbuild.
+  prepublishOnly: 'node --check client.js',
 }
 writeFileSync(join(staging, 'package.json'), `${JSON.stringify(stagedPkg, null, 2)}\n`)
 
