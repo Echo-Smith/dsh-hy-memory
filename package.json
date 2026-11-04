@@ -66,6 +66,7 @@
     "eval:recall": "node scripts/eval-recall.mjs",
     "check": "node --check index.js && node --check src/panel-api.js && node --check src/capture.js && node --check client.js",
     "eval:live": "node scripts/eval-live.mjs",
-    "migrate:embeddings": "node scripts/migrate-embeddings.mjs"
+    "migrate:embeddings": "node scripts/migrate-embeddings.mjs",
+    "bench:startup": "node scripts/bench-startup.mjs"
   }
 }
