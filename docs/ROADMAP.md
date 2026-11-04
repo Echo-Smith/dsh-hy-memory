@@ -61,3 +61,18 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: paired this Harness with MemHub through its one-time code, credential stored 0600 under `$DSH_HOME/memhub`, `mcp-one-memory` added to the profile as a stdio MCP client, host reloaded, and an authenticated `MemHub_recall` call succeeded (empty result, no auth error).
 - Done: status exposes `memhub.pairing` (credential count plus loopback broker state) and the MemHub card points at MemHub's own sync switch instead of duplicating it.
 - Open: verified end-to-end sync (enable it in MemHub, confirm imported conversations appear), and deciding whether the local export/pull/import actions stay once sync is on.
+
+## Phase 7: concurrency and cold start (done)
+
+- Measured with `scripts/bench-startup.mjs`: 0.9 to 2.8 s from spawn to health on this machine, then 5 to 8 ms for the first bridge call against a scratch store.
+- `sidecar.prewarm` (default true) starts the sidecar at plugin load; recall waits up to `recall.waitForStartMs` (2500 ms) for a starting sidecar, then proceeds without injection.
+- Eight concurrent recalls each inject and finish in 52 ms total, so nothing serializes on the state file or the sidecar.
+- `scripts/bench-wake.mjs` measured cold 1586 ms, idle stop at 61167 ms, wake 1561 ms. The first wake failed because a stopped child's exit handler cleared the newer child; exit handlers now ignore stale children and `test/sidecar-wake.test.mjs` covers it.
+
+## Phase 8: packaging and distribution (started)
+
+- npmjs: `dsh-hy-memory@0.1.1` is `latest` (0.1.0 was the first publish; 0.1.1 dropped a stray `__pycache__`). The temporary `0.0.0-stage` placeholder was removed.
+- GitHub Releases: `v0.1.1` carries `dsh-hy-memory-0.1.1.tgz`; the live profile's dependency now points at that asset and its lockfile was reconciled with `pnpm install --lockfile-only` after testing the same command on a profile copy.
+- GitHub Packages: `.github/workflows/publish-github-packages.yml` publishes the scoped `@echo-smith/dsh-hy-memory` with `GITHUB_TOKEN` (`packages: write`); run 41767325307 reported `+ @echo-smith/dsh-hy-memory@0.1.1`.
+- Plugin market: `market/index.json` (format 1) is validated with DSH's own `parseMarketIndex`, so DSH's detail page can compare versions and show updates on its own.
+- Open: an upgrade path that reports the installed version before replacing it, bumping the market index on every release, and a release job that publishes tagged versions to npmjs automatically.
