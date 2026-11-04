@@ -29,6 +29,6 @@ jobs:
       - name: Stage the scoped package
         run: node scripts/prepare-publish.mjs --name @echo-smith/dsh-hy-memory --version "${{ github.event.inputs.version || '0.1.1' }}" --staging dist/gh-package --registry https://npm.pkg.github.com
       - name: Publish to GitHub Packages
-        run: npm publish dist/gh-package --registry https://npm.pkg.github.com
+        run: npm publish ./dist/gh-package --registry https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
