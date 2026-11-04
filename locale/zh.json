@@ -195,5 +195,8 @@
   "why.source.lexical": "关键词",
   "why.source.both": "语义 + 关键词",
   "why.never": "这条记忆还没有被召回过",
-  "why.failed": "无法读取召回记录：{message}"
+  "why.failed": "无法读取召回记录：{message}",
+  "injected.open": "查看注入文本",
+  "injected.title": "这次召回的文本",
+  "injected.missing": "这次召回的文本已不在记录里"
 }

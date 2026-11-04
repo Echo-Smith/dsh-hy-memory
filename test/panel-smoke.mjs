@@ -42,6 +42,8 @@ const STATUS = Object.freeze({
 })
 
 const PAGE_TOTAL = 45
+const ACTIVITY_AT = 1700000000000
+const INJECTED_TEXT = '## injected memory\nremember the release checklist'
 
 const PERSONAL_ITEM = Object.freeze({
   id: 'm1',
@@ -505,7 +507,9 @@ function createFakePrimitives(react) {
         'aria-selected': item.value === props.value ? 'true' : 'false',
         onClick: () => { props.onChange(item.value) },
       }, item.label))),
-    DisclosureRow: (props) => react.createElement('div', null, props.title, props.open === true ? props.children : null),
+    DisclosureRow: (props) => react.createElement('div', null,
+      react.createElement('button', { type: 'button', onClick: () => props.onToggle() }, props.title),
+      props.open === true ? props.children : null),
     Modal: (props) => (props.open === true ? react.createElement('div', null, props.title, props.children, props.footer) : null),
     Tooltip: (props) => props.children ?? null,
     relativeTime: (at, now) => ({ unit: 'minutes', n: Math.max(1, Math.round((now - at) / 60000)) }),
@@ -564,6 +568,8 @@ function createFetch(fetchCalls, options = {}) {
   const autoUpdate = options.autoUpdate ?? 'current'
   const duplicates = options.duplicates ?? 'some'
   const explain = options.explain ?? 'found'
+  const explained = Array.isArray(options.explained) ? options.explained : ['m1']
+  const injectedMode = options.injected ?? 'found'
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
   const settings = { enabled: true }
   let activityPolls = 0
@@ -653,7 +659,7 @@ function createFetch(fetchCalls, options = {}) {
         ok: true,
         data: {
           events: [{
-            at: Date.now(),
+            at: ACTIVITY_AT,
             kind: 'recall',
             tier: 'personal',
             summary: 'polled recall',
@@ -684,6 +690,24 @@ function createFetch(fetchCalls, options = {}) {
       })
     }
     if (verb === 'merge') return jsonResponse({ ok: true, data: { merged: 1, kept: 'm1' } })
+    if (verb === 'explained') return jsonResponse({ ok: true, data: { ids: explained } })
+    if (verb === 'injected') {
+      const body = JSON.parse(callOptions.body ?? '{}')
+      if (injectedMode === 'error') {
+        return jsonResponse({ ok: false, error: { code: 'memory_error', message: 'injected failed' } }, 500)
+      }
+      if (injectedMode === 'missing') return jsonResponse({ ok: true, data: { found: false } })
+      return jsonResponse({
+        ok: true,
+        data: {
+          found: true,
+          at: body.at,
+          query: 'how do I rebuild the panel',
+          source: 'both',
+          text: INJECTED_TEXT,
+        },
+      })
+    }
     if (verb === 'explain') {
       if (explain === 'error') {
         return jsonResponse({ ok: false, error: { code: 'memory_error', message: 'explain failed' } }, 500)
@@ -755,7 +779,8 @@ function createDocumentStub() {
 
 function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found', context = true,
+  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
+  explained = ['m1'], injected = 'found', context = true,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -769,7 +794,8 @@ function createHarness({
   const scheduler = createScheduler()
   const documentStub = createDocumentStub()
   const fetchImpl = createFetch(fetchCalls, {
-    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain, context,
+    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
+    explained, injected, context,
   })
 
   const requireStub = (specifier) => {
@@ -975,10 +1001,12 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
 
 async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found', context = true,
+  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
+  explained = ['m1'], injected = 'found', context = true,
 }) {
   const harness = createHarness({
-    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain, context,
+    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
+    explained, injected, context,
   })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
@@ -1666,6 +1694,53 @@ async function exerciseWhyError(harness) {
     'a failed lookup shows one short failure line')
 }
 
+async function exerciseWhyGated(harness) {
+  const t = await mountSection(harness, 'zh')
+  const explainedCall = lastCall(harness, '/api/hy-memory/explained')
+  assert.ok(explainedCall !== undefined, 'the explained set is read when the lists load')
+  assert.equal(explainedCall.options.method, 'POST', '/explained is a POST')
+
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the personal row action button')
+  assert.ok(findButton(harness, t('row.copy')) !== undefined, 'the menu still renders')
+  assert.equal(findButton(harness, t('row.why')), undefined,
+    'a row that was never recalled does not offer 为什么召回')
+}
+
+async function exerciseWhyOffered(harness) {
+  const t = await mountSection(harness, 'zh')
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the personal row action button')
+  assert.ok(findButton(harness, t('row.why')) !== undefined, 'a recalled row offers 为什么召回')
+}
+
+async function exerciseInjectedText(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('activity.title'))
+  await harness.scheduler.advance(3000)
+
+  const row = findByLabel(harness, t('injected.open'))
+  assert.ok(row !== undefined, 'a recall entry in the activity feed is clickable')
+  await activate(harness, row, 'the recall entry')
+  assertPost(harness, '/api/hy-memory/injected', { at: ACTIVITY_AT })
+
+  const text = harness.mini.text()
+  assert.ok(text.includes(t('injected.title')), 'the injected-text dialog opens')
+  assert.ok(text.includes('injected memory'), 'it shows the injected text')
+  assert.ok(text.includes('how do I rebuild the panel'), 'it shows the matched query')
+  assert.ok(text.includes(t('why.source.both')), 'it shows the match source')
+  assert.ok(hostsOf(harness).some((node) => node.type === 'pre'
+    && String(node.props?.className ?? '').includes('hm-injectedText')), 'the text renders as a mono block')
+}
+
+async function exerciseInjectedMissing(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('activity.title'))
+  await harness.scheduler.advance(3000)
+  await activate(harness, findByLabel(harness, t('injected.open')), 'the recall entry')
+  assertPost(harness, '/api/hy-memory/injected', { at: ACTIVITY_AT })
+  assert.ok(harness.mini.text().includes(t('injected.missing')),
+    'a dropped recall text shows 这次召回的文本已不在记录里')
+}
+
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
 const withoutSeed = await run({ withPrimitives: false, label: 'without host primitives (fallbacks)' })
 const sessionPanelOff = await run({ withPrimitives: true, label: 'session panel disabled', sessionPanel: false })
@@ -1766,6 +1841,22 @@ const whyErrorRun = await run({ withPrimitives: true, label: 'why error', explai
 await exerciseWhyError(whyErrorRun)
 whyErrorRun.mini.unmount()
 
+const whyGatedRun = await run({ withPrimitives: true, label: 'why gated', explained: [] })
+await exerciseWhyGated(whyGatedRun)
+whyGatedRun.mini.unmount()
+
+const whyOfferedRun = await run({ withPrimitives: true, label: 'why offered' })
+await exerciseWhyOffered(whyOfferedRun)
+whyOfferedRun.mini.unmount()
+
+const injectedRun = await run({ withPrimitives: true, label: 'injected text' })
+await exerciseInjectedText(injectedRun)
+injectedRun.mini.unmount()
+
+const injectedMissingRun = await run({ withPrimitives: true, label: 'injected missing', injected: 'missing' })
+await exerciseInjectedMissing(injectedMissingRun)
+injectedMissingRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1788,5 +1879,7 @@ console.log(`  auto update: one force:false check per page load, quiet notice on
 console.log(`  forget: 永久遗忘 next to 删除, own confirmation, POST /forget {id}; diagnostics totals all three tiers`)
 console.log(`  duplicates: scan button, 没有重复项 for a clean store, one /merge POST per group with tier/keep/drop`)
 console.log(`  why recalled: 为什么召回 posts /explain {id}, shows query/tier/score/rank/time, not-found copy`)
+console.log(`  why gated: 为什么召回 only for ids in /explained (absent for a never-recalled row)`)
+console.log(`  injected text: clicking a recall entry posts /injected {at} and shows the capped mono block`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)

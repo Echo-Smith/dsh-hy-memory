@@ -117,6 +117,9 @@ function ActivityPanel(props) {
   // The poll refreshes this clock too, so relative times in this list stay live
   // without re-rendering the rest of the section.
   const [now, setNow] = React.useState(() => Date.now())
+  const [injected, setInjected] = React.useState(null)
+  const [injectedLoading, setInjectedLoading] = React.useState(false)
+  const [injectedError, setInjectedError] = React.useState('')
 
   React.useEffect(() => {
     let cancelled = false
@@ -153,20 +156,92 @@ function ActivityPanel(props) {
     }
   }, [tick])
 
-  const rows = events.map((event, index) => h('div', {
-    key: `${String(event.at)}|${event.kind}|${index}`,
-    className: 'hm-activityRow',
-  },
-  h(ui.StateDot, { state: event.ok ? dotState(event.kind === 'error' ? 'error' : 'done') : 'error' }),
-  h('div', null,
-    h('div', { className: 'hm-activitySummary' },
-      h(ui.Tag, { tone: event.kind === 'error' || !event.ok ? 'danger' : 'outline' }, kindLabel(t, event.kind)),
-      ' ',
-      event.tier !== '' ? h(ui.Tag, { tone: 'quiet' }, activityTierLabel(t, event.tier)) : null,
-      ' ',
-      event.summary),
-    event.detail !== '' ? h('p', { className: 'hm-activityDetail' }, event.detail) : null),
-  h('span', { className: 'hm-activityTime' }, timeText(t, event.at, now))))
+  /** The text the host injected for one recall entry (or "not in the log"). */
+  const openInjected = async (event) => {
+    setInjected({ at: event.at })
+    setInjectedLoading(true)
+    setInjectedError('')
+    try {
+      const data = await api.injected(event.at)
+      setInjected((prev) => (prev !== null && prev.at === event.at
+        ? { ...prev, result: data !== null && typeof data === 'object' ? data : { found: false } }
+        : prev))
+    } catch (injectedFailure) {
+      setInjectedError(errorMessage(injectedFailure))
+    } finally {
+      setInjectedLoading(false)
+    }
+  }
+
+  const closeInjected = () => {
+    setInjected(null)
+    setInjectedError('')
+  }
+
+  const renderInjectedModal = () => {
+    const result = injected?.result ?? null
+    const found = result !== null && result.found === true
+    let body
+    if (injectedLoading) {
+      body = h('p', { className: 'hm-muted', role: 'status' }, t('common.loading'))
+    } else if (injectedError !== '') {
+      body = h('p', { className: 'hm-error', role: 'alert' }, t('why.failed', { message: injectedError }))
+    } else if (!found) {
+      body = h('p', { className: 'hm-muted' }, t('injected.missing'))
+    } else {
+      const sourceKey = `why.source.${String(result.source ?? '')}`
+      const sourceText = t(sourceKey)
+      body = h(React.Fragment, null,
+        h('div', { className: 'hm-field' },
+          h('span', { className: 'hm-fieldLabel' }, t('why.query')),
+          h('span', { className: 'hm-fieldValue hm-mono' }, String(result.query ?? ''))),
+        h('div', { className: 'hm-field' },
+          h('span', { className: 'hm-fieldLabel' }, t('why.source')),
+          h('span', { className: 'hm-fieldValue' }, sourceText === sourceKey ? String(result.source ?? '') : sourceText)),
+        h('pre', { className: 'hm-pre hm-injectedText' }, String(result.text ?? '')))
+    }
+    return h(ui.Modal, {
+      open: injected !== null,
+      onClose: closeInjected,
+      title: t('injected.title'),
+      closeLabel: t('common.close'),
+      footer: h('div', { className: 'hm-row' },
+        h(ui.Button, {
+          size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+          onClick: closeInjected,
+        }, t('common.close'))),
+    }, body)
+  }
+
+  const rows = events.map((event, index) => {
+    const key = `${String(event.at)}|${event.kind}|${index}`
+    const content = [
+      h(ui.StateDot, {
+        key: 'dot',
+        state: event.ok ? dotState(event.kind === 'error' ? 'error' : 'done') : 'error',
+      }),
+      h('span', { key: 'body', className: 'hm-activityBody' },
+        h('span', { className: 'hm-activitySummary' },
+          h(ui.Tag, { tone: event.kind === 'error' || !event.ok ? 'danger' : 'outline' }, kindLabel(t, event.kind)),
+          ' ',
+          event.tier !== '' ? h(ui.Tag, { tone: 'quiet' }, activityTierLabel(t, event.tier)) : null,
+          ' ',
+          event.summary),
+        event.detail !== '' ? h('span', { className: 'hm-activityDetail' }, event.detail) : null),
+      h('span', { key: 'time', className: 'hm-activityTime' }, timeText(t, event.at, now)),
+    ]
+    // Recall entries open the text the host injected for that turn.
+    if (event.kind === 'recall') {
+      return h('button', {
+        key,
+        type: 'button',
+        className: 'hm-activityRow hm-activityRowButton',
+        'aria-label': t('injected.open'),
+        onClick: () => { void openInjected(event) },
+      }, content)
+    }
+    return h('div', { key, className: 'hm-activityRow' }, content)
+  })
 
   let body
   if (loading) {
@@ -181,14 +256,16 @@ function ActivityPanel(props) {
   } else {
     body = h('div', { className: 'hm-activity' }, rows)
   }
-  return h(ui.DisclosureRow, {
-    icon: h(ui.StateDot, { state: error !== '' ? 'error' : events.length > 0 ? 'done' : 'idle' }),
-    title: events.length > 0 ? `${t('activity.title')} (${events.length})` : t('activity.title'),
-    open,
-    expandable: true,
-    onToggle: () => { setOpen((value) => !value) },
-    headerAccessory: h('span', { className: 'hm-meta' }, t('activity.hint')),
-  }, body)
+  return h(React.Fragment, null,
+    h(ui.DisclosureRow, {
+      icon: h(ui.StateDot, { state: error !== '' ? 'error' : events.length > 0 ? 'done' : 'idle' }),
+      title: events.length > 0 ? `${t('activity.title')} (${events.length})` : t('activity.title'),
+      open,
+      expandable: true,
+      onToggle: () => { setOpen((value) => !value) },
+      headerAccessory: h('span', { className: 'hm-meta' }, t('activity.hint')),
+    }, body),
+    renderInjectedModal())
 }
 
 /** `error.code` values the MemHub routes use for a user-facing explanation. */
@@ -547,6 +624,7 @@ export function SettingsSection(props) {
   const [dupeOpen, setDupeOpen] = React.useState(false)
   const [dupeDone, setDupeDone] = React.useState(null)
   const [dupeError, setDupeError] = React.useState('')
+  const [explainedIds, setExplainedIds] = React.useState(() => new Set())
   const [why, setWhy] = React.useState(null)
   const [whyLoading, setWhyLoading] = React.useState(false)
   const [whyError, setWhyError] = React.useState('')
@@ -744,6 +822,21 @@ export function SettingsSection(props) {
     })()
     return () => { cancelled = true }
   }, [tab, masterOff, searchQuery, refreshTick, projectKey, sessionFilter, paging.session])
+
+  // Which memories have ever been recalled: 为什么召回 is only offered for those.
+  // Re-read whenever the lists are refreshed or the tab changes.
+  React.useEffect(() => {
+    if (masterOff) return undefined
+    let cancelled = false
+    api.explained().then((data) => {
+      if (cancelled) return
+      setExplainedIds(new Set(asArray(data?.ids).filter((id) => typeof id === 'string' && id !== '')))
+    }).catch(() => {
+      if (cancelled) return
+      setExplainedIds(new Set())
+    })
+    return () => { cancelled = true }
+  }, [tab, refreshTick, masterOff])
 
   // A shrinking page (delete, search, picker) falls back to the last real page.
   React.useEffect(() => {
@@ -1013,7 +1106,8 @@ export function SettingsSection(props) {
     if (!masterOff && tier === 'personal') {
       actions.push({ key: 'edit', label: t('row.edit'), onSelect: () => { startEditing(item) } })
     }
-    if (!masterOff && item.id !== '') {
+    // Only rows the host has actually injected can explain a recall.
+    if (!masterOff && item.id !== '' && explainedIds.has(item.id)) {
       actions.push({ key: 'why', label: t('row.why'), onSelect: () => { void openWhy(item) } })
     }
     if (!masterOff) {

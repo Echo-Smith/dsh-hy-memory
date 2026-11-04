@@ -195,5 +195,8 @@
   "why.source.lexical": "Keyword",
   "why.source.both": "Semantic + keyword",
   "why.never": "This memory has not been recalled yet",
-  "why.failed": "Could not read the recall record: {message}"
+  "why.failed": "Could not read the recall record: {message}",
+  "injected.open": "View injected text",
+  "injected.title": "Text injected by this recall",
+  "injected.missing": "This recall’s text is no longer in the log"
 }

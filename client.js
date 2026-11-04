@@ -135,6 +135,10 @@ var api = {
   forget: (id) => request("forget", { id }),
   // Recall explanation: why (if ever) the host injected this memory.
   explain: (id) => request("explain", { id }),
+  // Which memories appear in the recall log at all, and the text injected at one
+  // recall timestamp (used by the activity feed).
+  explained: () => request("explained"),
+  injected: (at) => request("injected", { at }),
   // Duplicate cleanup: scan groups, then merge one group per call.
   duplicates: (tier) => request("duplicates", typeof tier === "string" && tier !== "" ? { tier } : {}),
   merge: (payload) => request("merge", payload),
@@ -356,7 +360,10 @@ var zh_default = {
   "why.source.lexical": "关键词",
   "why.source.both": "语义 + 关键词",
   "why.never": "这条记忆还没有被召回过",
-  "why.failed": "无法读取召回记录：{message}"
+  "why.failed": "无法读取召回记录：{message}",
+  "injected.open": "查看注入文本",
+  "injected.title": "这次召回的文本",
+  "injected.missing": "这次召回的文本已不在记录里"
 };
 
 // locale/en.json
@@ -557,7 +564,10 @@ var en_default = {
   "why.source.lexical": "Keyword",
   "why.source.both": "Semantic + keyword",
   "why.never": "This memory has not been recalled yet",
-  "why.failed": "Could not read the recall record: {message}"
+  "why.failed": "Could not read the recall record: {message}",
+  "injected.open": "View injected text",
+  "injected.title": "Text injected by this recall",
+  "injected.missing": "This recall’s text is no longer in the log"
 };
 
 // client-src/locale.js
@@ -1116,9 +1126,13 @@ var PANEL_CSS = `
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
 .hm-activityRow { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
+.hm-activityRowButton { appearance:none; width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:left; padding:4px 6px; border-radius:6px; cursor:pointer; }
+.hm-activityRowButton:hover { background:var(--dsw-alias-interactive-bg-hover); }
+.hm-activityBody { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
 .hm-activitySummary { color:var(--dsw-alias-label-primary); overflow-wrap:anywhere; }
 .hm-activityTime { margin-left:auto; color:var(--dsw-alias-label-tertiary); font-size:11px; white-space:nowrap; }
-.hm-activityDetail { margin:0; color:var(--dsw-alias-label-tertiary); font-size:11px; overflow-wrap:anywhere; }
+.hm-activityDetail { display:block; margin:0; color:var(--dsw-alias-label-tertiary); font-size:11px; overflow-wrap:anywhere; }
+.hm-injectedText { margin:0; }
 .hm-tag { display:inline-flex; align-items:center; padding:1px 7px; border-radius:999px; border:1px solid var(--dsw-alias-border-l2); color:var(--dsw-alias-label-secondary); font-size:11px; }
 .hm-tag[data-tone="neutral"] { background:var(--dsw-alias-bg-layer-2); }
 .hm-tag[data-tone="info"] { border-color:var(--dsw-alias-link); color:var(--dsw-alias-link); }
@@ -1224,6 +1238,9 @@ function ActivityPanel(props) {
   const [open, setOpen] = React2.useState(false);
   const [tick, setTick] = React2.useState(0);
   const [now, setNow] = React2.useState(() => Date.now());
+  const [injected, setInjected] = React2.useState(null);
+  const [injectedLoading, setInjectedLoading] = React2.useState(false);
+  const [injectedError, setInjectedError] = React2.useState("");
   React2.useEffect(() => {
     let cancelled = false;
     let timer = null;
@@ -1260,29 +1277,107 @@ function ActivityPanel(props) {
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [tick]);
-  const rows = events.map((event, index) => h(
-    "div",
-    {
-      key: `${String(event.at)}|${event.kind}|${index}`,
-      className: "hm-activityRow"
-    },
-    h(ui.StateDot, { state: event.ok ? dotState(event.kind === "error" ? "error" : "done") : "error" }),
-    h(
-      "div",
-      null,
-      h(
+  const openInjected = async (event) => {
+    setInjected({ at: event.at });
+    setInjectedLoading(true);
+    setInjectedError("");
+    try {
+      const data = await api.injected(event.at);
+      setInjected((prev) => prev !== null && prev.at === event.at ? { ...prev, result: data !== null && typeof data === "object" ? data : { found: false } } : prev);
+    } catch (injectedFailure) {
+      setInjectedError(errorMessage(injectedFailure));
+    } finally {
+      setInjectedLoading(false);
+    }
+  };
+  const closeInjected = () => {
+    setInjected(null);
+    setInjectedError("");
+  };
+  const renderInjectedModal = () => {
+    const result = injected?.result ?? null;
+    const found = result !== null && result.found === true;
+    let body2;
+    if (injectedLoading) {
+      body2 = h("p", { className: "hm-muted", role: "status" }, t("common.loading"));
+    } else if (injectedError !== "") {
+      body2 = h("p", { className: "hm-error", role: "alert" }, t("why.failed", { message: injectedError }));
+    } else if (!found) {
+      body2 = h("p", { className: "hm-muted" }, t("injected.missing"));
+    } else {
+      const sourceKey = `why.source.${String(result.source ?? "")}`;
+      const sourceText = t(sourceKey);
+      body2 = h(
+        React2.Fragment,
+        null,
+        h(
+          "div",
+          { className: "hm-field" },
+          h("span", { className: "hm-fieldLabel" }, t("why.query")),
+          h("span", { className: "hm-fieldValue hm-mono" }, String(result.query ?? ""))
+        ),
+        h(
+          "div",
+          { className: "hm-field" },
+          h("span", { className: "hm-fieldLabel" }, t("why.source")),
+          h("span", { className: "hm-fieldValue" }, sourceText === sourceKey ? String(result.source ?? "") : sourceText)
+        ),
+        h("pre", { className: "hm-pre hm-injectedText" }, String(result.text ?? ""))
+      );
+    }
+    return h(ui.Modal, {
+      open: injected !== null,
+      onClose: closeInjected,
+      title: t("injected.title"),
+      closeLabel: t("common.close"),
+      footer: h(
         "div",
-        { className: "hm-activitySummary" },
-        h(ui.Tag, { tone: event.kind === "error" || !event.ok ? "danger" : "outline" }, kindLabel(t, event.kind)),
-        " ",
-        event.tier !== "" ? h(ui.Tag, { tone: "quiet" }, activityTierLabel(t, event.tier)) : null,
-        " ",
-        event.summary
+        { className: "hm-row" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "ghost",
+          "data-modal-autofocus": "",
+          onClick: closeInjected
+        }, t("common.close"))
+      )
+    }, body2);
+  };
+  const rows = events.map((event, index) => {
+    const key = `${String(event.at)}|${event.kind}|${index}`;
+    const content = [
+      h(ui.StateDot, {
+        key: "dot",
+        state: event.ok ? dotState(event.kind === "error" ? "error" : "done") : "error"
+      }),
+      h(
+        "span",
+        { key: "body", className: "hm-activityBody" },
+        h(
+          "span",
+          { className: "hm-activitySummary" },
+          h(ui.Tag, { tone: event.kind === "error" || !event.ok ? "danger" : "outline" }, kindLabel(t, event.kind)),
+          " ",
+          event.tier !== "" ? h(ui.Tag, { tone: "quiet" }, activityTierLabel(t, event.tier)) : null,
+          " ",
+          event.summary
+        ),
+        event.detail !== "" ? h("span", { className: "hm-activityDetail" }, event.detail) : null
       ),
-      event.detail !== "" ? h("p", { className: "hm-activityDetail" }, event.detail) : null
-    ),
-    h("span", { className: "hm-activityTime" }, timeText(t, event.at, now))
-  ));
+      h("span", { key: "time", className: "hm-activityTime" }, timeText(t, event.at, now))
+    ];
+    if (event.kind === "recall") {
+      return h("button", {
+        key,
+        type: "button",
+        className: "hm-activityRow hm-activityRowButton",
+        "aria-label": t("injected.open"),
+        onClick: () => {
+          void openInjected(event);
+        }
+      }, content);
+    }
+    return h("div", { key, className: "hm-activityRow" }, content);
+  });
   let body;
   if (loading) {
     body = h("div", { className: "hm-state" }, h(ui.StateDot, { state: "ongoing" }), t("common.loading"));
@@ -1304,16 +1399,21 @@ function ActivityPanel(props) {
   } else {
     body = h("div", { className: "hm-activity" }, rows);
   }
-  return h(ui.DisclosureRow, {
-    icon: h(ui.StateDot, { state: error !== "" ? "error" : events.length > 0 ? "done" : "idle" }),
-    title: events.length > 0 ? `${t("activity.title")} (${events.length})` : t("activity.title"),
-    open,
-    expandable: true,
-    onToggle: () => {
-      setOpen((value) => !value);
-    },
-    headerAccessory: h("span", { className: "hm-meta" }, t("activity.hint"))
-  }, body);
+  return h(
+    React2.Fragment,
+    null,
+    h(ui.DisclosureRow, {
+      icon: h(ui.StateDot, { state: error !== "" ? "error" : events.length > 0 ? "done" : "idle" }),
+      title: events.length > 0 ? `${t("activity.title")} (${events.length})` : t("activity.title"),
+      open,
+      expandable: true,
+      onToggle: () => {
+        setOpen((value) => !value);
+      },
+      headerAccessory: h("span", { className: "hm-meta" }, t("activity.hint"))
+    }, body),
+    renderInjectedModal()
+  );
 }
 var MEMHUB_ERROR_KEYS = Object.freeze({
   memhub_locked: "memhub.error.memhub_locked",
@@ -1697,6 +1797,7 @@ function SettingsSection(props) {
   const [dupeOpen, setDupeOpen] = React2.useState(false);
   const [dupeDone, setDupeDone] = React2.useState(null);
   const [dupeError, setDupeError] = React2.useState("");
+  const [explainedIds, setExplainedIds] = React2.useState(() => /* @__PURE__ */ new Set());
   const [why, setWhy] = React2.useState(null);
   const [whyLoading, setWhyLoading] = React2.useState(false);
   const [whyError, setWhyError] = React2.useState("");
@@ -1894,6 +1995,20 @@ function SettingsSection(props) {
       cancelled = true;
     };
   }, [tab, masterOff, searchQuery, refreshTick, projectKey, sessionFilter, paging.session]);
+  React2.useEffect(() => {
+    if (masterOff) return void 0;
+    let cancelled = false;
+    api.explained().then((data) => {
+      if (cancelled) return;
+      setExplainedIds(new Set(asArray(data?.ids).filter((id) => typeof id === "string" && id !== "")));
+    }).catch(() => {
+      if (cancelled) return;
+      setExplainedIds(/* @__PURE__ */ new Set());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, refreshTick, masterOff]);
   React2.useEffect(() => {
     for (const key of PAGED_LISTS) {
       const pages = Math.max(1, Math.ceil(asNumber(lists[key].total) / paging[key].size));
@@ -2129,7 +2244,7 @@ function SettingsSection(props) {
         startEditing(item);
       } });
     }
-    if (!masterOff && item.id !== "") {
+    if (!masterOff && item.id !== "" && explainedIds.has(item.id)) {
       actions.push({ key: "why", label: t("row.why"), onSelect: () => {
         void openWhy(item);
       } });
