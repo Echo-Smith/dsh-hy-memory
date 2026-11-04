@@ -564,11 +564,28 @@ function FileRow(props) {
   if (props.date !== '') meta.push(h('span', { key: 'date' }, props.date))
   if (props.status !== '') meta.push(h('span', { key: 'status', className: 'hm-fileStatus', role: 'status' }, props.status))
 
-  return h('li', { className: 'hm-file' },
+  const expanded = props.expanded === true
+  return h('li', { className: `hm-file${expanded ? ' hm-file-open' : ''}` },
+    h('div', {
+      className: 'hm-fileMain',
+      role: 'button',
+      tabIndex: 0,
+      'aria-expanded': expanded ? 'true' : 'false',
+      'aria-label': t('row.expand'),
+      onClick: () => { if (typeof props.onToggle === 'function') props.onToggle() },
+      onKeyDown: (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        if (typeof props.onToggle === 'function') props.onToggle()
+      },
+    },
     h('span', { className: 'hm-fileIcon', 'aria-hidden': 'true' }, h(Icon, { name: 'file', size: 17 })),
     h('div', { className: 'hm-fileText' },
       h('p', { className: 'hm-fileTitle', title: props.title }, props.title),
-      meta.length > 0 ? h('p', { className: 'hm-fileDate' }, meta) : null),
+      meta.length > 0 ? h('p', { className: 'hm-fileDate' }, meta) : null)),
+    expanded && typeof props.content === 'string' && props.content !== ''
+      ? h('p', { className: 'hm-fileBody' }, props.content)
+      : null,
     h('div', { className: 'hm-fileActions' },
       h('button', {
         type: 'button',
@@ -615,6 +632,8 @@ export function SettingsSection(props) {
     session: { page: 1, size: DEFAULT_PAGE_SIZE },
   }))
   const [editing, setEditing] = React.useState(null)
+  // One expanded row at a time: opening another closes the previous one.
+  const [expandedRow, setExpandedRow] = React.useState(null)
   const [savingId, setSavingId] = React.useState('')
   const [savedId, setSavedId] = React.useState('')
   const [rowError, setRowError] = React.useState(null)
@@ -1475,6 +1494,9 @@ export function SettingsSection(props) {
       title: memoryTitle(item.content, t('row.untitled')),
       date: memoryDate(item),
       status: statusText,
+      content: item.content,
+      expanded: expandedRow === item.id,
+      onToggle: () => { setExpandedRow((current) => (current === item.id ? null : item.id)) },
       actions: rowActions(tier, item),
     })
   }

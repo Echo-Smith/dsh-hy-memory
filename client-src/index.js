@@ -220,17 +220,19 @@ export function apply(ctx) {
   ctx.effect(installNavGlyph, 'hy-memory: settings nav glyph')
 
   // A page sync can register this section while the previous instance still
-  // holds the seat at priority 0. Shadowing at a higher priority keeps the panel
-  // alive instead of failing the whole sync; the older instance still renders
-  // until it disposes, and its content is identical.
+  // holds the seat. Shadowing it produced two identical nav rows, so wait for
+  // the old owner to dispose instead of adding a second seat: the old instance
+  // already renders the same panel, and a retry picks the seat up afterwards.
   const registerSection = () => {
-    for (let priority = 0; priority <= 5; priority += 1) {
+    let seat = null
+    const timers = []
+    const attempt = () => {
+      if (seat !== null) return
       try {
-        return ctx.slots.register({
+        seat = ctx.slots.register({
           name: 'settings.section',
           id: SECTION_ID,
           order: 30,
-          priority,
           label: () => navLabelNode(t),
           locale: NS,
           inject: () => ({ translate: t, api, subscribeLocale, localeSnapshot }),
@@ -240,7 +242,23 @@ export function apply(ctx) {
         if (!message.includes('already has an entry with id') && !message.includes('already has a registration')) throw error
       }
     }
-    return () => {}
+    attempt()
+    if (seat === null) {
+      for (const delay of [250, 1000, 2500]) {
+        timers.push(setTimeout(attempt, delay))
+      }
+      for (const timer of timers) timer.unref?.()
+    }
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+      if (seat !== null) {
+        try {
+          seat()
+        } catch {
+          // Disposal is best-effort.
+        }
+      }
+    }
   }
   ctx.effect(() => ctx.slots.inject('settings.section', registerSection), 'hy-memory: settings section')
 

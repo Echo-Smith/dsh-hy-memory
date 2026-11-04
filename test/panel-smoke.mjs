@@ -964,8 +964,13 @@ function createHarness({
 async function exerciseSlotConflict(harness) {
   await settle()
   const sections = harness.slotRegistrations.filter((entry) => entry.options.name === 'settings.section')
-  assert.equal(sections.length, 1, 'the section registers by shadowing the occupied priority')
-  assert.ok((sections[0].options.priority ?? 0) >= 1, 'it shadows at a higher priority')
+  assert.equal(sections.length, 0, 'the occupied seat is left to its current owner instead of duplicating the nav row')
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  assert.equal(
+    harness.slotRegistrations.filter((entry) => entry.options.name === 'settings.section').length,
+    0,
+    'a retry does not add a second seat while the namespace stays occupied',
+  )
 }
 
 async function exerciseLocaleConflict(harness) {
@@ -1001,6 +1006,12 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
   assert.equal(typeof loaded.registration.factory, 'function', `${label}: factory is a function`)
 
   const settingsSections = slotRegistrations.filter((entry) => entry.options.name === 'settings.section')
+  if (harness.slotConflict === true) {
+    // The dedicated exercise covers this harness: the occupied seat stays with
+    // its current owner and nothing else is asserted about this bundle instance.
+    assert.equal(settingsSections.length, 0, `${label}: the occupied seat is not duplicated`)
+    return
+  }
   assert.equal(settingsSections.length, 1, `${label}: exactly one settings.section registration`)
   assert.equal(settingsSections[0].options.id, 'hy-memory', `${label}: settings section id`)
   assert.equal(settingsSections[0].options.locale, 'hy-memory', `${label}: settings section locale namespace`)
@@ -1145,7 +1156,24 @@ async function activate(harness, node, label) {
 /** Open a card's action menu unless a re-render left it open already. */
 async function ensureRowMenu(harness, t) {
   if (findButton(harness, t('row.copy')) === undefined) {
-    await activate(harness, findByLabel(harness, t('row.actions')), 'the row action button')
+    const main = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain')
+  assert.ok(main !== undefined, 'the row content area is its own control')
+  assert.equal(main.props['aria-expanded'], 'false', 'the row starts collapsed')
+  await activate(harness, main, 'the row content area')
+  const expanded = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain')
+  assert.equal(expanded.props['aria-expanded'], 'true', 'clicking the content expands it')
+  assert.ok(hostsOf(harness).some((node) => String(node.props?.className ?? '').includes('hm-fileBody')),
+    'the expanded row renders the full memory body')
+  await activate(harness, expanded, 'the expanded row content area')
+  assert.equal(
+    hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain').props['aria-expanded'],
+    'false',
+    'clicking again collapses it',
+  )
+  assert.equal(hostsOf(harness).some((node) => String(node.props?.className ?? '').includes('hm-fileBody')), false,
+    'the body leaves the tree when collapsed')
+
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the row action button')
   }
 }
 
@@ -1244,6 +1272,23 @@ async function exercisePollIsolation(harness) {
   const sectionRenders = harness.mini.renderCounts.get('SettingsSection')
   const activityRenders = harness.mini.renderCounts.get('ActivityPanel')
   assert.ok(sectionRenders >= 1 && activityRenders >= 1, 'both the section and the activity subtree rendered')
+
+  const main = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain')
+  assert.ok(main !== undefined, 'the row content area is its own control')
+  assert.equal(main.props['aria-expanded'], 'false', 'the row starts collapsed')
+  await activate(harness, main, 'the row content area')
+  const expanded = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain')
+  assert.equal(expanded.props['aria-expanded'], 'true', 'clicking the content expands it')
+  assert.ok(hostsOf(harness).some((node) => String(node.props?.className ?? '').includes('hm-fileBody')),
+    'the expanded row renders the full memory body')
+  await activate(harness, expanded, 'the expanded row content area')
+  assert.equal(
+    hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain').props['aria-expanded'],
+    'false',
+    'clicking again collapses it',
+  )
+  assert.equal(hostsOf(harness).some((node) => String(node.props?.className ?? '').includes('hm-fileBody')), false,
+    'the body leaves the tree when collapsed')
 
   await activate(harness, findByLabel(harness, t('row.actions')), 'the row action button')
   await click(harness, t('row.edit'))
@@ -1492,6 +1537,23 @@ async function exerciseFileRows(harness) {
   assert.equal(hostsOf(harness).filter((node) => String(node.props?.className ?? '').includes('hm-fileIcon')).length, 1,
     'each card carries a square icon badge')
   assert.ok(findByLabel(harness, t('row.actions')) !== undefined, 'each card carries its action button')
+
+  const main = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain')
+  assert.ok(main !== undefined, 'the row content area is its own control')
+  assert.equal(main.props['aria-expanded'], 'false', 'the row starts collapsed')
+  await activate(harness, main, 'the row content area')
+  const expanded = hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain')
+  assert.equal(expanded.props['aria-expanded'], 'true', 'clicking the content expands it')
+  assert.ok(hostsOf(harness).some((node) => String(node.props?.className ?? '').includes('hm-fileBody')),
+    'the expanded row renders the full memory body')
+  await activate(harness, expanded, 'the expanded row content area')
+  assert.equal(
+    hostsOf(harness).find((node) => String(node.props?.className ?? '') === 'hm-fileMain').props['aria-expanded'],
+    'false',
+    'clicking again collapses it',
+  )
+  assert.equal(hostsOf(harness).some((node) => String(node.props?.className ?? '').includes('hm-fileBody')), false,
+    'the body leaves the tree when collapsed')
 
   await activate(harness, findByLabel(harness, t('row.actions')), 'the row action button')
   await activate(harness, findButton(harness, t('row.copy')), 'the copy action')

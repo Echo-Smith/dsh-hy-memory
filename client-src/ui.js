@@ -512,6 +512,10 @@ const PANEL_CSS = `
 .hm-footerResult a:hover { text-decoration:underline; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-fileMain { display:flex; align-items:center; gap:10px; flex:1; min-width:0; cursor:pointer; }
+.hm-fileMain:focus-visible { outline:2px solid var(--dsw-alias-brand-primary); outline-offset:2px; border-radius:8px; }
+.hm-fileBody { margin:8px 0 0 34px; font-size:12px; line-height:1.55; color:var(--dsw-alias-label-secondary); white-space:pre-wrap; overflow-wrap:anywhere; }
+.hm-file-open { align-items:flex-start; flex-wrap:wrap; }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
 .hm-dangerAction,
 .hm-dangerAction:hover { color:var(--dsw-alias-state-error-primary) !important; border-color:var(--dsw-alias-state-error-primary) !important; }

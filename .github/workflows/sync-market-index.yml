@@ -1,0 +1,37 @@
+name: sync-market-index
+
+# Keeps market/index.json on main equal to the version in package.json, so DSH's
+# detail page never advertises a version that was not shipped. The version commit
+# usually lands before the tag, which makes this a no-op; it exists for releases
+# made from a tag whose index bump was forgotten.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sync the index
+        run: node scripts/sync-market-index.mjs
+      - name: Commit when it changed
+        run: |
+          if git diff --quiet -- market/index.json; then
+            echo "index already matches package.json"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add market/index.json
+          git commit -m "market: sync index with package.json"
+          git push origin main

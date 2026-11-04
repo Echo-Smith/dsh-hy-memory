@@ -26,8 +26,16 @@ jobs:
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
+      - name: Resolve the version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Stage the scoped package
-        run: node scripts/prepare-publish.mjs --name @echo-smith/dsh-hy-memory --version "${{ github.event.inputs.version || '0.1.1' }}" --staging dist/gh-package --registry https://npm.pkg.github.com
+        run: node scripts/prepare-publish.mjs --name @echo-smith/dsh-hy-memory --version "${{ steps.version.outputs.value }}" --staging dist/gh-package --registry https://npm.pkg.github.com
       - name: Publish to GitHub Packages
         run: npm publish ./dist/gh-package --registry https://npm.pkg.github.com
         env:

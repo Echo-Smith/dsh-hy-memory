@@ -211,5 +211,6 @@
   "purge.done": "已清除 {n} 条并归档",
   "purge.failed": "清除被拒绝：{message}",
   "memhub.paired": "已与 MemHub 配对，同步在 MemHub 面板里开启。",
-  "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。"
+  "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。",
+  "row.expand": "展开记忆内容"
 }

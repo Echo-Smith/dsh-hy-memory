@@ -397,7 +397,8 @@ var zh_default = {
   "purge.done": "已清除 {n} 条并归档",
   "purge.failed": "清除被拒绝：{message}",
   "memhub.paired": "已与 MemHub 配对，同步在 MemHub 面板里开启。",
-  "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。"
+  "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。",
+  "row.expand": "展开记忆内容"
 };
 
 // locale/en.json
@@ -614,7 +615,8 @@ var en_default = {
   "purge.done": "Purged {n} memories and archived them",
   "purge.failed": "Purge refused: {message}",
   "memhub.paired": "Paired with MemHub; turn sync on in the MemHub panel.",
-  "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel."
+  "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel.",
+  "row.expand": "Expand memory content"
 };
 
 // client-src/locale.js
@@ -1098,6 +1100,10 @@ var PANEL_CSS = `
 .hm-footerResult a:hover { text-decoration:underline; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-fileMain { display:flex; align-items:center; gap:10px; flex:1; min-width:0; cursor:pointer; }
+.hm-fileMain:focus-visible { outline:2px solid var(--dsw-alias-brand-primary); outline-offset:2px; border-radius:8px; }
+.hm-fileBody { margin:8px 0 0 34px; font-size:12px; line-height:1.55; color:var(--dsw-alias-label-secondary); white-space:pre-wrap; overflow-wrap:anywhere; }
+.hm-file-open { align-items:flex-start; flex-wrap:wrap; }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
 .hm-dangerAction,
 .hm-dangerAction:hover { color:var(--dsw-alias-state-error-primary) !important; border-color:var(--dsw-alias-state-error-primary) !important; }
@@ -1781,16 +1787,36 @@ function FileRow(props) {
   const meta = [];
   if (props.date !== "") meta.push(h("span", { key: "date" }, props.date));
   if (props.status !== "") meta.push(h("span", { key: "status", className: "hm-fileStatus", role: "status" }, props.status));
+  const expanded = props.expanded === true;
   return h(
     "li",
-    { className: "hm-file" },
-    h("span", { className: "hm-fileIcon", "aria-hidden": "true" }, h(Icon, { name: "file", size: 17 })),
+    { className: `hm-file${expanded ? " hm-file-open" : ""}` },
     h(
       "div",
-      { className: "hm-fileText" },
-      h("p", { className: "hm-fileTitle", title: props.title }, props.title),
-      meta.length > 0 ? h("p", { className: "hm-fileDate" }, meta) : null
+      {
+        className: "hm-fileMain",
+        role: "button",
+        tabIndex: 0,
+        "aria-expanded": expanded ? "true" : "false",
+        "aria-label": t("row.expand"),
+        onClick: () => {
+          if (typeof props.onToggle === "function") props.onToggle();
+        },
+        onKeyDown: (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          if (typeof props.onToggle === "function") props.onToggle();
+        }
+      },
+      h("span", { className: "hm-fileIcon", "aria-hidden": "true" }, h(Icon, { name: "file", size: 17 })),
+      h(
+        "div",
+        { className: "hm-fileText" },
+        h("p", { className: "hm-fileTitle", title: props.title }, props.title),
+        meta.length > 0 ? h("p", { className: "hm-fileDate" }, meta) : null
+      )
     ),
+    expanded && typeof props.content === "string" && props.content !== "" ? h("p", { className: "hm-fileBody" }, props.content) : null,
     h(
       "div",
       { className: "hm-fileActions" },
@@ -1840,6 +1866,7 @@ function SettingsSection(props) {
     session: { page: 1, size: DEFAULT_PAGE_SIZE }
   }));
   const [editing, setEditing] = React2.useState(null);
+  const [expandedRow, setExpandedRow] = React2.useState(null);
   const [savingId, setSavingId] = React2.useState("");
   const [savedId, setSavedId] = React2.useState("");
   const [rowError, setRowError] = React2.useState(null);
@@ -2685,6 +2712,11 @@ function SettingsSection(props) {
       title: memoryTitle(item.content, t("row.untitled")),
       date: memoryDate(item),
       status: statusText,
+      content: item.content,
+      expanded: expandedRow === item.id,
+      onToggle: () => {
+        setExpandedRow((current) => current === item.id ? null : item.id);
+      },
       actions: rowActions(tier, item)
     });
   };
@@ -3627,13 +3659,15 @@ function apply(ctx) {
   });
   ctx.effect(installNavGlyph, "hy-memory: settings nav glyph");
   const registerSection = () => {
-    for (let priority = 0; priority <= 5; priority += 1) {
+    let seat = null;
+    const timers = [];
+    const attempt = () => {
+      if (seat !== null) return;
       try {
-        return ctx.slots.register({
+        seat = ctx.slots.register({
           name: "settings.section",
           id: SECTION_ID,
           order: 30,
-          priority,
           label: () => navLabelNode(t),
           locale: NS,
           inject: () => ({ translate: t, api, subscribeLocale, localeSnapshot })
@@ -3642,8 +3676,22 @@ function apply(ctx) {
         const message = String(error?.message ?? "");
         if (!message.includes("already has an entry with id") && !message.includes("already has a registration")) throw error;
       }
+    };
+    attempt();
+    if (seat === null) {
+      for (const delay of [250, 1e3, 2500]) {
+        timers.push(setTimeout(attempt, delay));
+      }
+      for (const timer of timers) timer.unref?.();
     }
     return () => {
+      for (const timer of timers) clearTimeout(timer);
+      if (seat !== null) {
+        try {
+          seat();
+        } catch {
+        }
+      }
     };
   };
   ctx.effect(() => ctx.slots.inject("settings.section", registerSection), "hy-memory: settings section");

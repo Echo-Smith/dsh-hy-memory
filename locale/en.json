@@ -211,5 +211,6 @@
   "purge.done": "Purged {n} memories and archived them",
   "purge.failed": "Purge refused: {message}",
   "memhub.paired": "Paired with MemHub; turn sync on in the MemHub panel.",
-  "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel."
+  "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel.",
+  "row.expand": "Expand memory content"
 }
