@@ -133,6 +133,9 @@ var api = {
   delete: (payload) => request("delete", payload),
   // Forget: delete the memory AND record its text so promotion cannot bring it back.
   forget: (id) => request("forget", { id }),
+  // Duplicate cleanup: scan groups, then merge one group per call.
+  duplicates: (tier) => request("duplicates", typeof tier === "string" && tier !== "" ? { tier } : {}),
+  merge: (payload) => request("merge", payload),
   search: (payload) => request("search", payload),
   activity: (since) => request("activity", since === void 0 ? {} : { since }),
   start: () => request("start"),
@@ -329,7 +332,16 @@ var zh_default = {
   "row.confirmForget.title": "永久遗忘这条记忆？",
   "row.confirmForget.body": "这条记忆会从存储中永久删除，并记住它的内容：之后的晋升不会再把它带回来。",
   "row.confirmForget.confirm": "永久遗忘",
-  "row.forgetFailed": "遗忘失败：{message}"
+  "row.forgetFailed": "遗忘失败：{message}",
+  "dupes.action": "整理重复项",
+  "dupes.scanning": "扫描中…",
+  "dupes.none": "没有重复项",
+  "dupes.confirm.title": "整理重复项？",
+  "dupes.confirm.body": "将移除 {rows} 条重复记忆（共 {groups} 组），每组保留最新的一条。",
+  "dupes.confirm.confirm": "整理",
+  "dupes.merging": "正在整理…",
+  "dupes.done": "已移除 {n} 条重复记忆",
+  "dupes.failed": "操作失败：{message}"
 };
 
 // locale/en.json
@@ -508,7 +520,16 @@ var en_default = {
   "row.confirmForget.title": "Forget this memory permanently?",
   "row.confirmForget.body": "The memory is deleted from the store and its text is remembered, so promotion will not bring it back.",
   "row.confirmForget.confirm": "Forget permanently",
-  "row.forgetFailed": "Forget failed: {message}"
+  "row.forgetFailed": "Forget failed: {message}",
+  "dupes.action": "Clean up duplicates",
+  "dupes.scanning": "Scanning…",
+  "dupes.none": "No duplicates",
+  "dupes.confirm.title": "Clean up duplicates?",
+  "dupes.confirm.body": "This removes {rows} duplicate memories across {groups} groups, keeping the newest one in each group.",
+  "dupes.confirm.confirm": "Clean up",
+  "dupes.merging": "Cleaning up…",
+  "dupes.done": "Removed {n} duplicate memories",
+  "dupes.failed": "Action failed: {message}"
 };
 
 // client-src/locale.js
@@ -992,6 +1013,8 @@ var PANEL_CSS = `
 .hm-footerResult a:hover { text-decoration:underline; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
+.hm-dupeHint { font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }
@@ -1641,6 +1664,11 @@ function SettingsSection(props) {
   const [forgetTarget, setForgetTarget] = React2.useState(null);
   const [forgetting, setForgetting] = React2.useState(false);
   const [forgetError, setForgetError] = React2.useState("");
+  const [dupeBusy, setDupeBusy] = React2.useState("");
+  const [dupeScan, setDupeScan] = React2.useState(null);
+  const [dupeOpen, setDupeOpen] = React2.useState(false);
+  const [dupeDone, setDupeDone] = React2.useState(null);
+  const [dupeError, setDupeError] = React2.useState("");
   const [deleting, setDeleting] = React2.useState(false);
   const [deleteError, setDeleteError] = React2.useState("");
   const [diagOpen, setDiagOpen] = React2.useState(false);
@@ -1969,6 +1997,44 @@ function SettingsSection(props) {
       setForgetting(false);
     }
   };
+  const scanDuplicates = async () => {
+    if (dupeBusy !== "") return;
+    setDupeBusy("scan");
+    setDupeError("");
+    setDupeDone(null);
+    try {
+      const data = await api.duplicates();
+      const groups = asArray(data?.groups).filter((group) => group !== null && typeof group === "object" && typeof group.tier === "string" && Array.isArray(group.drop) && group.drop.length > 0);
+      const total = asNumber(data?.total, groups.reduce((sum, group) => sum + asNumber(group.count, group.drop.length), 0));
+      setDupeScan({ groups, total });
+      setDupeOpen(total > 0);
+    } catch (error) {
+      setDupeScan(null);
+      setDupeError(errorMessage(error));
+    } finally {
+      setDupeBusy("");
+    }
+  };
+  const applyMerge = async () => {
+    if (dupeScan === null || dupeBusy !== "" || dupeOpen !== true) return;
+    setDupeBusy("merge");
+    setDupeError("");
+    let removed = 0;
+    try {
+      for (const group of dupeScan.groups) {
+        await api.merge({ tier: group.tier, keep: group.keep, drop: group.drop });
+        removed += asNumber(group.count, group.drop.length);
+      }
+      setDupeOpen(false);
+      setDupeScan(null);
+      setDupeDone(removed);
+      refresh();
+    } catch (error) {
+      setDupeError(errorMessage(error));
+    } finally {
+      setDupeBusy("");
+    }
+  };
   const copyItem = async (item) => {
     const ok = await copyToClipboard(item.content);
     if (copyTimer.current !== null) {
@@ -2040,6 +2106,12 @@ function SettingsSection(props) {
       });
     }
     return actions;
+  };
+  const dupeHint = () => {
+    if (dupeError !== "") return t("dupes.failed", { message: dupeError });
+    if (dupeDone !== null) return t("dupes.done", { n: dupeDone });
+    if (dupeScan !== null && dupeScan.total === 0) return t("dupes.none");
+    return "";
   };
   const renderHeader = () => h(
     "header",
@@ -2473,6 +2545,46 @@ function SettingsSection(props) {
     deleteTarget !== null ? h("p", { className: "hm-muted" }, t("row.confirmDelete.body", { tier: tierLabel(t, deleteTarget.tier) })) : null,
     deleteError !== "" ? h("p", { className: "hm-error" }, t("row.deleteFailed", { message: deleteError })) : null
   );
+  const renderDupeModal = () => h(
+    ui.Modal,
+    {
+      open: dupeOpen && dupeScan !== null,
+      onClose: () => {
+        if (dupeBusy === "merge") return;
+        setDupeOpen(false);
+        setDupeScan(null);
+        setDupeError("");
+      },
+      title: t("dupes.confirm.title"),
+      closeLabel: t("common.close"),
+      footer: h(
+        "div",
+        { className: "hm-row" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "ghost",
+          "data-modal-autofocus": "",
+          onClick: () => {
+            setDupeOpen(false);
+            setDupeScan(null);
+            setDupeError("");
+          }
+        }, t("row.confirmDelete.cancel")),
+        h(
+          ui.Button,
+          { size: "sm", variant: "primary", disabled: dupeBusy === "merge", onClick: () => {
+            void applyMerge();
+          } },
+          dupeBusy === "merge" ? t("dupes.merging") : t("dupes.confirm.confirm")
+        )
+      )
+    },
+    dupeScan !== null ? h("p", { className: "hm-muted" }, t("dupes.confirm.body", {
+      rows: dupeScan.total,
+      groups: dupeScan.groups.length
+    })) : null,
+    dupeError !== "" ? h("p", { className: "hm-error" }, t("dupes.failed", { message: dupeError })) : null
+  );
   const renderForgetModal = () => h(
     ui.Modal,
     {
@@ -2606,6 +2718,22 @@ function SettingsSection(props) {
       ),
       totalCount !== null ? h("p", { className: "hm-countLine" }, t("counts.total", { n: totalCount })) : null,
       context !== null && (memoryTokens > 0 || totalTokens > 0) ? h("p", { className: "hm-contextLine" }, t("diag.memoryTokens", { round: memoryTokens, total: totalTokens })) : null,
+      h(
+        "div",
+        { className: "hm-dupeRow" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "outline",
+          disabled: dupeBusy !== "",
+          onClick: () => {
+            void scanDuplicates();
+          }
+        }, dupeBusy === "scan" ? t("dupes.scanning") : t("dupes.action")),
+        dupeHint() !== "" ? h("span", {
+          className: `hm-dupeHint${dupeError !== "" ? " hm-error" : ""}`,
+          role: "status"
+        }, dupeHint()) : null
+      ),
       diagOpen ? h("dl", { className: "hm-grid" }, details) : null,
       diagOpen ? h("pre", { className: "hm-pre" }, JSON.stringify(status, null, 2)) : null
     );
@@ -2714,7 +2842,8 @@ function SettingsSection(props) {
     renderMemhub(),
     renderFooter(),
     renderDeleteModal(),
-    renderForgetModal()
+    renderForgetModal(),
+    renderDupeModal()
   );
 }
 

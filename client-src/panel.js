@@ -542,6 +542,11 @@ export function SettingsSection(props) {
   const [forgetTarget, setForgetTarget] = React.useState(null)
   const [forgetting, setForgetting] = React.useState(false)
   const [forgetError, setForgetError] = React.useState('')
+  const [dupeBusy, setDupeBusy] = React.useState('')
+  const [dupeScan, setDupeScan] = React.useState(null)
+  const [dupeOpen, setDupeOpen] = React.useState(false)
+  const [dupeDone, setDupeDone] = React.useState(null)
+  const [dupeError, setDupeError] = React.useState('')
   const [deleting, setDeleting] = React.useState(false)
   const [deleteError, setDeleteError] = React.useState('')
   const [diagOpen, setDiagOpen] = React.useState(false)
@@ -888,6 +893,50 @@ export function SettingsSection(props) {
     }
   }
 
+  /** Scan for duplicate groups, then either report "none" or ask to merge. */
+  const scanDuplicates = async () => {
+    if (dupeBusy !== '') return
+    setDupeBusy('scan')
+    setDupeError('')
+    setDupeDone(null)
+    try {
+      const data = await api.duplicates()
+      const groups = asArray(data?.groups).filter((group) => (
+        group !== null && typeof group === 'object' && typeof group.tier === 'string' && Array.isArray(group.drop) && group.drop.length > 0
+      ))
+      const total = asNumber(data?.total, groups.reduce((sum, group) => sum + asNumber(group.count, group.drop.length), 0))
+      setDupeScan({ groups, total })
+      setDupeOpen(total > 0)
+    } catch (error) {
+      setDupeScan(null)
+      setDupeError(errorMessage(error))
+    } finally {
+      setDupeBusy('')
+    }
+  }
+
+  /** One merge call per duplicate group, then refresh every list. */
+  const applyMerge = async () => {
+    if (dupeScan === null || dupeBusy !== '' || dupeOpen !== true) return
+    setDupeBusy('merge')
+    setDupeError('')
+    let removed = 0
+    try {
+      for (const group of dupeScan.groups) {
+        await api.merge({ tier: group.tier, keep: group.keep, drop: group.drop })
+        removed += asNumber(group.count, group.drop.length)
+      }
+      setDupeOpen(false)
+      setDupeScan(null)
+      setDupeDone(removed)
+      refresh()
+    } catch (error) {
+      setDupeError(errorMessage(error))
+    } finally {
+      setDupeBusy('')
+    }
+  }
+
   const copyItem = async (item) => {
     const ok = await copyToClipboard(item.content)
     if (copyTimer.current !== null) {
@@ -971,6 +1020,14 @@ export function SettingsSection(props) {
 
   // Title + description on the left, the master switch on the right edge of the
   // same block, vertically centred (the 通用 settings row layout).
+  // One short line under the cleanup button: result, "none", or the failure.
+  const dupeHint = () => {
+    if (dupeError !== '') return t('dupes.failed', { message: dupeError })
+    if (dupeDone !== null) return t('dupes.done', { n: dupeDone })
+    if (dupeScan !== null && dupeScan.total === 0) return t('dupes.none')
+    return ''
+  }
+
   const renderHeader = () => h('header', { className: 'hm-header' },
     h('div', { className: 'hm-headerMain' },
       h('div', null,
@@ -1336,6 +1393,32 @@ export function SettingsSection(props) {
     : null,
   deleteError !== '' ? h('p', { className: 'hm-error' }, t('row.deleteFailed', { message: deleteError })) : null)
 
+  const renderDupeModal = () => h(ui.Modal, {
+    open: dupeOpen && dupeScan !== null,
+    onClose: () => {
+      if (dupeBusy === 'merge') return
+      setDupeOpen(false)
+      setDupeScan(null)
+      setDupeError('')
+    },
+    title: t('dupes.confirm.title'),
+    closeLabel: t('common.close'),
+    footer: h('div', { className: 'hm-row' },
+      h(ui.Button, {
+        size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+        onClick: () => { setDupeOpen(false); setDupeScan(null); setDupeError('') },
+      }, t('row.confirmDelete.cancel')),
+      h(ui.Button, { size: 'sm', variant: 'primary', disabled: dupeBusy === 'merge', onClick: () => { void applyMerge() } },
+        dupeBusy === 'merge' ? t('dupes.merging') : t('dupes.confirm.confirm'))),
+  },
+  dupeScan !== null
+    ? h('p', { className: 'hm-muted' }, t('dupes.confirm.body', {
+      rows: dupeScan.total,
+      groups: dupeScan.groups.length,
+    }))
+    : null,
+  dupeError !== '' ? h('p', { className: 'hm-error' }, t('dupes.failed', { message: dupeError })) : null)
+
   const renderForgetModal = () => h(ui.Modal, {
     open: forgetTarget !== null,
     onClose: () => {
@@ -1431,6 +1514,19 @@ export function SettingsSection(props) {
       context !== null && (memoryTokens > 0 || totalTokens > 0)
         ? h('p', { className: 'hm-contextLine' }, t('diag.memoryTokens', { round: memoryTokens, total: totalTokens }))
         : null,
+      h('div', { className: 'hm-dupeRow' },
+        h(ui.Button, {
+          size: 'sm',
+          variant: 'outline',
+          disabled: dupeBusy !== '',
+          onClick: () => { void scanDuplicates() },
+        }, dupeBusy === 'scan' ? t('dupes.scanning') : t('dupes.action')),
+        dupeHint() !== ''
+          ? h('span', {
+            className: `hm-dupeHint${dupeError !== '' ? ' hm-error' : ''}`,
+            role: 'status',
+          }, dupeHint())
+          : null),
       diagOpen ? h('dl', { className: 'hm-grid' }, details) : null,
       diagOpen ? h('pre', { className: 'hm-pre' }, JSON.stringify(status, null, 2)) : null)
   }
@@ -1529,5 +1625,6 @@ export function SettingsSection(props) {
     renderMemhub(),
     renderFooter(),
     renderDeleteModal(),
-    renderForgetModal())
+    renderForgetModal(),
+    renderDupeModal())
 }

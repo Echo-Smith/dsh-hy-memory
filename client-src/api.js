@@ -123,6 +123,9 @@ export const api = {
   delete: (payload) => request('delete', payload),
   // Forget: delete the memory AND record its text so promotion cannot bring it back.
   forget: (id) => request('forget', { id }),
+  // Duplicate cleanup: scan groups, then merge one group per call.
+  duplicates: (tier) => request('duplicates', typeof tier === 'string' && tier !== '' ? { tier } : {}),
+  merge: (payload) => request('merge', payload),
   search: (payload) => request('search', payload),
   activity: (since) => request('activity', since === undefined ? {} : { since }),
   start: () => request('start'),

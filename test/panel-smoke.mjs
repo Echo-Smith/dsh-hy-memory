@@ -562,6 +562,7 @@ function createFetch(fetchCalls, options = {}) {
   const memhubDetected = options.memhubDetected !== false
   const withContext = options.context !== false
   const autoUpdate = options.autoUpdate ?? 'current'
+  const duplicates = options.duplicates ?? 'some'
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
   const settings = { enabled: true }
   let activityPolls = 0
@@ -665,6 +666,23 @@ function createFetch(fetchCalls, options = {}) {
     if (verb === 'update') return jsonResponse({ ok: true, data: { item: { id: 'm1', content: 'edited' } } })
     if (verb === 'delete') return jsonResponse({ ok: true, data: { deleted: true } })
     if (verb === 'forget') return jsonResponse({ ok: true, data: { deleted: true, forgotten: true } })
+    if (verb === 'duplicates') {
+      if (duplicates === 'error') {
+        return jsonResponse({ ok: false, error: { code: 'memory_error', message: 'scan failed' } }, 500)
+      }
+      if (duplicates === 'none') return jsonResponse({ ok: true, data: { groups: [], total: 0 } })
+      return jsonResponse({
+        ok: true,
+        data: {
+          groups: [
+            { tier: 'personal', keep: 'm1', drop: ['m2', 'm3'], count: 2, preview: 'remember this' },
+            { tier: 'project', keep: 'p1', drop: ['p2'], count: 1, preview: 'project note' },
+          ],
+          total: 3,
+        },
+      })
+    }
+    if (verb === 'merge') return jsonResponse({ ok: true, data: { merged: 1, kept: 'm1' } })
     if (verb === 'memhub/export') {
       if (options.memhubErrors === true) {
         return jsonResponse({ ok: false, error: { code: 'memhub_locked', message: 'store is locked by the MemHub runtime' } }, 409)
@@ -718,7 +736,7 @@ function createDocumentStub() {
 
 function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', autoUpdate = 'current', context = true,
+  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', context = true,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -732,7 +750,7 @@ function createHarness({
   const scheduler = createScheduler()
   const documentStub = createDocumentStub()
   const fetchImpl = createFetch(fetchCalls, {
-    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, context,
+    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, context,
   })
 
   const requireStub = (specifier) => {
@@ -938,10 +956,10 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
 
 async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', autoUpdate = 'current', context = true,
+  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', context = true,
 }) {
   const harness = createHarness({
-    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, context,
+    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, context,
   })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
@@ -1552,6 +1570,48 @@ async function exerciseForget(harness) {
   assert.ok(listCalls >= 2, 'a forgotten memory refreshes the list')
 }
 
+async function exerciseDuplicates(harness) {
+  const t = await mountSection(harness, 'zh')
+  assert.ok(findButton(harness, t('dupes.action')) !== undefined, 'the diagnostics card offers 整理重复项')
+  assert.equal(lastCall(harness, '/api/hy-memory/duplicates'), undefined, 'nothing is scanned before the click')
+
+  await click(harness, t('dupes.action'))
+  assertPost(harness, '/api/hy-memory/duplicates', {})
+  assert.ok(harness.mini.text().includes(t('dupes.confirm.title')), 'a scan with duplicates asks for confirmation')
+  assert.ok(harness.mini.text().includes(t('dupes.confirm.body', { rows: 3, groups: 2 })),
+    'the confirmation states how many rows across how many groups would go')
+  assert.equal(lastCall(harness, '/api/hy-memory/merge'), undefined, 'nothing is merged before confirming')
+
+  await click(harness, t('dupes.confirm.confirm'))
+  const merges = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/merge')
+  assert.equal(merges.length, 2, 'one merge call per duplicate group')
+  assert.deepEqual(JSON.parse(merges[0].options.body), { tier: 'personal', keep: 'm1', drop: ['m2', 'm3'] },
+    'the first merge keeps the newest personal row and drops the rest')
+  assert.deepEqual(JSON.parse(merges[1].options.body), { tier: 'project', keep: 'p1', drop: ['p2'] },
+    'the second merge carries the project tier')
+  assert.equal(harness.mini.text().includes(t('dupes.confirm.title')), false, 'the confirmation closes')
+  assert.ok(harness.mini.text().includes(t('dupes.done', { n: 3 })), 'the result reports how many rows were removed')
+  const listCalls = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
+  assert.ok(listCalls >= 2, 'a merge refreshes the lists')
+}
+
+async function exerciseDuplicatesEmpty(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('dupes.action'))
+  assertPost(harness, '/api/hy-memory/duplicates', {})
+  assert.ok(harness.mini.text().includes(t('dupes.none')), 'a clean store reports 没有重复项')
+  assert.equal(findButton(harness, t('dupes.confirm.confirm')), undefined,
+    'no confirmation opens when nothing is duplicated')
+  assert.equal(lastCall(harness, '/api/hy-memory/merge'), undefined, 'no merge is attempted for an empty scan')
+}
+
+async function exerciseDuplicatesError(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('dupes.action'))
+  assert.ok(harness.mini.text().includes(t('dupes.failed', { message: 'scan failed' })),
+    'a failed scan shows one short failure line')
+}
+
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
 const withoutSeed = await run({ withPrimitives: false, label: 'without host primitives (fallbacks)' })
 const sessionPanelOff = await run({ withPrimitives: true, label: 'session panel disabled', sessionPanel: false })
@@ -1628,6 +1688,18 @@ const forgetRun = await run({ withPrimitives: true, label: 'forget' })
 await exerciseForget(forgetRun)
 forgetRun.mini.unmount()
 
+const dupeRun = await run({ withPrimitives: true, label: 'duplicates' })
+await exerciseDuplicates(dupeRun)
+dupeRun.mini.unmount()
+
+const dupeEmptyRun = await run({ withPrimitives: true, label: 'duplicates none', duplicates: 'none' })
+await exerciseDuplicatesEmpty(dupeEmptyRun)
+dupeEmptyRun.mini.unmount()
+
+const dupeErrorRun = await run({ withPrimitives: true, label: 'duplicates error', duplicates: 'error' })
+await exerciseDuplicatesError(dupeErrorRun)
+dupeErrorRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1648,5 +1720,6 @@ console.log(`  footer: repo link (rel=noopener) + update/check POST with 已是�
 console.log(`  memory tokens: diagnostics line reads status.context.memoryTokens/totalTokens`)
 console.log(`  auto update: one force:false check per page load, quiet notice only when behind, button forces`)
 console.log(`  forget: 永久遗忘 next to 删除, own confirmation, POST /forget {id}; diagnostics totals all three tiers`)
+console.log(`  duplicates: scan button, 没有重复项 for a clean store, one /merge POST per group with tier/keep/drop`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)

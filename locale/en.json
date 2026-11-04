@@ -173,5 +173,14 @@
   "row.confirmForget.title": "Forget this memory permanently?",
   "row.confirmForget.body": "The memory is deleted from the store and its text is remembered, so promotion will not bring it back.",
   "row.confirmForget.confirm": "Forget permanently",
-  "row.forgetFailed": "Forget failed: {message}"
+  "row.forgetFailed": "Forget failed: {message}",
+  "dupes.action": "Clean up duplicates",
+  "dupes.scanning": "Scanning…",
+  "dupes.none": "No duplicates",
+  "dupes.confirm.title": "Clean up duplicates?",
+  "dupes.confirm.body": "This removes {rows} duplicate memories across {groups} groups, keeping the newest one in each group.",
+  "dupes.confirm.confirm": "Clean up",
+  "dupes.merging": "Cleaning up…",
+  "dupes.done": "Removed {n} duplicate memories",
+  "dupes.failed": "Action failed: {message}"
 }

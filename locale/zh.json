@@ -173,5 +173,14 @@
   "row.confirmForget.title": "永久遗忘这条记忆？",
   "row.confirmForget.body": "这条记忆会从存储中永久删除，并记住它的内容：之后的晋升不会再把它带回来。",
   "row.confirmForget.confirm": "永久遗忘",
-  "row.forgetFailed": "遗忘失败：{message}"
+  "row.forgetFailed": "遗忘失败：{message}",
+  "dupes.action": "整理重复项",
+  "dupes.scanning": "扫描中…",
+  "dupes.none": "没有重复项",
+  "dupes.confirm.title": "整理重复项？",
+  "dupes.confirm.body": "将移除 {rows} 条重复记忆（共 {groups} 组），每组保留最新的一条。",
+  "dupes.confirm.confirm": "整理",
+  "dupes.merging": "正在整理…",
+  "dupes.done": "已移除 {n} 条重复记忆",
+  "dupes.failed": "操作失败：{message}"
 }
