@@ -11,6 +11,7 @@ import {
   truncateChars,
   withDeadline,
 } from '../src/recall.js'
+import { createRecall } from '../src/recall.js'
 
 test('query comes from the latest direct human message only', () => {
   const messages = [
@@ -137,4 +138,40 @@ test('deadline resolves null and cannot leak a late rejection', async () => {
   await new Promise((resolve) => setTimeout(resolve, 40))
 
   assert.equal(await withDeadline(async () => 'fast', 1000), 'fast')
+})
+
+test('a cold recall waits briefly for the sidecar instead of skipping the turn', async () => {
+  let calls = 0
+  const client = {
+    bridgeSearch: async () => ({ memories: { schema: [], proactive: [], normal: [{ memory_id: 'm1', content: 'warm memory about pnpm', session_id: 's1', score: 0.9 }] } }),
+    bridgeList: async () => ({ memories: [] }),
+  }
+  const recall = createRecall({
+    settings: () => ({ enabled: true, recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.5, waitForStartMs: 800 } }),
+    activity: { record() {} },
+    getClient: () => null,
+    warmClient: async () => { calls += 1; return client },
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1', projectPath: '/tmp' }),
+    log: () => {},
+  })
+  const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'what did we decide about the package manager?' }], source: { kind: 'user' } }]
+  const out = await recall.handlePreStep({ agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 }, async () => ({ kind: 'proceed', messages }))
+  assert.equal(calls, 1)
+  assert.match(String(out.messages.at(-1).content[0].text), /warm memory about pnpm/)
+})
+
+test('a recall still gives up when the sidecar never becomes ready', async () => {
+  const recall = createRecall({
+    settings: () => ({ enabled: true, recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.5, waitForStartMs: 120 } }),
+    activity: { record() {} },
+    getClient: () => null,
+    warmClient: () => new Promise(() => {}),
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1', projectPath: '/tmp' }),
+    log: () => {},
+  })
+  const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'anything at all' }], source: { kind: 'user' } }]
+  const started = Date.now()
+  const out = await recall.handlePreStep({ agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 }, async () => ({ kind: 'proceed', messages }))
+  assert.equal(out.messages.length, messages.length)
+  assert.ok(Date.now() - started < 2000)
 })

@@ -300,6 +300,7 @@ export function createRecall(deps) {
   const settings = deps.settings
   const activity = deps.activity
   const getClient = deps.getClient
+  const warmClient = deps.warmClient
   const log = deps.log ?? (() => {})
   const contextOf = deps.contextOf
   const injectedTurn = new Map()
@@ -405,7 +406,15 @@ export function createRecall(deps) {
       if (turn !== null && injectedTurn.get(sessionId) === turn) return decision
       const query = extractQuery(payload.messages)
       if (!query) return decision
-      const client = getClient()
+      let client = getClient()
+      if (!client && typeof warmClient === 'function') {
+        // A cold sidecar answers in about a second, which is inside the step's
+        // budget; skipping the turn entirely is worse than waiting briefly.
+        const waitMs = Math.min(Number(config.recall?.waitForStartMs) || 0, 5_000)
+        if (waitMs > 0) {
+          client = await withDeadline(() => warmClient(), waitMs, new AbortController()).catch(() => null)
+        }
+      }
       if (!client) return decision
       const context = contextOf(payload, session)
       const groups = await search(client, query, context)

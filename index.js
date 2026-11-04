@@ -349,6 +349,13 @@ function createRuntime(ctx, config) {
         },
       })
 
+      // Cold start costs about a second; warming at boot means the first turn
+      // does not have to spend it, and an idle stop later is invisible.
+      if (settings?.enabled !== false && settings?.sidecar?.prewarm !== false) {
+        void sidecar.ensureStarted()
+          .then(() => log('sidecar prewarmed'))
+          .catch((error) => log('sidecar prewarm failed', error?.message ?? error))
+      }
       ops = createMemoryOps({
         settings: settingsNow,
         state,
@@ -364,6 +371,10 @@ function createRuntime(ctx, config) {
         settings: settingsNow,
         activity,
         getClient,
+        warmClient: async () => {
+          await sidecar.ensureStarted()
+          return sidecar.client
+        },
         contextOf,
         log,
         onInjected: (info) => {

@@ -137,6 +137,14 @@ friends directly. Pairing is detected by counting credential files under `$DSH_H
 the loopback broker's discovery file; the status route reports `memhub.pairing` and the MemHub card says
 whether sync should be turned on in MemHub's own panel. The plugin does not reimplement MemHub sync.
 
+## Cold start
+
+`scripts/bench-startup.mjs` spawns the bridge against a scratch data directory and reports the real cost:
+about 0.9 to 2.8 seconds from spawn to `/healthz` on this machine, then 5 to 8 ms for the first bridge
+call. `sidecar.prewarm` defaults to true, so the process is started when the plugin loads instead of on
+the first turn, and recall waits up to `recall.waitForStartMs` (2500 ms default) for a starting sidecar
+rather than silently skipping the turn.
+
 ## Duplicates
 
 `/api/hy-memory/duplicates` groups memories whose text is identical after whitespace and case folding,

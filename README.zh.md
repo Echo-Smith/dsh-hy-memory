@@ -126,6 +126,13 @@ lead 的会话记忆，而不是从空白开始。捕获仍然按各自会话 id
 等工具。配对状态通过统计 `$DSH_HOME/memhub` 下的凭据文件、并读取本机 broker 的发现文件来判断，状态路由
 返回 `memhub.pairing`，面板的 MemHub 卡片据此提示「同步在 MemHub 面板里开启」。插件本身不重写同步。
 
+## 冷启动
+
+`scripts/bench-startup.mjs` 会对着临时数据目录拉起 bridge，测出真实开销：在这台机器上从进程启动到
+`/healthz` 可用大约 0.9 到 2.8 秒，随后第一次 bridge 调用 5 到 8 毫秒。`sidecar.prewarm` 默认开启，
+插件加载时就拉起进程，而不是等第一轮对话；召回时若 sidecar 正在启动，最多等 `recall.waitForStartMs`
+（默认 2500 毫秒），不会静默跳过这一轮。
+
 ## 重复项
 
 `/api/hy-memory/duplicates` 把去掉空白、折叠大小写后文本相同的记忆归组，每组保留最新一条并列出其余；
