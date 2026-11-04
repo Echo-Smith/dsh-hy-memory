@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-hy-memory",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "description": "Hy-Memory 2.0 as a native DeepSeek Harness memory component: three-tier memory (personal / project / session), three scenes (chat / working / coding), automatic recall and capture with tool traces, a Settings > Memory panel, and MemHub interoperability.",
