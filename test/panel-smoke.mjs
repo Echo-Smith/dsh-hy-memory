@@ -563,6 +563,7 @@ function createFetch(fetchCalls, options = {}) {
   const withContext = options.context !== false
   const autoUpdate = options.autoUpdate ?? 'current'
   const duplicates = options.duplicates ?? 'some'
+  const explain = options.explain ?? 'found'
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
   const settings = { enabled: true }
   let activityPolls = 0
@@ -683,6 +684,24 @@ function createFetch(fetchCalls, options = {}) {
       })
     }
     if (verb === 'merge') return jsonResponse({ ok: true, data: { merged: 1, kept: 'm1' } })
+    if (verb === 'explain') {
+      if (explain === 'error') {
+        return jsonResponse({ ok: false, error: { code: 'memory_error', message: 'explain failed' } }, 500)
+      }
+      if (explain === 'missing') return jsonResponse({ ok: true, data: { found: false } })
+      return jsonResponse({
+        ok: true,
+        data: {
+          found: true,
+          at: Date.now() - 60000,
+          query: 'how do I rebuild the panel',
+          source: 'both',
+          tier: 'personal',
+          score: 0.8432,
+          rank: 2,
+        },
+      })
+    }
     if (verb === 'memhub/export') {
       if (options.memhubErrors === true) {
         return jsonResponse({ ok: false, error: { code: 'memhub_locked', message: 'store is locked by the MemHub runtime' } }, 409)
@@ -736,7 +755,7 @@ function createDocumentStub() {
 
 function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', context = true,
+  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found', context = true,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -750,7 +769,7 @@ function createHarness({
   const scheduler = createScheduler()
   const documentStub = createDocumentStub()
   const fetchImpl = createFetch(fetchCalls, {
-    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, context,
+    sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain, context,
   })
 
   const requireStub = (specifier) => {
@@ -956,10 +975,10 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
 
 async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
-  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', context = true,
+  updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found', context = true,
 }) {
   const harness = createHarness({
-    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, context,
+    withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain, context,
   })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
@@ -1612,6 +1631,41 @@ async function exerciseDuplicatesError(harness) {
     'a failed scan shows one short failure line')
 }
 
+async function exerciseWhyFound(harness) {
+  const t = await mountSection(harness, 'zh')
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the personal row action button')
+  assert.ok(findButton(harness, t('row.why')) !== undefined, 'the menu offers 为什么召回')
+  await activate(harness, findButton(harness, t('row.why')), 'the why action')
+  assertPost(harness, '/api/hy-memory/explain', { id: PERSONAL_ITEM.id })
+
+  const text = harness.mini.text()
+  assert.ok(text.includes(t('why.title')), 'the explanation dialog opens')
+  assert.ok(text.includes('how do I rebuild the panel'), 'it shows the matched request')
+  assert.ok(text.includes(t('why.query')), 'it labels the matched request')
+  assert.ok(text.includes('0.843'), 'it shows the recall score')
+  assert.ok(text.includes('#2'), 'it shows the rank in the injected list')
+  assert.ok(text.includes(t('time.minutes', { n: 1 })), 'it shows a relative time')
+  assert.ok(text.includes(t('why.source.both')), 'it names semantic + keyword as the source')
+  assert.ok(text.includes(t('tabs.personal')), 'it shows the tier')
+}
+
+async function exerciseWhyMissing(harness) {
+  const t = await mountSection(harness, 'zh')
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the personal row action button')
+  await activate(harness, findButton(harness, t('row.why')), 'the why action')
+  assertPost(harness, '/api/hy-memory/explain', { id: PERSONAL_ITEM.id })
+  assert.ok(harness.mini.text().includes(t('why.never')), 'an unrecalled memory says 这条记忆还没有被召回过')
+  assert.equal(harness.mini.text().includes('#2'), false, 'no rank is invented for an unrecalled memory')
+}
+
+async function exerciseWhyError(harness) {
+  const t = await mountSection(harness, 'zh')
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the personal row action button')
+  await activate(harness, findButton(harness, t('row.why')), 'the why action')
+  assert.ok(harness.mini.text().includes(t('why.failed', { message: 'explain failed' })),
+    'a failed lookup shows one short failure line')
+}
+
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
 const withoutSeed = await run({ withPrimitives: false, label: 'without host primitives (fallbacks)' })
 const sessionPanelOff = await run({ withPrimitives: true, label: 'session panel disabled', sessionPanel: false })
@@ -1700,6 +1754,18 @@ const dupeErrorRun = await run({ withPrimitives: true, label: 'duplicates error'
 await exerciseDuplicatesError(dupeErrorRun)
 dupeErrorRun.mini.unmount()
 
+const whyRun = await run({ withPrimitives: true, label: 'why recalled' })
+await exerciseWhyFound(whyRun)
+whyRun.mini.unmount()
+
+const whyMissingRun = await run({ withPrimitives: true, label: 'why not recalled', explain: 'missing' })
+await exerciseWhyMissing(whyMissingRun)
+whyMissingRun.mini.unmount()
+
+const whyErrorRun = await run({ withPrimitives: true, label: 'why error', explain: 'error' })
+await exerciseWhyError(whyErrorRun)
+whyErrorRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1721,5 +1787,6 @@ console.log(`  memory tokens: diagnostics line reads status.context.memoryTokens
 console.log(`  auto update: one force:false check per page load, quiet notice only when behind, button forces`)
 console.log(`  forget: 永久遗忘 next to 删除, own confirmation, POST /forget {id}; diagnostics totals all three tiers`)
 console.log(`  duplicates: scan button, 没有重复项 for a clean store, one /merge POST per group with tier/keep/drop`)
+console.log(`  why recalled: 为什么召回 posts /explain {id}, shows query/tier/score/rank/time, not-found copy`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)

@@ -547,6 +547,9 @@ export function SettingsSection(props) {
   const [dupeOpen, setDupeOpen] = React.useState(false)
   const [dupeDone, setDupeDone] = React.useState(null)
   const [dupeError, setDupeError] = React.useState('')
+  const [why, setWhy] = React.useState(null)
+  const [whyLoading, setWhyLoading] = React.useState(false)
+  const [whyError, setWhyError] = React.useState('')
   const [deleting, setDeleting] = React.useState(false)
   const [deleteError, setDeleteError] = React.useState('')
   const [diagOpen, setDiagOpen] = React.useState(false)
@@ -893,6 +896,23 @@ export function SettingsSection(props) {
     }
   }
 
+  /** Open the recall explanation for one row: the host answers from its log. */
+  const openWhy = async (item) => {
+    setWhy({ id: item.id, title: memoryTitle(item.content, t('row.untitled')), result: null })
+    setWhyLoading(true)
+    setWhyError('')
+    try {
+      const data = await api.explain(item.id)
+      setWhy((prev) => (prev !== null && prev.id === item.id
+        ? { ...prev, result: data !== null && typeof data === 'object' ? data : { found: false } }
+        : prev))
+    } catch (error) {
+      setWhyError(errorMessage(error))
+    } finally {
+      setWhyLoading(false)
+    }
+  }
+
   /** Scan for duplicate groups, then either report "none" or ask to merge. */
   const scanDuplicates = async () => {
     if (dupeBusy !== '') return
@@ -992,6 +1012,9 @@ export function SettingsSection(props) {
     // Edit is personal-only; every tier can be deleted once the host allows it.
     if (!masterOff && tier === 'personal') {
       actions.push({ key: 'edit', label: t('row.edit'), onSelect: () => { startEditing(item) } })
+    }
+    if (!masterOff && item.id !== '') {
+      actions.push({ key: 'why', label: t('row.why'), onSelect: () => { void openWhy(item) } })
     }
     if (!masterOff) {
       actions.push({
@@ -1393,6 +1416,58 @@ export function SettingsSection(props) {
     : null,
   deleteError !== '' ? h('p', { className: 'hm-error' }, t('row.deleteFailed', { message: deleteError })) : null)
 
+  const renderWhyModal = () => {
+    const result = why?.result ?? null
+    const found = result !== null && result.found === true
+    const fields = []
+    if (found) {
+      fields.push(h('div', { key: 'query', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('why.query')),
+        h('span', { className: 'hm-fieldValue hm-mono' }, String(result.query ?? ''))))
+      fields.push(h('div', { key: 'tier', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('why.tier')),
+        h('span', { className: 'hm-fieldValue' }, tierLabel(t, String(result.tier ?? '')))))
+      const score = asNumber(result.score)
+      fields.push(h('div', { key: 'score', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('why.score')),
+        h('span', { className: 'hm-fieldValue' }, Number.isFinite(score) ? score.toFixed(3) : String(result.score ?? ''))))
+      fields.push(h('div', { key: 'rank', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('why.rank')),
+        h('span', { className: 'hm-fieldValue' }, `#${asNumber(result.rank)}`)))
+      fields.push(h('div', { key: 'at', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('why.at')),
+        h('span', { className: 'hm-fieldValue' }, timeText(t, result.at, now))))
+      const sourceKey = `why.source.${String(result.source ?? '')}`
+      const sourceText = t(sourceKey)
+      fields.push(h('div', { key: 'source', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('why.source')),
+        h('span', { className: 'hm-fieldValue' }, sourceText === sourceKey ? String(result.source ?? '') : sourceText)))
+    }
+    let body
+    if (whyLoading) {
+      body = h('p', { className: 'hm-muted', role: 'status' }, t('common.loading'))
+    } else if (whyError !== '') {
+      body = h('p', { className: 'hm-error', role: 'alert' }, t('why.failed', { message: whyError }))
+    } else if (found) {
+      body = h('dl', { className: 'hm-grid' }, fields)
+    } else {
+      body = h('p', { className: 'hm-muted' }, t('why.never'))
+    }
+    return h(ui.Modal, {
+      open: why !== null,
+      onClose: () => { setWhy(null); setWhyError('') },
+      title: t('why.title'),
+      closeLabel: t('common.close'),
+      footer: h('div', { className: 'hm-row' },
+        h(ui.Button, {
+          size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+          onClick: () => { setWhy(null); setWhyError('') },
+        }, t('common.close'))),
+    },
+    why !== null ? h('p', { className: 'hm-muted' }, why.title) : null,
+    body)
+  }
+
   const renderDupeModal = () => h(ui.Modal, {
     open: dupeOpen && dupeScan !== null,
     onClose: () => {
@@ -1626,5 +1701,6 @@ export function SettingsSection(props) {
     renderFooter(),
     renderDeleteModal(),
     renderForgetModal(),
-    renderDupeModal())
+    renderDupeModal(),
+    renderWhyModal())
 }

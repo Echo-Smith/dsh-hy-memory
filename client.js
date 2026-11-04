@@ -133,6 +133,8 @@ var api = {
   delete: (payload) => request("delete", payload),
   // Forget: delete the memory AND record its text so promotion cannot bring it back.
   forget: (id) => request("forget", { id }),
+  // Recall explanation: why (if ever) the host injected this memory.
+  explain: (id) => request("explain", { id }),
   // Duplicate cleanup: scan groups, then merge one group per call.
   duplicates: (tier) => request("duplicates", typeof tier === "string" && tier !== "" ? { tier } : {}),
   merge: (payload) => request("merge", payload),
@@ -341,7 +343,20 @@ var zh_default = {
   "dupes.confirm.confirm": "整理",
   "dupes.merging": "正在整理…",
   "dupes.done": "已移除 {n} 条重复记忆",
-  "dupes.failed": "操作失败：{message}"
+  "dupes.failed": "操作失败：{message}",
+  "row.why": "为什么召回",
+  "why.title": "为什么召回",
+  "why.query": "匹配的请求",
+  "why.tier": "层级",
+  "why.score": "相关度",
+  "why.rank": "排名",
+  "why.at": "时间",
+  "why.source": "来源",
+  "why.source.semantic": "语义",
+  "why.source.lexical": "关键词",
+  "why.source.both": "语义 + 关键词",
+  "why.never": "这条记忆还没有被召回过",
+  "why.failed": "无法读取召回记录：{message}"
 };
 
 // locale/en.json
@@ -529,7 +544,20 @@ var en_default = {
   "dupes.confirm.confirm": "Clean up",
   "dupes.merging": "Cleaning up…",
   "dupes.done": "Removed {n} duplicate memories",
-  "dupes.failed": "Action failed: {message}"
+  "dupes.failed": "Action failed: {message}",
+  "row.why": "Why recalled",
+  "why.title": "Why was this recalled",
+  "why.query": "Matched request",
+  "why.tier": "Tier",
+  "why.score": "Score",
+  "why.rank": "Rank",
+  "why.at": "When",
+  "why.source": "Source",
+  "why.source.semantic": "Semantic",
+  "why.source.lexical": "Keyword",
+  "why.source.both": "Semantic + keyword",
+  "why.never": "This memory has not been recalled yet",
+  "why.failed": "Could not read the recall record: {message}"
 };
 
 // client-src/locale.js
@@ -1669,6 +1697,9 @@ function SettingsSection(props) {
   const [dupeOpen, setDupeOpen] = React2.useState(false);
   const [dupeDone, setDupeDone] = React2.useState(null);
   const [dupeError, setDupeError] = React2.useState("");
+  const [why, setWhy] = React2.useState(null);
+  const [whyLoading, setWhyLoading] = React2.useState(false);
+  const [whyError, setWhyError] = React2.useState("");
   const [deleting, setDeleting] = React2.useState(false);
   const [deleteError, setDeleteError] = React2.useState("");
   const [diagOpen, setDiagOpen] = React2.useState(false);
@@ -1997,6 +2028,19 @@ function SettingsSection(props) {
       setForgetting(false);
     }
   };
+  const openWhy = async (item) => {
+    setWhy({ id: item.id, title: memoryTitle(item.content, t("row.untitled")), result: null });
+    setWhyLoading(true);
+    setWhyError("");
+    try {
+      const data = await api.explain(item.id);
+      setWhy((prev) => prev !== null && prev.id === item.id ? { ...prev, result: data !== null && typeof data === "object" ? data : { found: false } } : prev);
+    } catch (error) {
+      setWhyError(errorMessage(error));
+    } finally {
+      setWhyLoading(false);
+    }
+  };
   const scanDuplicates = async () => {
     if (dupeBusy !== "") return;
     setDupeBusy("scan");
@@ -2083,6 +2127,11 @@ function SettingsSection(props) {
     if (!masterOff && tier === "personal") {
       actions.push({ key: "edit", label: t("row.edit"), onSelect: () => {
         startEditing(item);
+      } });
+    }
+    if (!masterOff && item.id !== "") {
+      actions.push({ key: "why", label: t("row.why"), onSelect: () => {
+        void openWhy(item);
       } });
     }
     if (!masterOff) {
@@ -2545,6 +2594,89 @@ function SettingsSection(props) {
     deleteTarget !== null ? h("p", { className: "hm-muted" }, t("row.confirmDelete.body", { tier: tierLabel(t, deleteTarget.tier) })) : null,
     deleteError !== "" ? h("p", { className: "hm-error" }, t("row.deleteFailed", { message: deleteError })) : null
   );
+  const renderWhyModal = () => {
+    const result = why?.result ?? null;
+    const found = result !== null && result.found === true;
+    const fields = [];
+    if (found) {
+      fields.push(h(
+        "div",
+        { key: "query", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("why.query")),
+        h("span", { className: "hm-fieldValue hm-mono" }, String(result.query ?? ""))
+      ));
+      fields.push(h(
+        "div",
+        { key: "tier", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("why.tier")),
+        h("span", { className: "hm-fieldValue" }, tierLabel(t, String(result.tier ?? "")))
+      ));
+      const score = asNumber(result.score);
+      fields.push(h(
+        "div",
+        { key: "score", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("why.score")),
+        h("span", { className: "hm-fieldValue" }, Number.isFinite(score) ? score.toFixed(3) : String(result.score ?? ""))
+      ));
+      fields.push(h(
+        "div",
+        { key: "rank", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("why.rank")),
+        h("span", { className: "hm-fieldValue" }, `#${asNumber(result.rank)}`)
+      ));
+      fields.push(h(
+        "div",
+        { key: "at", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("why.at")),
+        h("span", { className: "hm-fieldValue" }, timeText(t, result.at, now))
+      ));
+      const sourceKey = `why.source.${String(result.source ?? "")}`;
+      const sourceText = t(sourceKey);
+      fields.push(h(
+        "div",
+        { key: "source", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("why.source")),
+        h("span", { className: "hm-fieldValue" }, sourceText === sourceKey ? String(result.source ?? "") : sourceText)
+      ));
+    }
+    let body;
+    if (whyLoading) {
+      body = h("p", { className: "hm-muted", role: "status" }, t("common.loading"));
+    } else if (whyError !== "") {
+      body = h("p", { className: "hm-error", role: "alert" }, t("why.failed", { message: whyError }));
+    } else if (found) {
+      body = h("dl", { className: "hm-grid" }, fields);
+    } else {
+      body = h("p", { className: "hm-muted" }, t("why.never"));
+    }
+    return h(
+      ui.Modal,
+      {
+        open: why !== null,
+        onClose: () => {
+          setWhy(null);
+          setWhyError("");
+        },
+        title: t("why.title"),
+        closeLabel: t("common.close"),
+        footer: h(
+          "div",
+          { className: "hm-row" },
+          h(ui.Button, {
+            size: "sm",
+            variant: "ghost",
+            "data-modal-autofocus": "",
+            onClick: () => {
+              setWhy(null);
+              setWhyError("");
+            }
+          }, t("common.close"))
+        )
+      },
+      why !== null ? h("p", { className: "hm-muted" }, why.title) : null,
+      body
+    );
+  };
   const renderDupeModal = () => h(
     ui.Modal,
     {
@@ -2843,7 +2975,8 @@ function SettingsSection(props) {
     renderFooter(),
     renderDeleteModal(),
     renderForgetModal(),
-    renderDupeModal()
+    renderDupeModal(),
+    renderWhyModal()
   );
 }
 

@@ -182,5 +182,18 @@
   "dupes.confirm.confirm": "整理",
   "dupes.merging": "正在整理…",
   "dupes.done": "已移除 {n} 条重复记忆",
-  "dupes.failed": "操作失败：{message}"
+  "dupes.failed": "操作失败：{message}",
+  "row.why": "为什么召回",
+  "why.title": "为什么召回",
+  "why.query": "匹配的请求",
+  "why.tier": "层级",
+  "why.score": "相关度",
+  "why.rank": "排名",
+  "why.at": "时间",
+  "why.source": "来源",
+  "why.source.semantic": "语义",
+  "why.source.lexical": "关键词",
+  "why.source.both": "语义 + 关键词",
+  "why.never": "这条记忆还没有被召回过",
+  "why.failed": "无法读取召回记录：{message}"
 }
