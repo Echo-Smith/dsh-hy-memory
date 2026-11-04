@@ -42,7 +42,10 @@ rmSync(staging, { recursive: true, force: true })
 mkdirSync(staging, { recursive: true })
 for (const entry of ENTRY) {
   if (!existsSync(join(ROOT, entry))) continue
-  cpSync(join(ROOT, entry), join(staging, entry), { recursive: true })
+  cpSync(join(ROOT, entry), join(staging, entry), {
+    recursive: true,
+    filter: (source) => !source.includes('__pycache__') && !source.endsWith('.pyc'),
+  })
 }
 
 const stagedPkg = JSON.parse(readFileSync(join(staging, 'package.json'), 'utf8'))

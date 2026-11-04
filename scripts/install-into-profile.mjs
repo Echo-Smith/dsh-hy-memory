@@ -24,7 +24,9 @@ const arg = (name, fallback) => {
 }
 const apply = args.includes('--apply')
 const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh')
-const spec = resolve(arg('spec', 'dsh-hy-memory'))
+const rawSpec = arg('spec', 'dsh-hy-memory')
+const looksPath = rawSpec.startsWith('.') || rawSpec.startsWith('/') || rawSpec.startsWith('~') || existsSync(rawSpec)
+const spec = looksPath ? resolve(rawSpec) : rawSpec
 const profileArg = arg('profile', 'desktop')
 const profileDir = profileArg.includes('/') ? resolve(profileArg) : join(dshHome, 'profiles', profileArg)
 const pkgPath = join(profileDir, 'package.json')
@@ -45,7 +47,9 @@ if (local) {
   const manifest = JSON.parse(execFileSync('tar', ['-xOf', spec, 'package/package.json'], { encoding: 'utf8' }))
   name = manifest.name
 } else {
-  name = spec.split('@')[0] || spec
+  // `name@range` (including a scope) or a bare name.
+  const match = /^(@[^/]+\/[^@]+|[^@/]+)(?:@.*)?$/.exec(spec)
+  name = match ? match[1] : spec
 }
 if (!name) {
   console.error('cannot determine the package name from the spec')
@@ -54,10 +58,7 @@ if (!name) {
 
 const dependencySpec = local ? `file:${spec}` : spec
 const changes = []
-if (profile.dependencies[name] !== dependencySpec) {
-  profile.dependencies[name] = dependencySpec
-  changes.push(`dependency ${name} -> ${dependencySpec}`)
-}
+changes.push(`install ${dependencySpec}`)
 if (!bundles.includes(name)) {
   bundles.push(name)
   changes.push(`bundles += ${name}`)
@@ -70,15 +71,23 @@ if (!apply) {
   process.exit(0)
 }
 
-writeFileSync(pkgPath, `${JSON.stringify(profile, null, 2)}\n`)
 const manager = existsSync(join(profileDir, 'pnpm-lock.yaml')) ? 'pnpm' : 'npm'
-const managerArgs = manager === 'pnpm' ? ['add', dependencySpec] : ['install', '--no-audit', '--no-fund', dependencySpec]
+const managerArgs = manager === 'pnpm'
+  ? ['add', dependencySpec]
+  : ['install', '--no-audit', '--no-fund', dependencySpec]
 try {
   execFileSync(manager, managerArgs, { cwd: profileDir, stdio: 'pipe', encoding: 'utf8' })
 } catch (error) {
   console.error(`${manager} failed: ${error.stderr ?? error.message}`)
   process.exit(1)
 }
+// The package manager owns the dependency entry; add the bundle after it.
+const updated = JSON.parse(readFileSync(pkgPath, 'utf8'))
+updated.dsh = updated.dsh ?? {}
+updated.dsh.profile = updated.dsh.profile ?? {}
+const updatedBundles = Array.isArray(updated.dsh.profile.bundles) ? updated.dsh.profile.bundles : (updated.dsh.profile.bundles = [])
+if (!updatedBundles.includes(name)) updatedBundles.push(name)
+writeFileSync(pkgPath, `${JSON.stringify(updated, null, 2)}\n`)
 
 const installed = join(profileDir, 'node_modules', name)
 const entry = await import(`file://${join(installed, 'index.js')}`).catch((error) => {
