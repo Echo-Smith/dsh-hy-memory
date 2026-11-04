@@ -566,6 +566,7 @@ function FileRow(props) {
 
   const expanded = props.expanded === true
   return h('li', { className: `hm-file${expanded ? ' hm-file-open' : ''}` },
+    h('div', { className: 'hm-fileHead' },
     h('div', {
       className: 'hm-fileMain',
       role: 'button',
@@ -604,7 +605,7 @@ function FileRow(props) {
               action.onSelect()
             },
           }, action.label)))
-        : null),
+        : null)),
     expanded && typeof props.content === 'string' && props.content !== ''
       ? h('p', { className: 'hm-fileBody' }, props.content)
       : null)
