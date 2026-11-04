@@ -1100,9 +1100,10 @@ var PANEL_CSS = `
 .hm-footerResult a:hover { text-decoration:underline; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
-.hm-fileMain { display:flex; align-items:center; gap:10px; flex:1; min-width:0; cursor:pointer; }
+.hm-fileMain { display:flex; align-items:center; gap:10px; flex:1 1 auto; min-width:0; cursor:pointer; }
+.hm-fileActions { flex:none; align-self:flex-start; }
 .hm-fileMain:focus-visible { outline:2px solid var(--dsw-alias-brand-primary); outline-offset:2px; border-radius:8px; }
-.hm-fileBody { margin:8px 0 0 34px; font-size:12px; line-height:1.55; color:var(--dsw-alias-label-secondary); white-space:pre-wrap; overflow-wrap:anywhere; }
+.hm-fileBody { flex:1 1 100%; order:3; margin:2px 0 0 34px; font-size:12px; line-height:1.55; color:var(--dsw-alias-label-secondary); white-space:pre-wrap; overflow-wrap:anywhere; }
 .hm-file-open { align-items:flex-start; flex-wrap:wrap; }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
 .hm-dangerAction,
@@ -1137,7 +1138,7 @@ var PANEL_CSS = `
 .hm-iconButton:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
 .hm-iconButton:focus-visible { outline:1px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset:2px; }
 .hm-files { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
-.hm-file { position:relative; display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--dsw-alias-border-l1); border-radius:var(--dsw-radius-lg, 14px); background:var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-layer-2)); }
+.hm-file { position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--dsw-alias-border-l1); border-radius:var(--dsw-radius-lg, 14px); background:var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-layer-2)); }
 .hm-file:hover { border-color:var(--dsw-alias-border-l2); }
 .hm-fileIcon { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; flex:none; border:1px solid var(--dsw-alias-border-l1); border-radius:var(--dsw-radius-md, 9px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-tertiary); }
 .hm-fileText { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
@@ -1816,7 +1817,6 @@ function FileRow(props) {
         meta.length > 0 ? h("p", { className: "hm-fileDate" }, meta) : null
       )
     ),
-    expanded && typeof props.content === "string" && props.content !== "" ? h("p", { className: "hm-fileBody" }, props.content) : null,
     h(
       "div",
       { className: "hm-fileActions" },
@@ -1844,7 +1844,8 @@ function FileRow(props) {
           }
         }, action.label))
       ) : null
-    )
+    ),
+    expanded && typeof props.content === "string" && props.content !== "" ? h("p", { className: "hm-fileBody" }, props.content) : null
   );
 }
 function SettingsSection(props) {

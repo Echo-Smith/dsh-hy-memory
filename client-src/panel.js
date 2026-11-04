@@ -583,9 +583,6 @@ function FileRow(props) {
     h('div', { className: 'hm-fileText' },
       h('p', { className: 'hm-fileTitle', title: props.title }, props.title),
       meta.length > 0 ? h('p', { className: 'hm-fileDate' }, meta) : null)),
-    expanded && typeof props.content === 'string' && props.content !== ''
-      ? h('p', { className: 'hm-fileBody' }, props.content)
-      : null,
     h('div', { className: 'hm-fileActions' },
       h('button', {
         type: 'button',
@@ -607,7 +604,10 @@ function FileRow(props) {
               action.onSelect()
             },
           }, action.label)))
-        : null))
+        : null),
+    expanded && typeof props.content === 'string' && props.content !== ''
+      ? h('p', { className: 'hm-fileBody' }, props.content)
+      : null)
 }
 
 /** The settings section body. Stable module-level component: never recreate the type. */
