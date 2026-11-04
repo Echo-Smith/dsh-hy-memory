@@ -922,7 +922,19 @@ var PANEL_CSS = `
 .hm-headerSwitch { display:flex; align-items:center; gap:8px; flex:none; }
 .hm-title { margin:0; font-size:17px; font-weight:600; color:var(--dsw-alias-label-primary); }
 .hm-h2 { margin:0; font-size:14px; font-weight:600; color:var(--dsw-alias-label-primary); }
-.hm-subtitle { margin:4px 0 0; font-size:12px; color:var(--dsw-alias-label-secondary); max-width:52ch; }
+.hm-header { container-type:inline-size; }
+.hm-subtitle {
+  margin:4px 0 0;
+  font-size:12px;
+  color:var(--dsw-alias-label-secondary);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* Narrow settings panels fold the description onto two lines instead of clipping. */
+@container (max-width: 480px) {
+  .hm-subtitle { white-space:normal; overflow:visible; text-overflow:clip; }
+}
 .hm-headerActions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .hm-counts { display:flex; align-items:center; gap:6px; flex-wrap:wrap; color:var(--dsw-alias-label-secondary); font-size:12px; }
 .hm-card { border:1px solid var(--dsw-alias-border-l1); background:var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-layer-1)); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
