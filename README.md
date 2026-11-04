@@ -80,6 +80,14 @@ node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.2.tgz --ap
 ```
 
 Publishing is a human step with your own credentials: `npm publish ./dist/<tarball> --access public`.
+Pushing a `v*` tag also runs `.github/workflows/publish-npm.yml`, which publishes once the repository secret
+`NPM_TOKEN` holds a token allowed to create the package and otherwise skips with a warning.
+
+For a release, keep the market index in step with the shipped version:
+
+```bash
+node scripts/sync-market-index.mjs      # rewrites market/index.json from package.json
+```
 
 Requirements: DSH 0.2 preview, Python 3.10+ (installed into the plugin directory on first use), optional git for workspace ids.
 

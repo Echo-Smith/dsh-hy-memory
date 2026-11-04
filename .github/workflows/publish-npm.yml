@@ -1,9 +1,9 @@
 name: publish-npm
 
-# Publishes to the public npm registry when a version tag is pushed. The token
-# has to be added once as the repository secret NPM_TOKEN (an npm "Automation"
-# or granular token with publish permission); without it the job says so and
-# skips publishing instead of failing the tag.
+# Publishes to the public npm registry when a version tag is pushed. Add an npm
+# token once as the repository secret NPM_TOKEN (classic "Automation", or a
+# granular token allowed to create this package). Without a usable token the tag
+# run stays green and says why instead of reddening the tag.
 on:
   push:
     tags:
@@ -24,11 +24,22 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - name: Skip without a token
-        if: ${{ env.NODE_AUTH_TOKEN == '' }}
-        run: echo "::warning::NPM_TOKEN is not configured; skipping npm publish"
+      - name: Check credentials
+        id: auth
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NPM_TOKEN is not configured; skipping npm publish"
+            exit 0
+          fi
+          if npm whoami --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NPM_TOKEN is not accepted by registry.npmjs.org; skipping npm publish"
+          fi
       - name: Stage and publish
-        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        if: steps.auth.outputs.ready == 'true'
         run: |
           node scripts/prepare-publish.mjs --staging dist/npm-package
           npm publish ./dist/npm-package --registry https://registry.npmjs.org

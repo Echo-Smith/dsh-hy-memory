@@ -86,7 +86,15 @@ node scripts/prepare-publish.mjs                                  # 以公开包
 node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.2.tgz --apply
 ```
 
-发布是需要你自己凭据的人工步骤：`npm publish ./dist/<tarball> --access public`。
+发布是需要你自己凭据的人工步骤：`npm publish ./dist/<tarball> --access public`。推送 `v*` 标签还会触发
+`.github/workflows/publish-npm.yml`：仓库 secret `NPM_TOKEN` 里是允许创建该包的 token 时它自动发布，否则给出
+警告并跳过，不会把 tag 打红。
+
+发版时让市场索引跟上实际版本：
+
+```bash
+node scripts/sync-market-index.mjs      # 按 package.json 重写 market/index.json
+```
 
 要求：DSH 0.2 预览版、Python 3.10+（首次会自动装到插件目录）、可选 git（用于取 workspace id）。
 

@@ -75,4 +75,6 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - GitHub Releases: `v0.1.1` carries `dsh-hy-memory-0.1.1.tgz`; the live profile's dependency now points at that asset and its lockfile was reconciled with `pnpm install --lockfile-only` after testing the same command on a profile copy.
 - GitHub Packages: `.github/workflows/publish-github-packages.yml` publishes the scoped `@echo-smith/dsh-hy-memory` with `GITHUB_TOKEN` (`packages: write`); run 41767325307 reported `+ @echo-smith/dsh-hy-memory@0.1.1`.
 - Plugin market: `market/index.json` (format 1) is validated with DSH's own `parseMarketIndex`, so DSH's detail page can compare versions and show updates on its own.
-- Open: an upgrade path that reports the installed version before replacing it, bumping the market index on every release, and a release job that publishes tagged versions to npmjs automatically.
+- Done: the installer prints `installed: <name> <old> -> <new>` before changing anything; `scripts/sync-market-index.mjs` rewrites the index from `package.json`; `.github/workflows/publish-npm.yml` publishes on `v*` tags and skips with a warning when `NPM_TOKEN` is absent or rejected.
+- Done: 0.1.3 fixes the second page-sync failure (`settings.section` seat occupied) by shadowing at a higher priority instead of aborting the sync; smoke covers the occupied-seat case.
+- Open: a release job that also bumps the market index itself (today that commit is manual).
