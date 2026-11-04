@@ -56,6 +56,12 @@ node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 
 之后重启或重载 DSH。手工等价于在 profile 里 `pnpm add dsh-hy-memory`，再把包名加进 `dsh.profile.bundles`。
 
+给 DSH 插件详情页用的市场索引：
+
+```
+https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+```
+
 也可以直接从 GitHub Release 安装（依赖写成 tarball 地址）：
 
 ```bash
