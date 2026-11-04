@@ -806,7 +806,7 @@ function createDocumentStub() {
 function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
   updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
-  explained = ['m1'], injected = 'found', purge = 'ok', context = true,
+  explained = ['m1'], injected = 'found', purge = 'ok', context = true, localeConflict = false,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -821,7 +821,7 @@ function createHarness({
   const documentStub = createDocumentStub()
   const fetchImpl = createFetch(fetchCalls, {
     sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
-    explained, injected, purge, context,
+    explained, injected, purge, context, localeConflict,
   })
 
   const requireStub = (specifier) => {
@@ -855,7 +855,13 @@ function createHarness({
       },
     },
     locale: {
-      register(ns, dicts) {
+      register(ns, localeOrDicts, dict) {
+        const dicts = typeof localeOrDicts === 'string' ? { [localeOrDicts]: dict } : localeOrDicts
+        if (localeConflict && ns === 'hy-memory' && dicts?.zh !== undefined) {
+          // A page sync applying the bundle again while the previous effect still
+          // owns the namespace: the real service throws, the plugin must survive.
+          throw new Error(`locale namespace "${ns}" already has locale "zh"`)
+        }
         localeRegistrations.push({ ns, dicts })
         return () => {}
       },
@@ -940,11 +946,22 @@ function createHarness({
     slotRegistrations,
     tabRegistrations,
     localeRegistrations,
+    localeConflict,
     effectLabels,
     fetchCalls,
     clipboardWrites,
     document: documentStub,
   }
+}
+
+async function exerciseLocaleConflict(harness) {
+  await settle()
+  assert.ok(harness.slotRegistrations.length > 0, 'the settings section registers despite a locale conflict')
+  const registered = harness.localeRegistrations.filter((entry) => entry.ns === 'hy-memory')
+  assert.equal(registered.length, 1, 'the locale the old owner does not hold is registered')
+  assert.equal(registered[0].dicts.zh, undefined, 'the occupied locale is left to its current owner')
+  await settle()
+  assert.ok(harness.slotRegistrations.length > 0, 'the plugin stays mounted after the retry window')
 }
 
 function settle() {
@@ -1006,6 +1023,11 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
   assert.equal(settingsCalls.length, 1, `${label}: session panel flag is read once and cached`)
 
   const dictionaries = localeRegistrations.filter((entry) => entry.ns === 'hy-memory')
+  if (harness.localeConflict === true) {
+    // The dedicated exercise owns the assertions for the occupied-namespace case.
+    assert.equal(dictionaries.length, 1, `${label}: the free locale registers`)
+    return
+  }
   assert.equal(dictionaries.length, 1, `${label}: locale registered in the hy-memory namespace`)
   assert.equal(typeof dictionaries[0].dicts.zh['nav.label'], 'string', `${label}: zh catalog present`)
   assert.equal(typeof dictionaries[0].dicts.en['nav.label'], 'string', `${label}: en catalog present`)
@@ -1028,11 +1050,11 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
 async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
   updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
-  explained = ['m1'], injected = 'found', purge = 'ok', context = true,
+  explained = ['m1'], injected = 'found', purge = 'ok', context = true, localeConflict = false,
 }) {
   const harness = createHarness({
     withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
-    explained, injected, purge, context,
+    explained, injected, purge, context, localeConflict,
   })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
@@ -1935,6 +1957,11 @@ dupeEmptyRun.mini.unmount()
 const dupeErrorRun = await run({ withPrimitives: true, label: 'duplicates error', duplicates: 'error' })
 await exerciseDuplicatesError(dupeErrorRun)
 dupeErrorRun.mini.unmount()
+
+const localeConflictRun = await run({ withPrimitives: true, label: 'locale conflict', localeConflict: true })
+await exerciseLocaleConflict(localeConflictRun)
+localeConflictRun.mini.unmount()
+console.log('  locale conflict: settings section survives an occupied namespace')
 
 const whyRun = await run({ withPrimitives: true, label: 'why recalled' })
 await exerciseWhyFound(whyRun)

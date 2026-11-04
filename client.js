@@ -3565,11 +3565,54 @@ function installSessionPanel(ctx, deps) {
     }
   };
 }
+function installDictionaries(ctx) {
+  const stops = [];
+  try {
+    const stop = ctx.locale.register(NS, dictionaries);
+    if (typeof stop === "function") stops.push(stop);
+    return () => disposeAll(stops);
+  } catch (error) {
+    if (!String(error?.message ?? "").includes("already has locale")) throw error;
+  }
+  const occupied = [];
+  for (const [locale, dict] of Object.entries(dictionaries)) {
+    try {
+      const stop = ctx.locale.register(NS, locale, dict);
+      if (typeof stop === "function") stops.push(stop);
+    } catch (error) {
+      if (!String(error?.message ?? "").includes("already has locale")) throw error;
+      occupied.push([locale, dict]);
+    }
+  }
+  let timer = null;
+  if (occupied.length > 0) {
+    timer = setTimeout(() => {
+      timer = null;
+      for (const [locale, dict] of occupied.splice(0)) {
+        try {
+          const stop = ctx.locale.register(NS, locale, dict);
+          if (typeof stop === "function") stops.push(stop);
+        } catch {
+        }
+      }
+    }, 50);
+    timer.unref?.();
+  }
+  return () => {
+    if (timer !== null) clearTimeout(timer);
+    disposeAll(stops);
+  };
+}
+function disposeAll(stops) {
+  for (const stop of stops.reverse()) {
+    try {
+      stop();
+    } catch {
+    }
+  }
+}
 function apply(ctx) {
-  ctx.effect(
-    () => ctx.locale.register(NS, dictionaries),
-    "hy-memory: bilingual dictionaries"
-  );
+  ctx.effect(() => installDictionaries(ctx), "hy-memory: bilingual dictionaries");
   const t = ctx.locale.bind(NS);
   const subscribeLocale = (listener) => typeof ctx.on === "function" ? ctx.on("locale/change", listener) : () => {
   };
