@@ -47,7 +47,8 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: credential filtering at the capture boundary. `looksSensitive` drops any message matching API keys, GitHub/AWS/Slack tokens, bearer headers, private-key blocks or `password=` patterns; tested against a key-bearing turn.
 - Done: `permissions.disabledCaptureProjects` skips capture for listed project keys.
 - Done: `POST /api/hy-memory/purge {confirm:'PURGE'}` archives every memory to JSONL then deletes it; test covers the refusal without confirmation and the archive-then-delete path.
-- In flight: panel surface for purge and the project switch. Open: per-session switch, and a purge that names the count before deleting.
+- Done: panel surface. 彻底清除 requires typing PURGE, states the live total, archives then deletes, and surfaces host refusals; 不捕获此项目 sits in the workspace row and writes `permissions.disabledCaptureProjects`. Smoke covers the gate, the refusal path and the settings payload.
+- Open: per-session capture switch, and per-row purge targeting (today purge is all-or-nothing).
 
 ## Agent teams (cross-cutting)
 

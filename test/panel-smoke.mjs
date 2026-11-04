@@ -571,7 +571,7 @@ function createFetch(fetchCalls, options = {}) {
   const explained = Array.isArray(options.explained) ? options.explained : ['m1']
   const injectedMode = options.injected ?? 'found'
   // The host persists `enabled`; status reads it back, so the fake keeps it too.
-  const settings = { enabled: true }
+  const settings = { enabled: true, permissions: { disabledCaptureProjects: [] } }
   let activityPolls = 0
   return async (url, callOptions = {}) => {
     const target = String(url)
@@ -590,13 +590,33 @@ function createFetch(fetchCalls, options = {}) {
       })
     }
     if (verb === 'settings/get') {
-      return jsonResponse({ ok: true, data: { settings: { enabled: settings.enabled, ui: { sessionPanel } } } })
+      return jsonResponse({
+        ok: true,
+        data: {
+          settings: {
+            enabled: settings.enabled,
+            ui: { sessionPanel },
+            permissions: { disabledCaptureProjects: settings.permissions.disabledCaptureProjects.slice() },
+          },
+        },
+      })
     }
     if (verb === 'settings/set') {
       const body = JSON.parse(callOptions.body ?? '{}')
       const patch = body.patch ?? {}
       if (typeof patch.enabled === 'boolean') settings.enabled = patch.enabled
-      return jsonResponse({ ok: true, data: { settings: { enabled: settings.enabled, ui: { sessionPanel } } } })
+      const disabled = patch.permissions?.disabledCaptureProjects
+      if (Array.isArray(disabled)) settings.permissions.disabledCaptureProjects = disabled.slice()
+      return jsonResponse({
+        ok: true,
+        data: {
+          settings: {
+            enabled: settings.enabled,
+            ui: { sessionPanel },
+            permissions: { disabledCaptureProjects: settings.permissions.disabledCaptureProjects.slice() },
+          },
+        },
+      })
     }
     if (verb === 'projects') return jsonResponse({ ok: true, data: WORKSPACES })
     if (verb === 'update/check') {
@@ -690,6 +710,12 @@ function createFetch(fetchCalls, options = {}) {
       })
     }
     if (verb === 'merge') return jsonResponse({ ok: true, data: { merged: 1, kept: 'm1' } })
+    if (verb === 'purge') {
+      if (options.purge === 'error') {
+        return jsonResponse({ ok: false, error: { code: 'bad_confirm', message: 'confirm must be PURGE' } }, 400)
+      }
+      return jsonResponse({ ok: true, data: { purged: 6, archived: 6, archive: '/tmp/purge-1.jsonl' } })
+    }
     if (verb === 'explained') return jsonResponse({ ok: true, data: { ids: explained } })
     if (verb === 'injected') {
       const body = JSON.parse(callOptions.body ?? '{}')
@@ -780,7 +806,7 @@ function createDocumentStub() {
 function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
   updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
-  explained = ['m1'], injected = 'found', context = true,
+  explained = ['m1'], injected = 'found', purge = 'ok', context = true,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -795,7 +821,7 @@ function createHarness({
   const documentStub = createDocumentStub()
   const fetchImpl = createFetch(fetchCalls, {
     sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
-    explained, injected, context,
+    explained, injected, purge, context,
   })
 
   const requireStub = (specifier) => {
@@ -1002,11 +1028,11 @@ function assertCommon(harness, label, { expectSessionPanel = true } = {}) {
 async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
   updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
-  explained = ['m1'], injected = 'found', context = true,
+  explained = ['m1'], injected = 'found', purge = 'ok', context = true,
 }) {
   const harness = createHarness({
     withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
-    explained, injected, context,
+    explained, injected, purge, context,
   })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
@@ -1741,6 +1767,81 @@ async function exerciseInjectedMissing(harness) {
     'a dropped recall text shows 这次召回的文本已不在记录里')
 }
 
+async function exercisePurgeGate(harness) {
+  const t = await mountSection(harness, 'zh')
+  assert.equal(lastCall(harness, '/api/hy-memory/purge'), undefined, 'nothing is purged before the user asks')
+
+  await click(harness, t('purge.action'))
+  assert.ok(harness.mini.text().includes(t('purge.body', { n: 6 })),
+    'the dialog states how many memories the purge would take')
+  assert.ok(harness.mini.text().includes(t('purge.hint')), 'the dialog asks for the confirmation phrase')
+
+  let confirm = findButton(harness, t('purge.confirm'))
+  assert.ok(confirm !== undefined, 'the destructive button is present')
+  assert.equal(confirm.props.disabled, true, 'it is disabled before anything is typed')
+
+  const input = findInput(harness, (props) => props['aria-label'] === t('purge.hint'))
+  assert.ok(input !== undefined, 'the confirmation input renders')
+  input.props.onChange({ target: { value: 'PURG' } })
+  await settle()
+  confirm = findButton(harness, t('purge.confirm'))
+  assert.equal(confirm.props.disabled, true, 'a partial phrase keeps the button disabled')
+  assert.equal(lastCall(harness, '/api/hy-memory/purge'), undefined, 'a partial phrase calls nothing')
+
+  findInput(harness, (props) => props['aria-label'] === t('purge.hint')).props.onChange({ target: { value: 'PURGE' } })
+  await settle()
+  confirm = findButton(harness, t('purge.confirm'))
+  assert.equal(confirm.props.disabled, false, 'typing PURGE enables the button')
+
+  await activate(harness, confirm, 'the purge confirm button')
+  assertPost(harness, '/api/hy-memory/purge', { confirm: 'PURGE' })
+  assert.ok(harness.mini.text().includes(t('purge.done', { n: 6 })),
+    'success reports how many memories were cleared and archived')
+}
+
+async function exercisePurgeRefused(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('purge.action'))
+  findInput(harness, (props) => props['aria-label'] === t('purge.hint')).props.onChange({ target: { value: 'PURGE' } })
+  await settle()
+  await activate(harness, findButton(harness, t('purge.confirm')), 'the purge confirm button')
+  assert.ok(harness.mini.text().includes(t('purge.failed', { message: 'confirm must be PURGE' })),
+    'a refused purge surfaces the host error')
+  assert.ok(findButton(harness, t('purge.confirm')) !== undefined, 'the dialog stays open after a refusal')
+}
+
+async function exerciseCaptureToggle(harness) {
+  const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.workspace'))
+
+  const label = hostsOf(harness).find((node) => node.type === 'label'
+    && String(node.props?.className ?? '').includes('hm-captureToggle'))
+  assert.ok(label !== undefined, 'the workspace row carries the per-project switch')
+  assert.equal(label.props.title, t('capture.disabledHint'),
+    'the tooltip says it stops new captures for this project only')
+
+  let box = findInput(harness, (props) => props.type === 'checkbox')
+  assert.ok(box !== undefined, 'the switch renders as a checkbox')
+  assert.equal(box.props.checked, false, 'the active project is captured by default')
+  assert.equal(box.props['aria-label'], t('capture.disabled'), 'the checkbox carries an accessible name')
+
+  box.props.onChange({ target: { checked: true } })
+  await settle()
+  assertPost(harness, '/api/hy-memory/settings/set', {
+    patch: { permissions: { disabledCaptureProjects: ['abcdef012345'] } },
+  })
+  box = findInput(harness, (props) => props.type === 'checkbox')
+  assert.equal(box.props.checked, true, 'the switch reflects the saved value')
+
+  box.props.onChange({ target: { checked: false } })
+  await settle()
+  assertPost(harness, '/api/hy-memory/settings/set', {
+    patch: { permissions: { disabledCaptureProjects: [] } },
+  })
+  assert.equal(findInput(harness, (props) => props.type === 'checkbox').props.checked, false,
+    'the switch clears again')
+}
+
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
 const withoutSeed = await run({ withPrimitives: false, label: 'without host primitives (fallbacks)' })
 const sessionPanelOff = await run({ withPrimitives: true, label: 'session panel disabled', sessionPanel: false })
@@ -1857,6 +1958,18 @@ const injectedMissingRun = await run({ withPrimitives: true, label: 'injected mi
 await exerciseInjectedMissing(injectedMissingRun)
 injectedMissingRun.mini.unmount()
 
+const purgeRun = await run({ withPrimitives: true, label: 'purge' })
+await exercisePurgeGate(purgeRun)
+purgeRun.mini.unmount()
+
+const purgeRefusedRun = await run({ withPrimitives: true, label: 'purge refused', purge: 'error' })
+await exercisePurgeRefused(purgeRefusedRun)
+purgeRefusedRun.mini.unmount()
+
+const captureRun = await run({ withPrimitives: true, label: 'capture switch' })
+await exerciseCaptureToggle(captureRun)
+captureRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1881,5 +1994,7 @@ console.log(`  duplicates: scan button, 没有重复项 for a clean store, one /
 console.log(`  why recalled: 为什么召回 posts /explain {id}, shows query/tier/score/rank/time, not-found copy`)
 console.log(`  why gated: 为什么召回 only for ids in /explained (absent for a never-recalled row)`)
 console.log(`  injected text: clicking a recall entry posts /injected {at} and shows the capped mono block`)
+console.log(`  purge: typed PURGE gate, /purge {confirm:'PURGE'}, 已清除 N 条并归档, host refusals surfaced`)
+console.log(`  capture switch: 不捕获此项目 posts settings/set with permissions.disabledCaptureProjects`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)
