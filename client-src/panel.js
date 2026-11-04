@@ -539,6 +539,9 @@ export function SettingsSection(props) {
   const [savedId, setSavedId] = React.useState('')
   const [rowError, setRowError] = React.useState(null)
   const [deleteTarget, setDeleteTarget] = React.useState(null)
+  const [forgetTarget, setForgetTarget] = React.useState(null)
+  const [forgetting, setForgetting] = React.useState(false)
+  const [forgetError, setForgetError] = React.useState('')
   const [deleting, setDeleting] = React.useState(false)
   const [deleteError, setDeleteError] = React.useState('')
   const [diagOpen, setDiagOpen] = React.useState(false)
@@ -862,6 +865,29 @@ export function SettingsSection(props) {
     }
   }
 
+  const confirmForget = async () => {
+    if (forgetTarget === null || forgetting || masterOff) return
+    setForgetting(true)
+    setForgetError('')
+    try {
+      await api.forget(forgetTarget.id)
+      setLists((prev) => {
+        const list = prev[forgetTarget.tier]
+        const items = list.items.filter((item) => item.id !== forgetTarget.id)
+        return {
+          ...prev,
+          [forgetTarget.tier]: { ...list, items, total: Math.max(0, list.total - 1) },
+        }
+      })
+      setForgetTarget(null)
+      setRefreshTick((value) => value + 1)
+    } catch (error) {
+      setForgetError(errorMessage(error))
+    } finally {
+      setForgetting(false)
+    }
+  }
+
   const copyItem = async (item) => {
     const ok = await copyToClipboard(item.content)
     if (copyTimer.current !== null) {
@@ -926,6 +952,17 @@ export function SettingsSection(props) {
         onSelect: () => {
           setDeleteError('')
           setDeleteTarget({ tier, id: item.id })
+        },
+      })
+      // Forget is the stronger option: the text is blocked from promotion, so it
+      // needs its own confirmation rather than sharing the delete dialog.
+      actions.push({
+        key: 'forget',
+        label: t('row.forget'),
+        danger: true,
+        onSelect: () => {
+          setForgetError('')
+          setForgetTarget({ tier, id: item.id })
         },
       })
     }
@@ -1299,6 +1336,28 @@ export function SettingsSection(props) {
     : null,
   deleteError !== '' ? h('p', { className: 'hm-error' }, t('row.deleteFailed', { message: deleteError })) : null)
 
+  const renderForgetModal = () => h(ui.Modal, {
+    open: forgetTarget !== null,
+    onClose: () => {
+      if (forgetting) return
+      setForgetTarget(null)
+      setForgetError('')
+    },
+    title: t('row.confirmForget.title'),
+    closeLabel: t('common.close'),
+    footer: h('div', { className: 'hm-row' },
+      h(ui.Button, {
+        size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+        onClick: () => { setForgetTarget(null); setForgetError('') },
+      }, t('row.confirmDelete.cancel')),
+      h(ui.Button, { size: 'sm', variant: 'primary', disabled: forgetting, onClick: confirmForget },
+        forgetting ? t('common.loading') : t('row.confirmForget.confirm'))),
+  },
+  forgetTarget !== null
+    ? h('p', { className: 'hm-muted' }, t('row.confirmForget.body'))
+    : null,
+  forgetError !== '' ? h('p', { className: 'hm-error' }, t('row.forgetFailed', { message: forgetError })) : null)
+
   // The activity poll lives in ActivityPanel; the section only seats it, so a
   // tick never re-renders the lists, the search box or an open inline editor.
   const renderActivity = () => h(ActivityPanel, { t })
@@ -1346,6 +1405,10 @@ export function SettingsSection(props) {
         h('span', { className: 'hm-fieldLabel' }, t('diag.dataSize')),
         h('span', { className: 'hm-fieldValue' }, size)))
     }
+    const counts = status?.counts ?? null
+    const totalCount = counts === null
+      ? null
+      : asNumber(counts.personal) + asNumber(counts.project) + asNumber(counts.session)
     const context = status?.context ?? null
     const memoryTokens = asNumber(context?.memoryTokens)
     const totalTokens = asNumber(context?.totalTokens)
@@ -1362,6 +1425,9 @@ export function SettingsSection(props) {
           h(ui.StateDot, { state: dotState(sidecar?.state) }),
           stateLabel(t, sidecar?.state),
           sidecar?.port ? h('span', { className: 'hm-mono' }, `:${sidecar.port}`) : null)),
+      totalCount !== null
+        ? h('p', { className: 'hm-countLine' }, t('counts.total', { n: totalCount }))
+        : null,
       context !== null && (memoryTokens > 0 || totalTokens > 0)
         ? h('p', { className: 'hm-contextLine' }, t('diag.memoryTokens', { round: memoryTokens, total: totalTokens }))
         : null,
@@ -1462,5 +1528,6 @@ export function SettingsSection(props) {
     renderDiagnostics(),
     renderMemhub(),
     renderFooter(),
-    renderDeleteModal())
+    renderDeleteModal(),
+    renderForgetModal())
 }

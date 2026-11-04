@@ -499,6 +499,7 @@ const PANEL_CSS = `
 .hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
 .hm-footerResult a:hover { text-decoration:underline; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
+.hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }

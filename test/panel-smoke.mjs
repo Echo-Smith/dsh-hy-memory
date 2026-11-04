@@ -664,6 +664,7 @@ function createFetch(fetchCalls, options = {}) {
     }
     if (verb === 'update') return jsonResponse({ ok: true, data: { item: { id: 'm1', content: 'edited' } } })
     if (verb === 'delete') return jsonResponse({ ok: true, data: { deleted: true } })
+    if (verb === 'forget') return jsonResponse({ ok: true, data: { deleted: true, forgotten: true } })
     if (verb === 'memhub/export') {
       if (options.memhubErrors === true) {
         return jsonResponse({ ok: false, error: { code: 'memhub_locked', message: 'store is locked by the MemHub runtime' } }, 409)
@@ -1306,6 +1307,7 @@ async function exerciseWorkspaceBlocks(harness) {
 
   await activate(harness, findByLabel(harness, t('row.actions')), 'the first project row action button')
   assert.ok(findButton(harness, t('row.delete')) !== undefined, 'project memories are deletable')
+  assert.ok(findButton(harness, t('row.forget')) !== undefined, 'project memories can be forgotten too')
   assert.equal(findButton(harness, t('row.edit')), undefined, 'project memories are not editable')
 
   await activate(harness, findButton(harness, t('row.delete')), 'the delete action')
@@ -1460,6 +1462,8 @@ async function exerciseFooterAndTokens(harness) {
   // Memory footprint line from status.context.
   assert.ok(text.includes(t('diag.memoryTokens', { round: 120, total: 3400 })),
     'the diagnostics card shows the memory token line')
+  assert.ok(text.includes(t('counts.total', { n: 6 })),
+    'the diagnostics card shows the summed total across the three tiers')
 
   // The automatic check: exactly one, without force, before any click.
   const updateCalls = () => harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check')
@@ -1526,6 +1530,26 @@ async function exerciseAutoUpdateNotice(harness) {
   assert.equal(pills().length, 0, 'the manual result clears the automatic notice')
   assert.ok(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })),
     'the manual result renders its own line')
+}
+
+async function exerciseForget(harness) {
+  const t = await mountSection(harness, 'zh')
+  await activate(harness, findByLabel(harness, t('row.actions')), 'the personal row action button')
+  assert.ok(findButton(harness, t('row.delete')) !== undefined, '删除 renders for personal rows')
+  assert.ok(findButton(harness, t('row.forget')) !== undefined, '永久遗忘 renders next to 删除')
+
+  await activate(harness, findButton(harness, t('row.forget')), 'the forget action')
+  assert.ok(harness.mini.text().includes(t('row.confirmForget.title')), 'forgetting has its own confirmation')
+  assert.ok(harness.mini.text().includes(t('row.confirmForget.body')),
+    'the confirmation explains promotion will not bring the fact back')
+  assert.equal(lastCall(harness, '/api/hy-memory/forget'), undefined, 'nothing is forgotten before confirming')
+  assert.equal(lastCall(harness, '/api/hy-memory/delete'), undefined, 'forget never goes through the delete route')
+
+  await activate(harness, findButton(harness, t('row.confirmForget.confirm')), 'the forget confirm button')
+  assertPost(harness, '/api/hy-memory/forget', { id: PERSONAL_ITEM.id })
+  assert.equal(harness.mini.text().includes(t('row.confirmForget.title')), false, 'the confirmation closes')
+  const listCalls = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
+  assert.ok(listCalls >= 2, 'a forgotten memory refreshes the list')
 }
 
 const withSeed = await run({ withPrimitives: true, label: 'with host primitives' })
@@ -1600,6 +1624,10 @@ const noticeRun = await run({ withPrimitives: true, label: 'auto update notice',
 await exerciseAutoUpdateNotice(noticeRun)
 noticeRun.mini.unmount()
 
+const forgetRun = await run({ withPrimitives: true, label: 'forget' })
+await exerciseForget(forgetRun)
+forgetRun.mini.unmount()
+
 console.log('panel-smoke: PASS')
 console.log(`  client.js: ${clientPath}`)
 console.log(`  with primitives: ${withSeed.slotRegistrations.length} slot registration(s), ${withSeed.tabRegistrations.length} tab type(s)`)
@@ -1619,5 +1647,6 @@ console.log(`  memhub absent: dashed card, short not-installed line, all three a
 console.log(`  footer: repo link (rel=noopener) + update/check POST with 已是最新 / 发现新版本 / failure states`)
 console.log(`  memory tokens: diagnostics line reads status.context.memoryTokens/totalTokens`)
 console.log(`  auto update: one force:false check per page load, quiet notice only when behind, button forces`)
+console.log(`  forget: 永久遗忘 next to 删除, own confirmation, POST /forget {id}; diagnostics totals all three tiers`)
 console.log(`  poll isolation: section re-renders across a tick: ${isolation.sectionDelta}, activity subtree: +${isolation.activityDelta}, section total ${isolation.sectionTotal}`)
 console.log(`  effects: ${withSeed.effectLabels.join(' | ')}`)

@@ -121,6 +121,8 @@ export const api = {
   list: (params) => request('list', params),
   update: (payload) => request('update', payload),
   delete: (payload) => request('delete', payload),
+  // Forget: delete the memory AND record its text so promotion cannot bring it back.
+  forget: (id) => request('forget', { id }),
   search: (payload) => request('search', payload),
   activity: (since) => request('activity', since === undefined ? {} : { since }),
   start: () => request('start'),

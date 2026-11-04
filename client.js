@@ -131,6 +131,8 @@ var api = {
   list: (params) => request("list", params),
   update: (payload) => request("update", payload),
   delete: (payload) => request("delete", payload),
+  // Forget: delete the memory AND record its text so promotion cannot bring it back.
+  forget: (id) => request("forget", { id }),
   search: (payload) => request("search", payload),
   activity: (since) => request("activity", since === void 0 ? {} : { since }),
   start: () => request("start"),
@@ -322,7 +324,12 @@ var zh_default = {
   "update.failed": "检查更新失败，请稍后再试",
   "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok",
   "update.newVersion": "新版本 v{version}",
-  "update.manualHint": "安装需手动进行"
+  "update.manualHint": "安装需手动进行",
+  "row.forget": "永久遗忘",
+  "row.confirmForget.title": "永久遗忘这条记忆？",
+  "row.confirmForget.body": "这条记忆会从存储中永久删除，并记住它的内容：之后的晋升不会再把它带回来。",
+  "row.confirmForget.confirm": "永久遗忘",
+  "row.forgetFailed": "遗忘失败：{message}"
 };
 
 // locale/en.json
@@ -496,7 +503,12 @@ var en_default = {
   "update.failed": "Update check failed, try again later",
   "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total",
   "update.newVersion": "v{version} available",
-  "update.manualHint": "Install manually"
+  "update.manualHint": "Install manually",
+  "row.forget": "Forget permanently",
+  "row.confirmForget.title": "Forget this memory permanently?",
+  "row.confirmForget.body": "The memory is deleted from the store and its text is remembered, so promotion will not bring it back.",
+  "row.confirmForget.confirm": "Forget permanently",
+  "row.forgetFailed": "Forget failed: {message}"
 };
 
 // client-src/locale.js
@@ -967,6 +979,7 @@ var PANEL_CSS = `
 .hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
 .hm-footerResult a:hover { text-decoration:underline; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
+.hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }
@@ -1613,6 +1626,9 @@ function SettingsSection(props) {
   const [savedId, setSavedId] = React2.useState("");
   const [rowError, setRowError] = React2.useState(null);
   const [deleteTarget, setDeleteTarget] = React2.useState(null);
+  const [forgetTarget, setForgetTarget] = React2.useState(null);
+  const [forgetting, setForgetting] = React2.useState(false);
+  const [forgetError, setForgetError] = React2.useState("");
   const [deleting, setDeleting] = React2.useState(false);
   const [deleteError, setDeleteError] = React2.useState("");
   const [diagOpen, setDiagOpen] = React2.useState(false);
@@ -1919,6 +1935,28 @@ function SettingsSection(props) {
       setDeleting(false);
     }
   };
+  const confirmForget = async () => {
+    if (forgetTarget === null || forgetting || masterOff) return;
+    setForgetting(true);
+    setForgetError("");
+    try {
+      await api.forget(forgetTarget.id);
+      setLists((prev) => {
+        const list = prev[forgetTarget.tier];
+        const items = list.items.filter((item) => item.id !== forgetTarget.id);
+        return {
+          ...prev,
+          [forgetTarget.tier]: { ...list, items, total: Math.max(0, list.total - 1) }
+        };
+      });
+      setForgetTarget(null);
+      setRefreshTick((value) => value + 1);
+    } catch (error) {
+      setForgetError(errorMessage(error));
+    } finally {
+      setForgetting(false);
+    }
+  };
   const copyItem = async (item) => {
     const ok = await copyToClipboard(item.content);
     if (copyTimer.current !== null) {
@@ -1977,6 +2015,15 @@ function SettingsSection(props) {
         onSelect: () => {
           setDeleteError("");
           setDeleteTarget({ tier, id: item.id });
+        }
+      });
+      actions.push({
+        key: "forget",
+        label: t("row.forget"),
+        danger: true,
+        onSelect: () => {
+          setForgetError("");
+          setForgetTarget({ tier, id: item.id });
         }
       });
     }
@@ -2414,6 +2461,39 @@ function SettingsSection(props) {
     deleteTarget !== null ? h("p", { className: "hm-muted" }, t("row.confirmDelete.body", { tier: tierLabel(t, deleteTarget.tier) })) : null,
     deleteError !== "" ? h("p", { className: "hm-error" }, t("row.deleteFailed", { message: deleteError })) : null
   );
+  const renderForgetModal = () => h(
+    ui.Modal,
+    {
+      open: forgetTarget !== null,
+      onClose: () => {
+        if (forgetting) return;
+        setForgetTarget(null);
+        setForgetError("");
+      },
+      title: t("row.confirmForget.title"),
+      closeLabel: t("common.close"),
+      footer: h(
+        "div",
+        { className: "hm-row" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "ghost",
+          "data-modal-autofocus": "",
+          onClick: () => {
+            setForgetTarget(null);
+            setForgetError("");
+          }
+        }, t("row.confirmDelete.cancel")),
+        h(
+          ui.Button,
+          { size: "sm", variant: "primary", disabled: forgetting, onClick: confirmForget },
+          forgetting ? t("common.loading") : t("row.confirmForget.confirm")
+        )
+      )
+    },
+    forgetTarget !== null ? h("p", { className: "hm-muted" }, t("row.confirmForget.body")) : null,
+    forgetError !== "" ? h("p", { className: "hm-error" }, t("row.forgetFailed", { message: forgetError })) : null
+  );
   const renderActivity = () => h(ActivityPanel, { t });
   const renderDiagnostics = () => {
     const model = status?.model ?? null;
@@ -2480,6 +2560,8 @@ function SettingsSection(props) {
         h("span", { className: "hm-fieldValue" }, size)
       ));
     }
+    const counts = status?.counts ?? null;
+    const totalCount = counts === null ? null : asNumber(counts.personal) + asNumber(counts.project) + asNumber(counts.session);
     const context = status?.context ?? null;
     const memoryTokens = asNumber(context?.memoryTokens);
     const totalTokens = asNumber(context?.totalTokens);
@@ -2510,6 +2592,7 @@ function SettingsSection(props) {
           sidecar?.port ? h("span", { className: "hm-mono" }, `:${sidecar.port}`) : null
         )
       ),
+      totalCount !== null ? h("p", { className: "hm-countLine" }, t("counts.total", { n: totalCount })) : null,
       context !== null && (memoryTokens > 0 || totalTokens > 0) ? h("p", { className: "hm-contextLine" }, t("diag.memoryTokens", { round: memoryTokens, total: totalTokens })) : null,
       diagOpen ? h("dl", { className: "hm-grid" }, details) : null,
       diagOpen ? h("pre", { className: "hm-pre" }, JSON.stringify(status, null, 2)) : null
@@ -2618,7 +2701,8 @@ function SettingsSection(props) {
     renderDiagnostics(),
     renderMemhub(),
     renderFooter(),
-    renderDeleteModal()
+    renderDeleteModal(),
+    renderForgetModal()
   );
 }
 

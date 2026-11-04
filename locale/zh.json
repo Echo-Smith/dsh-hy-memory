@@ -168,5 +168,10 @@
   "update.failed": "检查更新失败，请稍后再试",
   "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok",
   "update.newVersion": "新版本 v{version}",
-  "update.manualHint": "安装需手动进行"
+  "update.manualHint": "安装需手动进行",
+  "row.forget": "永久遗忘",
+  "row.confirmForget.title": "永久遗忘这条记忆？",
+  "row.confirmForget.body": "这条记忆会从存储中永久删除，并记住它的内容：之后的晋升不会再把它带回来。",
+  "row.confirmForget.confirm": "永久遗忘",
+  "row.forgetFailed": "遗忘失败：{message}"
 }

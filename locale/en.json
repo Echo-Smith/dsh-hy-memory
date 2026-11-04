@@ -168,5 +168,10 @@
   "update.failed": "Update check failed, try again later",
   "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total",
   "update.newVersion": "v{version} available",
-  "update.manualHint": "Install manually"
+  "update.manualHint": "Install manually",
+  "row.forget": "Forget permanently",
+  "row.confirmForget.title": "Forget this memory permanently?",
+  "row.confirmForget.body": "The memory is deleted from the store and its text is remembered, so promotion will not bring it back.",
+  "row.confirmForget.confirm": "Forget permanently",
+  "row.forgetFailed": "Forget failed: {message}"
 }
