@@ -29,7 +29,9 @@ const arg = (name, fallback) => {
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const name = arg('name', 'dsh-hy-memory')
 const version = arg('version', pkg.version)
-const staging = join(tmpdir(), `hy-memory-publish-${Date.now()}`)
+const keep = args.includes('--keep') || args.includes('--staging')
+const staging = arg('staging', join(tmpdir(), `hy-memory-publish-${Date.now()}`))
+const registry = arg('registry', '')
 const dist = join(ROOT, 'dist')
 
 const ENTRY = ['index.js', 'build.mjs', 'cordis.patch.yml', 'client.js', 'client-src', 'src', 'bridge', 'locale', 'icon.svg', 'docs/screenshots', 'package.json', 'README.md', 'README.zh.md', 'LICENSE']
@@ -52,7 +54,7 @@ const stagedPkg = JSON.parse(readFileSync(join(staging, 'package.json'), 'utf8')
 stagedPkg.name = name
 stagedPkg.version = version
 delete stagedPkg.private
-stagedPkg.publishConfig = { access: 'public' }
+stagedPkg.publishConfig = { access: 'public', ...(registry ? { registry } : {}) }
 stagedPkg.homepage = `https://www.npmjs.com/package/${name}`
 stagedPkg.scripts = {
   ...stagedPkg.scripts,
@@ -96,9 +98,10 @@ if (typeof plugin.apply !== 'function') throw new Error('installed entry does no
 if (!readFileSync(join(installed, 'client.js'), 'utf8').includes(`"${name}"`)) throw new Error('installed bundle lost the loader id')
 if (!existsSync(join(installed, 'bridge', 'hy_bridge.py'))) throw new Error('installed bridge missing')
 
-rmSync(staging, { recursive: true, force: true })
 rmSync(scratch, { recursive: true, force: true })
+if (!keep) rmSync(staging, { recursive: true, force: true })
 console.log(`packed ${filename} (${files.length} files, ${(files.reduce((sum, file) => sum + file.size, 0) / 1024).toFixed(0)} KiB)`)
 console.log(`verified install: ${name} exports apply(), loader id and bridge intact`)
 console.log(`tarball: ${tarball}`)
-console.log('publish with: npm publish ' + tarball)
+console.log(`publish with: npm publish ${tarball}${registry ? ` --registry ${registry}` : ''}`)
+if (keep) console.log(`staging kept at: ${staging}`)
