@@ -206,3 +206,11 @@ test('explained lists recalled ids and injected returns the injected text', asyn
   const missing = await api.routes.find((entry) => entry.path.endsWith('/injected')).fetch(post('injected', { at: 1 }))
   assert.equal((await missing.json()).data.found, false)
 })
+
+test('status carries the MemHub pairing block', async () => {
+  const { api } = harness()
+  const route = api.routes.find((entry) => entry.path.endsWith('/status'))
+  const body = await (await route.fetch(post('status', {}))).json()
+  assert.equal(typeof body.data.memhub.pairing, 'object')
+  assert.equal(typeof body.data.memhub.pairing.paired, 'boolean')
+})
