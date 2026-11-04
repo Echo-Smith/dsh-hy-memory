@@ -371,6 +371,18 @@ function createRuntime(ctx, config) {
           memoryContext.lastSource = info?.source ?? 'semantic'
           if (info?.source === 'lexical' || info?.source === 'both') memoryContext.lexicalTurns = (memoryContext.lexicalTurns ?? 0) + 1
           memoryContext.turns = (memoryContext.turns ?? 0) + 1
+          const store = state?.data
+          if (store && Array.isArray(info?.entries) && info.entries.length > 0) {
+            if (!Array.isArray(store.recallLog)) store.recallLog = []
+            store.recallLog.push({
+              at: Date.now(),
+              query: String(info.query ?? '').slice(0, 200),
+              source: info.source ?? 'semantic',
+              items: info.entries,
+            })
+            if (store.recallLog.length > 50) store.recallLog.splice(0, store.recallLog.length - 50)
+            state.save()
+          }
           memoryContext.lastAt = Date.now()
           memoryContext.totalTokens += tokens
           memoryContext.totalItems += info?.items ?? 0

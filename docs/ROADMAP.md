@@ -36,10 +36,11 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: `/api/hy-memory/duplicates` groups identical text keeping the newest, `/api/hy-memory/merge` deletes the listed rows, and the panel exposes one 整理重复项 button with a confirmation that names rows and groups. Tests cover the host grouping and delete, plus the panel scan, empty state, confirmation copy and merge bodies.
 - Measured headroom: the live store holds 106 rows (86 chat, 17 coding, 3 working) against a 2000 cap, so the cap is not the next bottleneck; a real-store cap run is deferred until it matters.
 
-## Phase 4: explainable recall
+## Phase 4: explainable recall (started)
 
-- Panel row shows why it was recalled: tier, score, source session, and the query that matched.
-- Activity feed links a recall to the injected text.
+- Done (host): each injection appends `{at, query, source, items:[{id, tier, score, rank}]}` to `state.json` `recallLog`, capped at 50. `POST /api/hy-memory/explain {id}` returns the newest entry containing that id; test covers newest-wins and the not-found case.
+- In flight: the panel row action that shows the explanation (query, tier, score, rank, time).
+- Still open: linking an activity-feed recall to the exact injected text.
 
 ## Phase 5: privacy and permission
 

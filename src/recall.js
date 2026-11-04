@@ -443,6 +443,13 @@ export function createRecall(deps) {
           chars: merged.text.length,
           tiers: merged.items.map((item) => item.tier),
           source: lexicalUsed ? (semanticUsed ? 'both' : 'lexical') : 'semantic',
+          query,
+          entries: merged.items.map((item, index) => ({
+            id: item.id,
+            tier: item.tier,
+            score: typeof item.score === 'number' ? Number(item.score.toFixed(4)) : null,
+            rank: index + 1,
+          })),
         })
       }
       if (!merged.text) return decision

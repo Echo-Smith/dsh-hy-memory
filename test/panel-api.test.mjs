@@ -65,12 +65,13 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/sessions',
     '/api/hy-memory/forget',
     '/api/hy-memory/duplicates',
+    '/api/hy-memory/explain',
     '/api/hy-memory/merge',
     '/api/hy-memory/update/check',
   ])
-  assert.equal(PANEL_ROUTE_DEFS.length, 18)
+  assert.equal(PANEL_ROUTE_DEFS.length, 19)
   const { api } = harness()
-  assert.equal(api.routes.length, 18)
+  assert.equal(api.routes.length, 19)
   for (const route of api.routes) {
     assert.deepEqual(route.methods, ['POST'])
     assert.equal(route.requestBody, 'buffered')
@@ -162,4 +163,22 @@ test('helpers shape success and failure payloads', async () => {
   const bad = errorResponse('nope', 'broken', 418)
   assert.equal(bad.status, 418)
   assert.deepEqual(await bad.json(), { ok: false, error: { code: 'nope', message: 'broken' } })
+})
+
+test('explain returns the newest recall that injected the memory', async () => {
+  const { api, state } = harness()
+  const route = api.routes.find((entry) => entry.path.endsWith('/explain'))
+  const empty = await route.fetch(post('explain', { id: 'm1' }))
+  assert.equal((await empty.json()).data.found, false)
+
+  state.data.recallLog = [
+    { at: 1000, query: 'old query', source: 'semantic', items: [{ id: 'm1', tier: 'personal', score: 0.7, rank: 2 }] },
+    { at: 2000, query: 'new query', source: 'lexical', items: [{ id: 'm1', tier: 'personal', score: 0.62, rank: 1 }] },
+  ]
+  const found = await route.fetch(post('explain', { id: 'm1' }))
+  const body = await found.json()
+  assert.equal(body.data.found, true)
+  assert.equal(body.data.query, 'new query')
+  assert.equal(body.data.source, 'lexical')
+  assert.equal(body.data.rank, 1)
 })

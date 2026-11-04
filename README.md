@@ -106,6 +106,13 @@ weighting is skipped when a memory has no timestamp.
 whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
 promotion pass. Ordinary delete does not do this.
 
+## Why was this recalled
+
+Every injection appends one entry to `state.json` under `recallLog` (last 50), holding the turn's query,
+the source (semantic, lexical or both) and, per item, tier, score and rank. `POST /api/hy-memory/explain
+{id}` returns the newest entry that contains a memory id, so the panel can answer "why is this row here"
+instead of showing an opaque list. The log is capped and stores ids and scores, not memory text.
+
 ## Duplicates
 
 `/api/hy-memory/duplicates` groups memories whose text is identical after whitespace and case folding,

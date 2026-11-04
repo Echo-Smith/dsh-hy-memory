@@ -27,6 +27,7 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'sessions', request: '{ projectKey? }' },
   { name: 'forget', request: '{ id }' },
   { name: 'duplicates', request: '{ tier? }' },
+  { name: 'explain', request: '{ id }' },
   { name: 'merge', request: '{ tier, keep?, drop }' },
   { name: 'update/check', request: '{}' },
 ])
@@ -335,6 +336,16 @@ export function createPanelApi(deps) {
       }
       case 'forget':
         return jsonResponse(await ops.forget({ id: body?.id }))
+      case 'explain': {
+        const id = String(body?.id ?? '')
+        const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []
+        for (let index = log.length - 1; index >= 0; index -= 1) {
+          const entry = log[index]
+          const hit = (entry.items ?? []).find((item) => item.id === id)
+          if (hit) return jsonResponse({ found: true, at: entry.at, query: entry.query, source: entry.source, tier: hit.tier, score: hit.score, rank: hit.rank })
+        }
+        return jsonResponse({ found: false })
+      }
       case 'duplicates':
         return jsonResponse(await ops.duplicates(body ?? {}))
       case 'merge':
