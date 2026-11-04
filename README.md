@@ -36,6 +36,25 @@ dsh plugin --profile desktop add link:$(pwd)
 
 Then open Settings > 记忆. First use bootstraps the Python environment; the model route comes from your existing DSH settings, so there is no extra key to fill in.
 
+### From npm or a tarball
+
+The publishable package name is `dsh-hy-memory`. Until it is on the registry, build a tarball and install that:
+
+```bash
+node scripts/prepare-publish.mjs                       # dist/dsh-hy-memory-<version>.tgz
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.0.tgz          # dry run
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.0.tgz --apply  # writes + installs
+```
+
+A profile needs the package as a dependency *and* its name in `dsh.profile.bundles`; the installer does both, then verifies the installed entry exports `apply()`. Restart or reload DSH afterwards. Once published, the same command takes `--spec dsh-hy-memory`.
+
+Publishing needs your npm credentials; the repository cannot publish on your behalf:
+
+```bash
+npm login
+npm publish dist/dsh-hy-memory-0.1.0.tgz
+```
+
 Requirements: DSH 0.2 preview, Python 3.10+ (installed into the plugin directory on first use), optional git for workspace ids.
 
 ## Dependencies

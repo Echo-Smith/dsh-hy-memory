@@ -17,7 +17,8 @@
     "src",
     "bridge",
     "locale/*.json",
-    "icon.svg"
+    "icon.svg",
+    "docs/screenshots"
   ],
   "dsh": {
     "bundle": {
@@ -67,6 +68,8 @@
     "check": "node --check index.js && node --check src/panel-api.js && node --check src/capture.js && node --check client.js",
     "eval:live": "node scripts/eval-live.mjs",
     "migrate:embeddings": "node scripts/migrate-embeddings.mjs",
-    "bench:startup": "node scripts/bench-startup.mjs"
+    "bench:startup": "node scripts/bench-startup.mjs",
+    "pack:publish": "node scripts/prepare-publish.mjs",
+    "install:profile": "node scripts/install-into-profile.mjs"
   }
 }
