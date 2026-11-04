@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,8 +9,18 @@ import { join } from 'node:path'
 // skips there rather than pretending to pass.
 const realVenv = join(homedir(), '.dsh', 'integrations', 'hy-memory', 'venv')
 const python = join(realVenv, 'bin', 'python')
+// A venv that exists but cannot import the SDK (a bare CI runner, for one)
+// would spawn a bridge that dies; only run where a usable one is installed.
+const usable = (() => {
+  if (!existsSync(python)) return false
+  try {
+    return spawnSync(python, ['-c', 'import hy_memory'], { timeout: 10_000 }).status === 0
+  } catch {
+    return false
+  }
+})()
 
-test('a stopped sidecar can be started again before the old child exits', { skip: !existsSync(python) }, async () => {
+test('a stopped sidecar can be started again before the old child exits', { skip: !usable }, async () => {
   const home = mkdtempSync(join(tmpdir(), 'hy-wake-test-'))
   process.env.DSH_HOME = home
   mkdirSync(join(home, 'integrations', 'hy-memory'), { recursive: true })
