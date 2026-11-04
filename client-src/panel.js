@@ -621,6 +621,8 @@ export function SettingsSection(props) {
   const [forgetError, setForgetError] = React.useState('')
   const [dupeBusy, setDupeBusy] = React.useState('')
   const [dupeScan, setDupeScan] = React.useState(null)
+  const [dupeNotice, setDupeNotice] = React.useState(false)
+  const dupeNoticeTimer = React.useRef(null)
   const [dupeOpen, setDupeOpen] = React.useState(false)
   const [dupeDone, setDupeDone] = React.useState(null)
   const [dupeError, setDupeError] = React.useState('')
@@ -657,6 +659,7 @@ export function SettingsSection(props) {
   const refresh = React.useCallback(() => { setRefreshTick((value) => value + 1) }, [])
 
   React.useEffect(() => () => {
+    if (dupeNoticeTimer.current !== null) clearTimeout(dupeNoticeTimer.current)
     if (savedTimer.current !== null) clearTimeout(savedTimer.current)
     if (copyTimer.current !== null) clearTimeout(copyTimer.current)
   }, [])
@@ -1101,6 +1104,16 @@ export function SettingsSection(props) {
       const total = asNumber(data?.total, groups.reduce((sum, group) => sum + asNumber(group.count, group.drop.length), 0))
       setDupeScan({ groups, total })
       setDupeOpen(total > 0)
+      if (total === 0) {
+        setDupeNotice(true)
+        if (dupeNoticeTimer.current !== null) clearTimeout(dupeNoticeTimer.current)
+        dupeNoticeTimer.current = setTimeout(() => {
+          dupeNoticeTimer.current = null
+          setDupeNotice(false)
+        }, 2000)
+      } else {
+        setDupeNotice(false)
+      }
     } catch (error) {
       setDupeScan(null)
       setDupeError(errorMessage(error))
@@ -1222,7 +1235,7 @@ export function SettingsSection(props) {
   const dupeHint = () => {
     if (dupeError !== '') return t('dupes.failed', { message: dupeError })
     if (dupeDone !== null) return t('dupes.done', { n: dupeDone })
-    if (dupeScan !== null && dupeScan.total === 0) return t('dupes.none')
+    if (dupeNotice && dupeScan !== null && dupeScan.total === 0) return t('dupes.none')
     return ''
   }
 
@@ -1671,7 +1684,8 @@ export function SettingsSection(props) {
       }, t('row.confirmDelete.cancel')),
       h(ui.Button, {
         size: 'sm',
-        variant: 'primary',
+        variant: 'outline',
+        className: 'hm-dangerAction',
         disabled: purgeBusy !== '' || purgeText.trim() !== 'PURGE',
         onClick: () => { void confirmPurge() },
       }, purgeBusy !== '' ? t('purge.busy') : t('purge.confirm'))),
@@ -1820,11 +1834,11 @@ export function SettingsSection(props) {
             className: `hm-dupeHint${dupeError !== '' ? ' hm-error' : ''}`,
             role: 'status',
           }, dupeHint())
-          : null),
-      h('div', { className: 'hm-dupeRow' },
+          : null,
         h(ui.Button, {
           size: 'sm',
           variant: 'outline',
+          className: 'hm-dangerAction',
           disabled: purgeBusy !== '',
           onClick: () => {
             setPurgeText('')

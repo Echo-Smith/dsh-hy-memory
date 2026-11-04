@@ -1646,6 +1646,10 @@ async function exerciseForget(harness) {
 async function exerciseDuplicates(harness) {
   const t = await mountSection(harness, 'zh')
   assert.ok(findButton(harness, t('dupes.action')) !== undefined, 'the diagnostics card offers 整理重复项')
+  const dangerButtons = hostsOf(harness).filter((node) => String(node.props?.className ?? '').includes('hm-dangerAction'))
+  assert.ok(dangerButtons.length >= 1, 'destructive actions carry the red class')
+  const rowHosts = hostsOf(harness).filter((node) => String(node.props?.className ?? '') === 'hm-dupeRow')
+  assert.equal(rowHosts.length, 1, 'both diagnostics actions share one row')
   assert.equal(lastCall(harness, '/api/hy-memory/duplicates'), undefined, 'nothing is scanned before the click')
 
   await click(harness, t('dupes.action'))
@@ -1673,6 +1677,8 @@ async function exerciseDuplicatesEmpty(harness) {
   await click(harness, t('dupes.action'))
   assertPost(harness, '/api/hy-memory/duplicates', {})
   assert.ok(harness.mini.text().includes(t('dupes.none')), 'a clean store reports 没有重复项')
+  // The two-second auto-hide runs on a timer; the mini renderer only repaints
+  // from its own event path, so that timing is verified in the browser instead.
   assert.equal(findButton(harness, t('dupes.confirm.confirm')), undefined,
     'no confirmation opens when nothing is duplicated')
   assert.equal(lastCall(harness, '/api/hy-memory/merge'), undefined, 'no merge is attempted for an empty scan')

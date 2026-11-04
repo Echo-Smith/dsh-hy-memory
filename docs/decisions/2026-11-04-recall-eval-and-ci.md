@@ -69,3 +69,8 @@ Predicate: move memories from a store built for one embedder into a store built 
 - `ops.duplicates` groups by `contentHash` after case and whitespace folding, excludes singletons, keeps the newest via `createdAt`. Test: three rows, one group, keep `a2`, drop `a1`.
 - `ops.merge` deletes the drop ids through the same locate and delete path as `remove`, refusing when `keep` is inside `drop`. Test asserts the delete call.
 - Real store size measured: 106 rows against a 2000 cap. The cap is not exercised in production, and the guard stays off by default.
+
+## Diagnostics polish addendum
+
+- Both diagnostics actions (整理重复项, 彻底清除) now share one row; smoke asserts a single `hm-dupeRow` host and that destructive controls carry `hm-dangerAction`.
+- The clean-store result (没有重复项) is transient: it renders only while a 2-second flag is set, then disappears. NOT VERIFIED by the smoke harness, whose mini renderer does not repaint from a bare timer callback; the behaviour needs a browser check after the next page reload.

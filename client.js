@@ -1095,6 +1095,8 @@ var PANEL_CSS = `
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
+.hm-dangerAction { color:var(--dsw-alias-state-error-primary); }
+.hm-dangerAction:hover { border-color:var(--dsw-alias-state-error-primary); }
 .hm-dupeHint { font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-captureToggle { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dsw-alias-label-secondary); cursor:pointer; }
 .hm-captureCheck { width:13px; height:13px; margin:0; accent-color:var(--dsw-alias-brand-primary); cursor:pointer; }
@@ -1842,6 +1844,8 @@ function SettingsSection(props) {
   const [forgetError, setForgetError] = React2.useState("");
   const [dupeBusy, setDupeBusy] = React2.useState("");
   const [dupeScan, setDupeScan] = React2.useState(null);
+  const [dupeNotice, setDupeNotice] = React2.useState(false);
+  const dupeNoticeTimer = React2.useRef(null);
   const [dupeOpen, setDupeOpen] = React2.useState(false);
   const [dupeDone, setDupeDone] = React2.useState(null);
   const [dupeError, setDupeError] = React2.useState("");
@@ -1878,6 +1882,7 @@ function SettingsSection(props) {
     setRefreshTick((value) => value + 1);
   }, []);
   React2.useEffect(() => () => {
+    if (dupeNoticeTimer.current !== null) clearTimeout(dupeNoticeTimer.current);
     if (savedTimer.current !== null) clearTimeout(savedTimer.current);
     if (copyTimer.current !== null) clearTimeout(copyTimer.current);
   }, []);
@@ -2283,6 +2288,16 @@ function SettingsSection(props) {
       const total = asNumber(data?.total, groups.reduce((sum, group) => sum + asNumber(group.count, group.drop.length), 0));
       setDupeScan({ groups, total });
       setDupeOpen(total > 0);
+      if (total === 0) {
+        setDupeNotice(true);
+        if (dupeNoticeTimer.current !== null) clearTimeout(dupeNoticeTimer.current);
+        dupeNoticeTimer.current = setTimeout(() => {
+          dupeNoticeTimer.current = null;
+          setDupeNotice(false);
+        }, 2e3);
+      } else {
+        setDupeNotice(false);
+      }
     } catch (error) {
       setDupeScan(null);
       setDupeError(errorMessage(error));
@@ -2390,7 +2405,7 @@ function SettingsSection(props) {
   const dupeHint = () => {
     if (dupeError !== "") return t("dupes.failed", { message: dupeError });
     if (dupeDone !== null) return t("dupes.done", { n: dupeDone });
-    if (dupeScan !== null && dupeScan.total === 0) return t("dupes.none");
+    if (dupeNotice && dupeScan !== null && dupeScan.total === 0) return t("dupes.none");
     return "";
   };
   const renderHeader = () => h(
@@ -2951,7 +2966,8 @@ function SettingsSection(props) {
         }, t("row.confirmDelete.cancel")),
         h(ui.Button, {
           size: "sm",
-          variant: "primary",
+          variant: "outline",
+          className: "hm-dangerAction",
           disabled: purgeBusy !== "" || purgeText.trim() !== "PURGE",
           onClick: () => {
             void confirmPurge();
@@ -3167,14 +3183,11 @@ function SettingsSection(props) {
         dupeHint() !== "" ? h("span", {
           className: `hm-dupeHint${dupeError !== "" ? " hm-error" : ""}`,
           role: "status"
-        }, dupeHint()) : null
-      ),
-      h(
-        "div",
-        { className: "hm-dupeRow" },
+        }, dupeHint()) : null,
         h(ui.Button, {
           size: "sm",
           variant: "outline",
+          className: "hm-dangerAction",
           disabled: purgeBusy !== "",
           onClick: () => {
             setPurgeText("");
