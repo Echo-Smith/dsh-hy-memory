@@ -1,0 +1,34 @@
+name: publish-npm
+
+# Publishes to the public npm registry when a version tag is pushed. The token
+# has to be added once as the repository secret NPM_TOKEN (an npm "Automation"
+# or granular token with publish permission); without it the job says so and
+# skips publishing instead of failing the tag.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Skip without a token
+        if: ${{ env.NODE_AUTH_TOKEN == '' }}
+        run: echo "::warning::NPM_TOKEN is not configured; skipping npm publish"
+      - name: Stage and publish
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        run: |
+          node scripts/prepare-publish.mjs --staging dist/npm-package
+          npm publish ./dist/npm-package --registry https://registry.npmjs.org

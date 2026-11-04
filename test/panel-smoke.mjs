@@ -807,6 +807,7 @@ function createHarness({
   withPrimitives, sessionPanel = true, memhubErrors = false, memhubDetected = true,
   updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
   explained = ['m1'], injected = 'found', purge = 'ok', context = true, localeConflict = false,
+  slotConflict = false,
 }) {
   const slotRegistrations = []
   const tabRegistrations = []
@@ -821,7 +822,7 @@ function createHarness({
   const documentStub = createDocumentStub()
   const fetchImpl = createFetch(fetchCalls, {
     sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
-    explained, injected, purge, context, localeConflict,
+    explained, injected, purge, context, localeConflict, slotConflict,
   })
 
   const requireStub = (specifier) => {
@@ -847,6 +848,11 @@ function createHarness({
         return typeof dispose === 'function' ? dispose : () => {}
       },
       register(options, component) {
+        if (slotConflict && options.name === 'settings.section' && options.id === 'hy-memory'
+          && (options.priority ?? 0) === 0) {
+          // A page sync re-applying the bundle while the previous seat is still held.
+          throw new Error('list slot "settings.section" already has an entry with id "hy-memory" at priority 0 (registered by Gb)')
+        }
         slotRegistrations.push({ options, component })
         return () => {
           const index = slotRegistrations.findIndex((entry) => entry.options === options)
@@ -947,11 +953,19 @@ function createHarness({
     tabRegistrations,
     localeRegistrations,
     localeConflict,
+    slotConflict,
     effectLabels,
     fetchCalls,
     clipboardWrites,
     document: documentStub,
   }
+}
+
+async function exerciseSlotConflict(harness) {
+  await settle()
+  const sections = harness.slotRegistrations.filter((entry) => entry.options.name === 'settings.section')
+  assert.equal(sections.length, 1, 'the section registers by shadowing the occupied priority')
+  assert.ok((sections[0].options.priority ?? 0) >= 1, 'it shadows at a higher priority')
 }
 
 async function exerciseLocaleConflict(harness) {
@@ -1051,10 +1065,11 @@ async function run({
   withPrimitives, label, sessionPanel = true, memhubErrors = false, memhubDetected = true,
   updateCheck = 'current', autoUpdate = 'current', duplicates = 'some', explain = 'found',
   explained = ['m1'], injected = 'found', purge = 'ok', context = true, localeConflict = false,
+  slotConflict = false,
 }) {
   const harness = createHarness({
     withPrimitives, sessionPanel, memhubErrors, memhubDetected, updateCheck, autoUpdate, duplicates, explain,
-    explained, injected, purge, context, localeConflict,
+    explained, injected, purge, context, localeConflict, slotConflict,
   })
   const exported = harness.loaded.registration.factory(harness.requireStub)
   assert.ok(Array.isArray(exported.inject), `${label}: factory exports inject`)
@@ -1957,6 +1972,11 @@ dupeEmptyRun.mini.unmount()
 const dupeErrorRun = await run({ withPrimitives: true, label: 'duplicates error', duplicates: 'error' })
 await exerciseDuplicatesError(dupeErrorRun)
 dupeErrorRun.mini.unmount()
+
+const slotConflictRun = await run({ withPrimitives: true, label: 'slot conflict', slotConflict: true })
+await exerciseSlotConflict(slotConflictRun)
+slotConflictRun.mini.unmount()
+console.log('  slot conflict: settings section shadows the occupied seat')
 
 const localeConflictRun = await run({ withPrimitives: true, label: 'locale conflict', localeConflict: true })
 await exerciseLocaleConflict(localeConflictRun)

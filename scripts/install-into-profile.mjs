@@ -73,6 +73,17 @@ if (!name) {
 }
 
 const dependencySpec = isUrl ? spec : local ? `file:${spec}` : spec
+// Report what is installed before replacing it: an upgrade should never be a
+// surprise about which version was running.
+const installedManifest = join(profileDir, 'node_modules', name, 'package.json')
+const installedVersion = existsSync(installedManifest)
+  ? JSON.parse(readFileSync(installedManifest, 'utf8')).version ?? 'unknown'
+  : 'not installed'
+const targetVersion = local
+  ? JSON.parse(execFileSync('tar', ['-xOf', downloaded ?? spec, 'package/package.json'], { encoding: 'utf8' })).version ?? 'unknown'
+  : 'latest'
+console.log(`installed: ${name} ${installedVersion} -> ${targetVersion} (${dependencySpec})`)
+
 const changes = []
 changes.push(`install ${dependencySpec}`)
 if (!bundles.includes(name)) {

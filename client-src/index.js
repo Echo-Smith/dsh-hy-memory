@@ -219,14 +219,30 @@ export function apply(ctx) {
 
   ctx.effect(installNavGlyph, 'hy-memory: settings nav glyph')
 
-  ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: SECTION_ID,
-    order: 30,
-    label: () => navLabelNode(t),
-    locale: NS,
-    inject: () => ({ translate: t, api, subscribeLocale, localeSnapshot }),
-  }, HyMemorySection)), 'hy-memory: settings section')
+  // A page sync can register this section while the previous instance still
+  // holds the seat at priority 0. Shadowing at a higher priority keeps the panel
+  // alive instead of failing the whole sync; the older instance still renders
+  // until it disposes, and its content is identical.
+  const registerSection = () => {
+    for (let priority = 0; priority <= 5; priority += 1) {
+      try {
+        return ctx.slots.register({
+          name: 'settings.section',
+          id: SECTION_ID,
+          order: 30,
+          priority,
+          label: () => navLabelNode(t),
+          locale: NS,
+          inject: () => ({ translate: t, api, subscribeLocale, localeSnapshot }),
+        }, HyMemorySection)
+      } catch (error) {
+        const message = String(error?.message ?? '')
+        if (!message.includes('already has an entry with id') && !message.includes('already has a registration')) throw error
+      }
+    }
+    return () => {}
+  }
+  ctx.effect(() => ctx.slots.inject('settings.section', registerSection), 'hy-memory: settings section')
 
   // The session pane is optional: read `ui.sessionPanel` once, then contribute
   // the tab type and its body. A false flag contributes neither, so the sidebar

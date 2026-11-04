@@ -3626,14 +3626,27 @@ function apply(ctx) {
   void loadStatus().catch(() => {
   });
   ctx.effect(installNavGlyph, "hy-memory: settings nav glyph");
-  ctx.effect(() => ctx.slots.inject("settings.section", () => ctx.slots.register({
-    name: "settings.section",
-    id: SECTION_ID,
-    order: 30,
-    label: () => navLabelNode(t),
-    locale: NS,
-    inject: () => ({ translate: t, api, subscribeLocale, localeSnapshot })
-  }, HyMemorySection)), "hy-memory: settings section");
+  const registerSection = () => {
+    for (let priority = 0; priority <= 5; priority += 1) {
+      try {
+        return ctx.slots.register({
+          name: "settings.section",
+          id: SECTION_ID,
+          order: 30,
+          priority,
+          label: () => navLabelNode(t),
+          locale: NS,
+          inject: () => ({ translate: t, api, subscribeLocale, localeSnapshot })
+        }, HyMemorySection);
+      } catch (error) {
+        const message = String(error?.message ?? "");
+        if (!message.includes("already has an entry with id") && !message.includes("already has a registration")) throw error;
+      }
+    }
+    return () => {
+    };
+  };
+  ctx.effect(() => ctx.slots.inject("settings.section", registerSection), "hy-memory: settings section");
   ctx.effect(() => {
     let disposed = false;
     let release = null;
