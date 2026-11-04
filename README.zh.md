@@ -67,6 +67,24 @@ node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.1.tgz --ap
 
 要求：DSH 0.2 预览版、Python 3.10+（首次会自动装到插件目录）、可选 git（用于取 workspace id）。
 
+## 插件市场索引
+
+DSH 的插件详情页会拿已安装的包和市场索引对比版本，自己标记「有更新」；那个页面属于 DSH 本体，插件无法往
+上面画东西。插件能做的是提供 DSH 认识的索引。本仓库带了一份 `market/index.json`（format 1，已用 DSH 自带
+的解析器验证）：
+
+```bash
+node scripts/validate-market-index.mjs     # 需要本机装有 DSH（或用 --module 指定解包后的 app node_modules）
+```
+
+在 DSH 的插件市场设置里把下面这个地址加为索引，详情页就会开始对比 `dsh-hy-memory` 的版本：
+
+```
+https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+```
+
+每次发版把 `versions` 更新一下，详情页就会显示有可用版本；设置面板里那条「只提示不安装」的检查保持不变。
+
 ## 截图
 
 | 个人记忆 | 项目与会话 | 更新检查 |

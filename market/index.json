@@ -1,0 +1,65 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Echo Smith's DSH plugins",
+    "zh": "Echo Smith 的 DSH 插件"
+  },
+  "description": {
+    "en": "Plugins maintained by Echo Smith for DeepSeek Harness.",
+    "zh": "Echo Smith 维护的 DeepSeek Harness 插件。"
+  },
+  "metadata": {
+    "categories": {
+      "memory": {
+        "title": {
+          "en": "Memory",
+          "zh": "记忆"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "dsh-hy-memory",
+      "title": {
+        "en": "Memory",
+        "zh": "记忆"
+      },
+      "description": {
+        "en": "Hy-Memory 2.0 as a native DSH memory component: personal, project and session tiers, automatic recall and capture, a Settings > Memory panel, and MemHub interoperability.",
+        "zh": "把 Hy-Memory 2.0 接成 DSH 原生记忆组件：个人、项目、会话三层，自动召回与沉淀，设置面板，以及与 MemHub 的互通。"
+      },
+      "icon": "https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/icon.svg",
+      "author": "Echo Smith",
+      "homepage": "https://github.com/Echo-Smith/hy-memory4dsh#readme",
+      "repository": {
+        "url": "https://github.com/Echo-Smith/hy-memory4dsh"
+      },
+      "metadata": {
+        "category": "memory",
+        "keywords": [
+          "memory",
+          "hy-memory",
+          "memhub",
+          "deepseek-harness"
+        ],
+        "labels": [],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "0.1.1",
+          "publishTimestamp": 1793761659,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.0"
+          }
+        }
+      ]
+    }
+  ]
+}

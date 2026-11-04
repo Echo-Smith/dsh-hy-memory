@@ -82,6 +82,27 @@ Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edi
 | `promotion.everyTurns` | 8 | turns between promotion passes |
 | `embedding.mode` | local | `local` ONNX (384 dims, ~80 MB downloaded once into `~/.cache/chroma`) or `remote` with `baseURL`/`model`/`apiKey`/`dims` |
 
+## Plugin market index
+
+DSH's plugin detail page compares an installed package with a market index and marks
+`update-available` on its own; that page belongs to DSH, so a plugin cannot draw on it. What a plugin can
+do is publish an index DSH understands. This repository ships one at `market/index.json` (format 1,
+validated with DSH's own parser):
+
+```bash
+node scripts/validate-market-index.mjs     # needs an installed DSH app (or --module <extracted app node_modules>)
+```
+
+Add this URL as an index in DSH's plugin market settings, and the detail page starts comparing
+`dsh-hy-memory` versions against it:
+
+```
+https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+```
+
+Bump `versions` there when a release goes out; the page then shows the new version as available while the
+settings panel keeps its own notify-only update check.
+
 ## Screenshots
 
 | Personal | Project and session | Update check |

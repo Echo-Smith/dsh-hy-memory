@@ -70,6 +70,7 @@
     "migrate:embeddings": "node scripts/migrate-embeddings.mjs",
     "bench:startup": "node scripts/bench-startup.mjs",
     "pack:publish": "node scripts/prepare-publish.mjs",
-    "install:profile": "node scripts/install-into-profile.mjs"
+    "install:profile": "node scripts/install-into-profile.mjs",
+    "validate:market": "node scripts/validate-market-index.mjs"
   }
 }

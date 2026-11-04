@@ -25,7 +25,8 @@ const arg = (name, fallback) => {
 const apply = args.includes('--apply')
 const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh')
 const rawSpec = arg('spec', 'dsh-hy-memory')
-const looksPath = rawSpec.startsWith('.') || rawSpec.startsWith('/') || rawSpec.startsWith('~') || existsSync(rawSpec)
+const isUrl = /^https?:\/\//.test(rawSpec)
+const looksPath = !isUrl && (rawSpec.startsWith('.') || rawSpec.startsWith('/') || rawSpec.startsWith('~') || existsSync(rawSpec))
 const spec = looksPath ? resolve(rawSpec) : rawSpec
 const profileArg = arg('profile', 'desktop')
 const profileDir = profileArg.includes('/') ? resolve(profileArg) : join(dshHome, 'profiles', profileArg)
@@ -41,10 +42,25 @@ profile.dsh = profile.dsh ?? {}
 profile.dsh.profile = profile.dsh.profile ?? {}
 const bundles = Array.isArray(profile.dsh.profile.bundles) ? profile.dsh.profile.bundles : (profile.dsh.profile.bundles = [])
 
-const local = existsSync(spec)
+let local = !isUrl && existsSync(spec)
+let downloaded = null
+if (isUrl) {
+  // A release asset is a tarball URL, not an npm spec: fetch it once so the
+  // name is known, then hand the URL itself to the package manager.
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const response = await fetch(spec, { redirect: 'follow' })
+  if (!response.ok) {
+    console.error(`download failed: ${response.status} ${response.statusText}`)
+    process.exit(1)
+  }
+  downloaded = join(mkdtempSync(join(tmpdir(), 'hy-install-url-')), 'package.tgz')
+  writeFileSync(downloaded, Buffer.from(await response.arrayBuffer()))
+  local = true
+}
 let name
 if (local) {
-  const manifest = JSON.parse(execFileSync('tar', ['-xOf', spec, 'package/package.json'], { encoding: 'utf8' }))
+  const manifest = JSON.parse(execFileSync('tar', ['-xOf', downloaded ?? spec, 'package/package.json'], { encoding: 'utf8' }))
   name = manifest.name
 } else {
   // `name@range` (including a scope) or a bare name.
@@ -56,7 +72,7 @@ if (!name) {
   process.exit(2)
 }
 
-const dependencySpec = local ? `file:${spec}` : spec
+const dependencySpec = isUrl ? spec : local ? `file:${spec}` : spec
 const changes = []
 changes.push(`install ${dependencySpec}`)
 if (!bundles.includes(name)) {
@@ -71,14 +87,29 @@ if (!apply) {
   process.exit(0)
 }
 
-const manager = existsSync(join(profileDir, 'pnpm-lock.yaml')) ? 'pnpm' : 'npm'
-const managerArgs = manager === 'pnpm'
-  ? ['add', dependencySpec]
+// A profile with a pnpm lock wants pnpm. It may not be on PATH because the DSH
+// app ships its own copy, so try that before giving up on the lockfile.
+function resolvePnpm() {
+  try {
+    execFileSync('pnpm', ['--version'], { stdio: 'ignore' })
+    return { command: 'pnpm', prefix: [] }
+  } catch {}
+  const bundled = process.env.DSH_APP_PNPM
+    ?? '/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.cjs'
+  if (existsSync(bundled)) return { command: process.execPath, prefix: [bundled] }
+  return null
+}
+
+const wantsPnpm = existsSync(join(profileDir, 'pnpm-lock.yaml'))
+const pnpm = wantsPnpm ? resolvePnpm() : null
+if (wantsPnpm && !pnpm) console.error('pnpm lock found but pnpm is unavailable; falling back to npm')
+const managerArgs = pnpm
+  ? [...pnpm.prefix, 'add', dependencySpec]
   : ['install', '--no-audit', '--no-fund', dependencySpec]
 try {
-  execFileSync(manager, managerArgs, { cwd: profileDir, stdio: 'pipe', encoding: 'utf8' })
+  execFileSync(pnpm?.command ?? 'npm', managerArgs, { cwd: profileDir, stdio: 'pipe', encoding: 'utf8' })
 } catch (error) {
-  console.error(`${manager} failed: ${error.stderr ?? error.message}`)
+  console.error(`${pnpm ? 'pnpm' : 'npm'} failed: ${error.stderr ?? error.message}`)
   process.exit(1)
 }
 // The package manager owns the dependency entry; add the bundle after it.
