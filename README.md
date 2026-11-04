@@ -96,6 +96,16 @@ CI runs the same four commands on every push and pull request. The recall harnes
 
 What is planned next, in order, is in [docs/ROADMAP.md](docs/ROADMAP.md): real-data recall fixtures, multilingual embeddings, lifecycle and dedupe, explainable recall, privacy controls, MemHub's own sync path, scene verification, and operations.
 
+## Forgetting and recency
+
+Ranking is not purely similarity: an equally relevant memory that is a year old loses to a fresh one.
+The half-life defaults to 30 days (`recall.halfLifeDays`), thresholding stays on the raw score, and the
+weighting is skipped when a memory has no timestamp.
+
+`memory_forget` deletes a memory and records a hash of its text in `state.json`. Promotion skips lines
+whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
+promotion pass. Ordinary delete does not do this.
+
 ## Contributing
 
 Issues and pull requests are welcome. A reproduction with the version, the steps and the relevant part of `$DSH_HOME/integrations/hy-memory/sidecar.log` saves time; changes should come with a test or a reproducible verification.

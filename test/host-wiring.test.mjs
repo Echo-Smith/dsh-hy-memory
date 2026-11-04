@@ -105,11 +105,12 @@ test('apply writes the boot marker and wires tools, routes and listeners', async
     assert.deepEqual(marker.routes, [...PANEL_ROUTE_PATHS])
     assert.deepEqual(marker.inject, ['tools', 'sessions', 'llm'])
 
-    const wired = await waitFor(() => harness.registeredTools.length === 6 && harness.panels.length === 15)
-    assert.ok(wired, `expected 6 tools and 15 routes, saw ${harness.registeredTools.length}/${harness.panels.length}`)
+    const wired = await waitFor(() => harness.registeredTools.length === 7 && harness.panels.length === 15)
+    assert.ok(wired, `expected 7 tools and 15 routes, saw ${harness.registeredTools.length}/${harness.panels.length}`)
     assert.deepEqual(harness.registeredTools.map((tool) => tool.name).sort(), [
       'memory_add',
       'memory_delete',
+      'memory_forget',
       'memory_get',
       'memory_list',
       'memory_search',
@@ -136,7 +137,7 @@ test('listeners degrade quietly with no running sidecar', async () => {
   const harness = fakeContext()
   try {
     apply(harness.ctx, {})
-    await waitFor(() => harness.registeredTools.length === 6)
+    await waitFor(() => harness.registeredTools.length === 7)
 
     const session = { id: 's1', header: { cwd: home }, title: 'demo' }
     for (const handler of harness.listeners.get('session/event')) {

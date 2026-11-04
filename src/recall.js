@@ -208,12 +208,27 @@ export function selectRecall(groups, options = {}) {
     seenContent.add(contentKey)
     unique.push(item)
   }
-  unique.sort((left, right) => {
-    const leftScore = typeof left.score === 'number' ? left.score : -1
-    const rightScore = typeof right.score === 'number' ? right.score : -1
-    if (leftScore !== rightScore) return rightScore - leftScore
-    return (TIER_ORDER[left.tier] ?? 9) - (TIER_ORDER[right.tier] ?? 9)
+  // Recency weighting: two equally relevant memories are not equally useful when
+  // one is a year old. Thresholding stays on the raw score; only rank order moves.
+  const halfLifeDays = Number.isFinite(options.halfLifeDays) ? options.halfLifeDays : 30
+  const nowMs = Date.now()
+  const recency = (item) => {
+    if (halfLifeDays <= 0) return 1
+    const at = Number(item.updatedAt ?? item.createdAt ?? 0)
+    if (!Number.isFinite(at) || at <= 0) return 1
+    const ageDays = Math.max(0, (nowMs - at) / 86_400_000)
+    return 0.5 ** (ageDays / halfLifeDays)
+  }
+  const ranked = unique.map((item) => ({
+    item,
+    rank: (typeof item.score === 'number' ? item.score : 0) * recency(item),
+  }))
+  ranked.sort((left, right) => {
+    if (right.rank !== left.rank) return right.rank - left.rank
+    return (TIER_ORDER[left.item.tier] ?? 9) - (TIER_ORDER[right.item.tier] ?? 9)
   })
+  unique.length = 0
+  for (const entry of ranked) unique.push(entry.item)
   const items = []
   let used = 0
   for (const item of unique) {

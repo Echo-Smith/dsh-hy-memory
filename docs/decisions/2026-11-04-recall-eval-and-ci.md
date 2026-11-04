@@ -51,3 +51,9 @@ Predicate: move memories from a store built for one embedder into a store built 
 - `scripts/migrate-embeddings.mjs` exports the source, writes a timestamped backup, prints source and target totals, and only writes with `--apply --confirm YES-MIGRATE`.
 - Verified across two pro stores on the same machine: dry run reported 102 source rows and an empty target; applying three memories wrote 3 and failed 0, the target grew to 6 rows (pro reconcile splits), a search for the first memory returned it, and the source totals stayed at 84 chat, 3 working, 15 coding. VERIFIED for the mechanics.
 - Not verified: a real embedder change (both stores used the bundled 384-dimension model), workspace scope for productivity rows, and any run at full store size.
+
+## Phase 3 addendum: recency and forget
+
+- Recency weighting added to `selectRecall`: rank score is `score * 0.5^(ageDays/halfLifeDays)`, default half-life 30 days, `halfLifeDays: 0` disables it. Thresholding still uses the raw score so an old-but-relevant memory is not dropped outright. Tests cover fresh-before-old and the off switch.
+- `memory_forget` deletes by id and records `contentHash(text)` in `state.json`; both promotion sites filter forgotten lines. Test covers the delete call and the recorded hash.
+- Live evaluation after the change: still 9/10 hits at 941 average characters. Latency read 385 ms on this run against a cold sidecar, which is not comparable to the earlier 149 ms.

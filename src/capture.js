@@ -9,7 +9,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { collectSearchItems, truncateChars } from './recall.js'
-import { projectAgentId, projectKey, projectTitleForPath, pickScene, resolveUser, workspaceIdFor, writeScope } from './tiers.js'
+import { contentHash, projectAgentId, projectKey, projectTitleForPath, pickScene, resolveUser, workspaceIdFor, writeScope } from './tiers.js'
 
 export const MAX_BUFFER_EVENTS = 400
 export const MAX_QUEUE_JOBS = 60
@@ -513,6 +513,14 @@ export function createCapture(deps) {
     }
   }
 
+  /** Drop lines the user explicitly forgot, so promotion cannot resurrect them. */
+  function dropForgotten(lines) {
+    const store = state?.data
+    if (!Array.isArray(store?.forgottenHashes) || store.forgottenHashes.length === 0) return lines
+    const known = new Set(store.forgottenHashes)
+    return lines.filter((line) => !known.has(contentHash(line)))
+  }
+
   async function ask(model, prompt) {
     // Prefer the sidecar's endpoint: it runs with the thinking channel disabled,
     // while a gateway model reached through the host can answer with reasoning
@@ -642,7 +650,7 @@ export function createCapture(deps) {
       if (items.length < 2 || !key) return
       const prompt = truncateChars(sessionToProjectPrompt(items), PROMPT_INPUT_CHARS)
       const answer = await ask(model, prompt)
-      const lines = promotionLines(answer)
+      const lines = dropForgotten(promotionLines(answer))
       if (lines.length === 0) return
       const result = await writePromotedWithRetry(client, {
         data: [{ role: 'user', content: lines.join('\n') }],
@@ -733,7 +741,7 @@ export function createCapture(deps) {
       if (items.length < 3) return
       const prompt = truncateChars(projectToPersonalPrompt(items), PROMPT_INPUT_CHARS)
       const answer = await ask(model, prompt)
-      const lines = promotionLines(answer)
+      const lines = dropForgotten(promotionLines(answer))
       if (lines.length === 0) return
       const result = await writePromotedWithRetry(client, {
         data: [{ role: 'user', content: lines.join('\n') }],

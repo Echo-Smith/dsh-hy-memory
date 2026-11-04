@@ -11,6 +11,7 @@ import { collectSearchItems } from './recall.js'
 import {
   PERSONAL_AGENT,
   PROJECT_SESSION,
+  contentHash,
   inferTier,
   isTier,
   normalizeItems,
@@ -382,6 +383,34 @@ export function createMemoryOps(deps) {
     return { deleted: true }
   }
 
+  /** Delete one memory and remember its text so capture cannot reintroduce it. */
+  async function forget(scope = {}) {
+    assertEnabled()
+    const id = typeof scope.id === 'string' ? scope.id.trim() : ''
+    if (!id) throw new MemoryRequestError('id is required', 'id_required')
+    const ctx = context(scope)
+    const client = ready()
+    const raw = await locate(client, ctx, id, optionsOf(scope))
+    if (!raw) throw new MemoryRequestError('memory not found', 'not_found')
+    const scene = sceneOf(raw)
+    const kind = kindOf(raw)
+    const payload = { id, kind }
+    if (isProductivityScene(scene)) payload.variant = scene
+    await bridgeMethod(client, 'bridgeDelete')(payload, optionsOf(scope))
+    countCache.clear()
+    const text = String(raw?.content ?? '')
+    const store = deps.state?.data
+    if (store) {
+      if (!Array.isArray(store.forgottenHashes)) store.forgottenHashes = []
+      const hash = contentHash(text)
+      if (!store.forgottenHashes.includes(hash)) store.forgottenHashes.push(hash)
+      if (store.forgottenHashes.length > 1000) store.forgottenHashes.splice(0, store.forgottenHashes.length - 1000)
+      deps.state.save?.()
+    }
+    activity?.record({ kind: 'delete', tier: tierOfItem(raw, ctx) ?? 'session', summary: 'forgot a memory for good', detail: text.slice(0, 120), ok: true })
+    return { forgotten: true, content: text.slice(0, 160) }
+  }
+
   async function add(
     scope = {}) {
     assertEnabled()
@@ -444,7 +473,7 @@ export function createMemoryOps(deps) {
     }
   }
 
-  return { search, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
+  return { search, forget, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
 }
 
 const TEXT_OUTPUT = {
@@ -611,6 +640,23 @@ export function createTools(deps) {
       execute: guard(async (args, exec) => {
         await ops.remove({ id: args.id, tier: args.tier, ...runOptions(exec) })
         return `Deleted ${args.tier} memory ${args.id}.`
+      }),
+    },
+    {
+      name: 'memory_forget',
+      description: 'Delete a memory and remember its text, so later capture cannot bring the same fact back. Use when the user says to forget something for good.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Id of the memory to forget.' },
+        },
+        required: ['id'],
+      },
+      output: TEXT_OUTPUT,
+      timeoutMs: 120_000,
+      execute: guard(async (args, exec) => {
+        const result = await ops.forget({ id: args.id, ...runOptions(exec) })
+        return `Forgotten for good: ${result.content}`
       }),
     },
   ]

@@ -28,11 +28,11 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Migration tool shipped: `scripts/migrate-embeddings.mjs` reads a source sidecar, writes a timestamped backup, and re-adds text to a second sidecar. Dry run by default; writing needs `--apply --confirm YES-MIGRATE`. Verified with three memories across two pro stores (3 written, 0 failed; target search returned the migrated text; source totals unchanged).
 - Still open: a real multilingual provider to measure quality, and workspace-scope preservation for coding and working rows (the list route does not return it).
 
-## Phase 3: memory lifecycle
+## Phase 3: memory lifecycle (started)
 
-- Time decay in recall ranking instead of a hard cutoff.
-- Capacity cap per tier with archival instead of silent growth.
-- Panel: merge duplicates, and an explicit "forget this" that also blocks future promotion of the same content.
+- Done: time decay in recall ranking. `recall.halfLifeDays` defaults to 30, thresholding still uses the raw score, and items without timestamps skip the weighting. Three tests cover ordering and the off switch.
+- Done: `memory_forget` deletes a memory and records its text hash; promotion filters lines whose hash was forgotten. Ordinary delete stays non-blocking.
+- Still open: a capacity cap per tier with archival, panel merge of duplicates, and exposing forget in the panel (today it is a tool, not a button).
 
 ## Phase 4: explainable recall
 

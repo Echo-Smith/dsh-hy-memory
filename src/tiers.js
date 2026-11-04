@@ -190,8 +190,8 @@ export function normalizeItem(raw, context = {}) {
     layer: String(raw?.layer ?? ''),
     status: String(raw?.status ?? 'active'),
     tags: Array.isArray(raw?.tags) ? raw.tags.map(String) : [],
-    createdAt: toMillis(raw?.gmt_created ?? raw?.created_at ?? raw?.memory_at),
-    updatedAt: toMillis(raw?.gmt_modified ?? raw?.updated_at ?? raw?.gmt_created ?? raw?.created_at),
+    createdAt: toMillis(raw?.gmt_created ?? raw?.created_at ?? raw?.memory_at ?? raw?.createdAt),
+    updatedAt: toMillis(raw?.gmt_modified ?? raw?.updated_at ?? raw?.gmt_created ?? raw?.created_at ?? raw?.updatedAt ?? raw?.createdAt),
   }
   if (score !== undefined) item.score = score
   if (tier !== 'personal' && context.projectKey) item.projectKey = context.projectKey
@@ -268,4 +268,10 @@ export function inferTier(content) {
   // Both or neither: project-shaped evidence is the narrower claim, so keep the
   // user profile clean and only fall back to personal when nothing is technical.
   return project ? 'project' : 'personal'
+}
+
+
+/** Stable hash of a memory's text, used to keep a forgotten memory from returning. */
+export function contentHash(content) {
+  return createHash('sha256').update(String(content ?? '').replace(/\s+/g, ' ').trim().toLowerCase()).digest('hex')
 }
