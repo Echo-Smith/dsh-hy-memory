@@ -53,3 +53,32 @@ test('forget deletes the memory and records its text hash', async () => {
   assert.deepEqual(calls[0], { id: 'm1', kind: 'chat' })
   assert.ok(state.data.forgottenHashes.includes(contentHash('forget me  please')))
 })
+
+test('duplicates groups identical text and merge deletes the rest', async () => {
+  const deleted = []
+  const rows = [
+    { memory_id: 'a1', content: 'same fact', agent_id: 'personal', session_id: 'personal', gmt_created: 1000 },
+    { memory_id: 'a2', content: 'Same  fact', agent_id: 'personal', session_id: 'personal', gmt_created: 2000 },
+    { memory_id: 'a3', content: 'other fact', agent_id: 'personal', session_id: 'personal', gmt_created: 3000 },
+  ]
+  const client = {
+    bridgeList: async () => ({ memories: rows }),
+    get: async (id) => rows.find((row) => row.memory_id === id) ?? null,
+    bridgeDelete: async (payload) => { deleted.push(payload.id); return { success: true } },
+  }
+  const ops = createMemoryOps({
+    settings: () => ({ enabled: true }),
+    state: { data: {}, save() {} },
+    activity: { record() {} },
+    getClient: () => client,
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1' }),
+    log: () => {},
+  })
+  const found = await ops.duplicates({ tier: 'personal' })
+  assert.equal(found.groups.length, 1)
+  assert.equal(found.groups[0].keep, 'a2')
+  assert.deepEqual(found.groups[0].drop, ['a1'])
+  const merged = await ops.merge({ tier: 'personal', keep: 'a2', drop: ['a1'] })
+  assert.equal(merged.merged, 1)
+  assert.deepEqual(deleted, ['a1'])
+})

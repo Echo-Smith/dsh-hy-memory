@@ -33,7 +33,8 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: time decay in recall ranking. `recall.halfLifeDays` defaults to 30, thresholding still uses the raw score, and items without timestamps skip the weighting. Three tests cover ordering and the off switch.
 - Done: `memory_forget` deletes a memory and records its text hash; promotion filters lines whose hash was forgotten. Ordinary delete stays non-blocking.
 - Done: opt-in capacity guard. `lifecycle.archiveOnCap` appends the oldest overflow rows to a JSONL archive under the integration directory, then deletes them; off by default. Covered by a test that archives and removes exactly the overflow.
-- Still open: panel merge of duplicates, a forget button in the panel, and a measured run at real store size.
+- Done (host): `/api/hy-memory/duplicates` groups identical text keeping the newest, `/api/hy-memory/merge` deletes the listed rows; test covers grouping and the delete call. Panel button in flight.
+- Measured headroom: the live store holds 106 rows (86 chat, 17 coding, 3 working) against a 2000 cap, so the cap is not the next bottleneck; a real-store cap run is deferred until it matters.
 
 ## Phase 4: explainable recall
 

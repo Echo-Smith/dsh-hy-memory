@@ -106,6 +106,12 @@ weighting is skipped when a memory has no timestamp.
 whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
 promotion pass. Ordinary delete does not do this.
 
+## Duplicates
+
+`/api/hy-memory/duplicates` groups memories whose text is identical after whitespace and case folding,
+keeping the newest of each group and listing the rest. `/api/hy-memory/merge` then deletes the listed
+rows. Nothing runs automatically; the panel exposes it as one button in the diagnostics card.
+
 ## Capacity
 
 `lifecycle.maxPerTier` defaults to 2000 and `lifecycle.archiveOnCap` is off. Turning it on appends the

@@ -101,6 +101,11 @@ CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一�
 `memory_forget`（工具与 `/api/hy-memory/forget` 路由）删除一条记忆，并把它的文本哈希记进 `state.json`。晋升时会跳过哈希命中的行，所以用户明确
 要求忘掉的事实不会在下一次晋升里回来。普通的删除没有这个效果。
 
+## 重复项
+
+`/api/hy-memory/duplicates` 把去掉空白、折叠大小写后文本相同的记忆归组，每组保留最新一条并列出其余；
+`/api/hy-memory/merge` 负责删除列出的那些行。它不会自动运行，面板在诊断卡里提供一个按钮触发。
+
 ## 容量
 
 `lifecycle.maxPerTier` 默认 2000，`lifecycle.archiveOnCap` 默认关闭。打开后，超出上限的最旧行会先追加到

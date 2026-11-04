@@ -26,6 +26,8 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'projects', request: '{}' },
   { name: 'sessions', request: '{ projectKey? }' },
   { name: 'forget', request: '{ id }' },
+  { name: 'duplicates', request: '{ tier? }' },
+  { name: 'merge', request: '{ tier, keep?, drop }' },
   { name: 'update/check', request: '{}' },
 ])
 
@@ -333,6 +335,10 @@ export function createPanelApi(deps) {
       }
       case 'forget':
         return jsonResponse(await ops.forget({ id: body?.id }))
+      case 'duplicates':
+        return jsonResponse(await ops.duplicates(body ?? {}))
+      case 'merge':
+        return jsonResponse(await ops.merge(body ?? {}))
       case 'update/check':
         return jsonResponse(await checkUpdate(body))
       case 'projects':

@@ -63,3 +63,9 @@ Predicate: move memories from a store built for one embedder into a store built 
 - Added `/api/hy-memory/forget` so the panel can call the same forget semantics as the tool; route count moved to 16 and the contract test follows.
 - Capacity guard: `lifecycle.maxPerTier` (default 2000) with `archiveOnCap` off. Enabling it writes a JSONL archive of the overflow first, then deletes. Test: 60 rows, cap 50, ten archived lines, ten deletes, one archive file. VERIFIED.
 - Not done: panel merge of duplicates, a forget button, and any run against a real store at the cap.
+
+## Phase 3 addendum: duplicates and headroom
+
+- `ops.duplicates` groups by `contentHash` after case and whitespace folding, excludes singletons, keeps the newest via `createdAt`. Test: three rows, one group, keep `a2`, drop `a1`.
+- `ops.merge` deletes the drop ids through the same locate and delete path as `remove`, refusing when `keep` is inside `drop`. Test asserts the delete call.
+- Real store size measured: 106 rows against a 2000 cap. The cap is not exercised in production, and the guard stays off by default.

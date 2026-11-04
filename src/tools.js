@@ -411,6 +411,62 @@ export function createMemoryOps(deps) {
     return { forgotten: true, content: text.slice(0, 160) }
   }
 
+  /** Groups of memories whose text is identical after whitespace and case folding. */
+  async function duplicates(scope = {}) {
+    assertEnabled()
+    const ctx = context(scope)
+    const tiers = normalizeTierList(scope.tier ?? scope.tiers, ['personal', 'project', 'session'])
+    const groups = []
+    for (const tier of tiers) {
+      if (tier !== 'personal' && !ctx.projectKey) continue
+      if (tier === 'session' && !ctx.sessionId) continue
+      let page
+      try {
+        page = await list({ tier, limit: 500, offset: 0, projectKey: ctx.projectKey, sessionId: ctx.sessionId })
+      } catch {
+        continue
+      }
+      const byHash = new Map()
+      for (const item of page.items ?? []) {
+        const hash = contentHash(item.content)
+        if (!byHash.has(hash)) byHash.set(hash, [])
+        byHash.get(hash).push({ id: item.id, content: String(item.content ?? '').slice(0, 200), createdAt: item.createdAt ?? 0 })
+      }
+      for (const [hash, items] of byHash) {
+        if (items.length < 2) continue
+        items.sort((left, right) => right.createdAt - left.createdAt)
+        groups.push({ tier, hash, keep: items[0].id, drop: items.slice(1).map((item) => item.id), count: items.length, preview: items[0].content.slice(0, 120) })
+      }
+    }
+    return { groups, total: groups.reduce((sum, group) => sum + group.drop.length, 0) }
+  }
+
+  /** Keep one row of a duplicate group and delete the rest. */
+  async function merge(scope = {}) {
+    assertEnabled()
+    const tier = scope.tier
+    if (!isTier(tier)) throw new MemoryRequestError('tier is required', 'tier_required')
+    const drop = Array.isArray(scope.drop) ? scope.drop.map(String).filter(Boolean) : []
+    const keep = typeof scope.keep === 'string' ? scope.keep : ''
+    if (drop.length === 0) throw new MemoryRequestError('drop is required', 'drop_required')
+    if (keep && drop.includes(keep)) throw new MemoryRequestError('keep cannot be dropped', 'keep_dropped')
+    const client = ready()
+    const ctx = context(scope)
+    let merged = 0
+    for (const id of drop) {
+      const raw = await locate(client, ctx, id, optionsOf(scope))
+      if (!raw) continue
+      const scene = sceneOf(raw)
+      const payload = { id, kind: kindOf(raw) }
+      if (isProductivityScene(scene)) payload.variant = scene
+      await bridgeMethod(client, 'bridgeDelete')(payload, optionsOf(scope))
+      merged += 1
+    }
+    countCache.clear()
+    activity?.record({ kind: 'delete', tier, summary: `merged ${merged} duplicate memories`, detail: keep ? `kept ${keep}` : '', ok: true })
+    return { merged, kept: keep }
+  }
+
   async function add(
     scope = {}) {
     assertEnabled()
@@ -473,7 +529,7 @@ export function createMemoryOps(deps) {
     }
   }
 
-  return { search, forget, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
+  return { search, forget, merge, duplicates, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
 }
 
 const TEXT_OUTPUT = {
