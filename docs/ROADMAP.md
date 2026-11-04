@@ -48,7 +48,8 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: `permissions.disabledCaptureProjects` skips capture for listed project keys.
 - Done: `POST /api/hy-memory/purge {confirm:'PURGE'}` archives every memory to JSONL then deletes it; test covers the refusal without confirmation and the archive-then-delete path.
 - Done: panel surface. 彻底清除 requires typing PURGE, states the live total, archives then deletes, and surfaces host refusals; 不捕获此项目 sits in the workspace row and writes `permissions.disabledCaptureProjects`. Smoke covers the gate, the refusal path and the settings payload.
-- Open: per-session capture switch, and per-row purge targeting (today purge is all-or-nothing).
+- Done (host): `permissions.disabledCaptureSessions` skips capture for a session id; test asserts no write and no queue entry.
+- Open: a panel toggle for the per-session switch (settings file only today), and per-row purge targeting (purge is all-or-nothing).
 
 ## Agent teams (cross-cutting)
 

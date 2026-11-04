@@ -109,8 +109,8 @@ lead 的会话记忆，而不是从空白开始。捕获仍然按各自会话 id
 ## 隐私
 
 捕获在内容离开进程前先过滤凭据：API key、GitHub token、AWS key、Slack token、Bearer 头、私钥块以及
-`password=` 形式的内容会让整条消息从批次里被丢弃（`looksSensitive`）。`permissions.disabledCaptureProjects`
-列出不捕获的项目键。`POST /api/hy-memory/purge {confirm:'PURGE'}` 先把所有记忆写成集成目录下的 JSONL
+`password=` 形式的内容会让整条消息从批次里被丢弃（`looksSensitive`）。`permissions.disabledCaptureProjects` 列出不捕获的项目键，`permissions.disabledCaptureSessions`
+按会话 id 关闭捕获。`POST /api/hy-memory/purge {confirm:'PURGE'}` 先把所有记忆写成集成目录下的 JSONL
 归档，再删除；确认词不对或缺失会被拒绝。
 
 ## 这条为什么被召回

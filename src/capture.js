@@ -327,12 +327,14 @@ export function createCapture(deps) {
     try {
       const config = settings()
       const captureKey = projectKey(entry.cwd)
-      if (Array.isArray(config.permissions?.disabledCaptureProjects) && config.permissions.disabledCaptureProjects.includes(captureKey)) {
+      const disabledProjects = Array.isArray(config.permissions?.disabledCaptureProjects) ? config.permissions.disabledCaptureProjects : []
+      const disabledSessions = Array.isArray(config.permissions?.disabledCaptureSessions) ? config.permissions.disabledCaptureSessions : []
+      if (disabledProjects.includes(captureKey) || disabledSessions.includes(entry.id)) {
         entry.buffer = []
         entry.tools = []
         entry.turnsSinceFlush = 0
         persistEntry(entry)
-        activity?.record({ kind: 'capture', tier: 'session', summary: 'capture skipped for a disabled project', detail: captureKey, ok: true })
+        activity?.record({ kind: 'capture', tier: 'session', summary: 'capture skipped by a privacy switch', detail: disabledSessions.includes(entry.id) ? 'session' : `project ${captureKey}`, ok: true })
         return
       }
       const toolsSeen = entry.tools.map((tool) => tool.name)

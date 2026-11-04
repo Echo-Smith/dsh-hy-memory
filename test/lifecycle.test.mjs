@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { selectRecall } from '../src/recall.js'
 import { createMemoryOps } from '../src/tools.js'
+import { createCapture } from '../src/capture.js'
 import { contentHash } from '../src/tiers.js'
 
 test('recency ranks a fresh memory above an equally scored old one', () => {
@@ -129,4 +130,23 @@ test('purge archives before deleting and requires confirmation', async () => {
   const archives = readdirSync(join(home, 'integrations', 'hy-memory', 'archive'))
   assert.equal(archives.length, 1)
   rmSync(home, { recursive: true, force: true })
+})
+
+test('a disabled session skips capture entirely', async () => {
+  let adds = 0
+  const client = { add: async () => { adds += 1; return { success: true } }, bridgeList: async () => ({ memories: [] }) }
+  const state = { data: { capture: { sessions: {}, queue: [] } }, save() {}, flush: async () => {} }
+  const settings = {
+    enabled: true,
+    capture: { enabled: true, windowTurns: 1, idleFlushMs: 50, includeToolCalls: false },
+    promotion: { enabled: false },
+    permissions: { disabledCaptureSessions: ['quiet-sess'] },
+  }
+  const capture = createCapture({ settings: () => settings, state, activity: { record() {} }, getClient: () => client, getLlm: () => null, modelFor: () => null, log: () => {} })
+  const session = { id: 'quiet-sess', header: { cwd: '/tmp' } }
+  capture.handleSessionEvent(session, { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'private turn' }] } })
+  capture.handleSessionEvent(session, { seq: 2, type: 'turn/end', data: { turn: 1, reason: { kind: 'stop' } } })
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  assert.equal(adds, 0)
+  assert.equal(state.data.capture.queue.length, 0)
 })

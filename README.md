@@ -117,8 +117,8 @@ sibling's memories.
 
 Capture filters credentials before anything leaves the process: API keys, GitHub tokens, AWS keys, Slack
 tokens, bearer headers, private-key blocks and `password=` patterns cause the whole message to be
-dropped from the batch (`looksSensitive`). `permissions.disabledCaptureProjects` lists project keys whose
-turn capture is skipped entirely. `POST /api/hy-memory/purge {confirm:'PURGE'}` writes every memory to a
+dropped from the batch (`looksSensitive`). `permissions.disabledCaptureProjects` lists project keys whose turn capture is skipped entirely, and
+`permissions.disabledCaptureSessions` does the same for individual session ids. `POST /api/hy-memory/purge {confirm:'PURGE'}` writes every memory to a
 JSONL archive under the integration directory first, then deletes them; a wrong or missing confirmation
 is refused.
 
