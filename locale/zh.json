@@ -198,5 +198,16 @@
   "why.failed": "无法读取召回记录：{message}",
   "injected.open": "查看注入文本",
   "injected.title": "这次召回的文本",
-  "injected.missing": "这次召回的文本已不在记录里"
+  "injected.missing": "这次召回的文本已不在记录里",
+  "capture.disabled": "不捕获此项目",
+  "capture.disabledHint": "只停止该项目之后的新捕获，不会删除已有记忆。",
+  "capture.failed": "保存失败：{message}",
+  "purge.action": "彻底清除",
+  "purge.title": "彻底清除全部记忆？",
+  "purge.body": "将归档并删除全部 {n} 条记忆，此操作不可撤销。",
+  "purge.hint": "输入 PURGE 以确认",
+  "purge.confirm": "全部清除",
+  "purge.busy": "正在清除…",
+  "purge.done": "已清除 {n} 条并归档",
+  "purge.failed": "清除被拒绝：{message}"
 }

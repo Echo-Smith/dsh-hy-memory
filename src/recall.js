@@ -162,7 +162,7 @@ async function lexicalHits(client, query, context, user) {
     const agentId = String(row?.agent_id ?? '')
     const tier = agentId === 'personal'
       ? 'personal'
-      : sessionId && sessionId === context.sessionId ? 'session' : 'project'
+      : sessionId && (sessionId === context.sessionId || sessionId === context.parentSessionId) ? 'session' : 'project'
     hits.push({
       ...row,
       memory_id: row?.memory_id ?? row?.fact_id ?? row?.experience_id,
@@ -347,7 +347,7 @@ export function createRecall(deps) {
           // another session belongs to that session, not this one. Hits without a
           // session column are kept, since productivity lanes may omit it.
           items: entry.tier === 'session'
-            ? hits.filter((item) => !item?.session_id || item.session_id === context.sessionId)
+            ? hits.filter((item) => !item?.session_id || item.session_id === context.sessionId || item.session_id === context.parentSessionId)
             : entry.tier === 'project'
               ? hits.filter((item) => !item?.session_id || item.session_id === 'project')
               : hits,

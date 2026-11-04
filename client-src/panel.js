@@ -624,6 +624,14 @@ export function SettingsSection(props) {
   const [dupeOpen, setDupeOpen] = React.useState(false)
   const [dupeDone, setDupeDone] = React.useState(null)
   const [dupeError, setDupeError] = React.useState('')
+  const [permissions, setPermissions] = React.useState(null)
+  const [captureBusy, setCaptureBusy] = React.useState(false)
+  const [captureError, setCaptureError] = React.useState('')
+  const [purgeOpen, setPurgeOpen] = React.useState(false)
+  const [purgeText, setPurgeText] = React.useState('')
+  const [purgeBusy, setPurgeBusy] = React.useState('')
+  const [purgeDone, setPurgeDone] = React.useState(null)
+  const [purgeError, setPurgeError] = React.useState('')
   const [explainedIds, setExplainedIds] = React.useState(() => new Set())
   const [why, setWhy] = React.useState(null)
   const [whyLoading, setWhyLoading] = React.useState(false)
@@ -989,6 +997,79 @@ export function SettingsSection(props) {
     }
   }
 
+  // The persisted settings carry the per-project capture switches; the session
+  // pane flag shares this one read (see api.loadSettings).
+  React.useEffect(() => {
+    let cancelled = false
+    api.loadSettings().then((settings) => {
+      if (cancelled) return
+      setPermissions({
+        disabledCaptureProjects: asArray(settings?.permissions?.disabledCaptureProjects)
+          .filter((key) => typeof key === 'string' && key !== ''),
+      })
+    }).catch(() => {
+      if (cancelled) return
+      setPermissions({ disabledCaptureProjects: [] })
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const captureKeys = permissions?.disabledCaptureProjects ?? []
+  const captureDisabled = projectKey !== '' && captureKeys.includes(projectKey)
+
+  /** Flip 不捕获此项目 for the active project and persist the whole array. */
+  const toggleCapture = async (next) => {
+    if (captureBusy || projectKey === '') return
+    const updated = next
+      ? (captureKeys.includes(projectKey) ? captureKeys : [...captureKeys, projectKey])
+      : captureKeys.filter((key) => key !== projectKey)
+    setCaptureBusy(true)
+    setCaptureError('')
+    try {
+      const data = await api.setSettings({ permissions: { disabledCaptureProjects: updated } })
+      const saved = data?.settings?.permissions?.disabledCaptureProjects
+      setPermissions({
+        disabledCaptureProjects: Array.isArray(saved)
+          ? saved.filter((key) => typeof key === 'string' && key !== '')
+          : updated,
+      })
+    } catch (error) {
+      setCaptureError(errorMessage(error))
+    } finally {
+      setCaptureBusy(false)
+    }
+  }
+
+  /** Total memories the host reports, for the purge warning. */
+  const memoryTotal = () => {
+    const counts = status?.counts ?? null
+    if (counts === null) return null
+    return asNumber(counts.personal) + asNumber(counts.project) + asNumber(counts.session)
+  }
+
+  const confirmPurge = async () => {
+    if (purgeBusy !== '' || purgeText.trim() !== 'PURGE') return
+    setPurgeBusy('purge')
+    setPurgeError('')
+    try {
+      const data = await api.purge('PURGE')
+      setPurgeOpen(false)
+      setPurgeText('')
+      setPurgeDone(asNumber(data?.purged))
+      refresh()
+    } catch (error) {
+      setPurgeError(errorMessage(error))
+    } finally {
+      setPurgeBusy('')
+    }
+  }
+
+  const purgeHint = () => {
+    if (purgeError !== '') return t('purge.failed', { message: purgeError })
+    if (purgeDone !== null) return t('purge.done', { n: purgeDone })
+    return ''
+  }
+
   /** Open the recall explanation for one row: the host answers from its log. */
   const openWhy = async (item) => {
     setWhy({ id: item.id, title: memoryTitle(item.content, t('row.untitled')), result: null })
@@ -1226,7 +1307,18 @@ export function SettingsSection(props) {
     h('span', { className: 'hm-divider', 'aria-hidden': 'true' }),
     h('span', { className: 'hm-projectCount' }, t('count.memories', { n: workspaceCount })),
     renderSearchField(),
-    renderRefreshButton())
+    renderRefreshButton(),
+    h('label', { className: 'hm-captureToggle', title: t('capture.disabledHint') },
+      h('input', {
+        type: 'checkbox',
+        className: 'hm-captureCheck',
+        checked: captureDisabled,
+        disabled: captureBusy || projectKey === '' || permissions === null,
+        'aria-label': t('capture.disabled'),
+        onChange: (event) => { void toggleCapture(event.target.checked) },
+      }),
+      h('span', { className: 'hm-captureLabel' }, t('capture.disabled'))),
+    captureError !== '' ? h('span', { className: 'hm-error' }, t('capture.failed', { message: captureError })) : null)
 
   const renderBlockHead = (title, count) => h('div', { className: 'hm-blockHead' },
     h('h3', { className: 'hm-blockTitle' }, title),
@@ -1562,6 +1654,42 @@ export function SettingsSection(props) {
     body)
   }
 
+  const renderPurgeModal = () => h(ui.Modal, {
+    open: purgeOpen,
+    onClose: () => {
+      if (purgeBusy !== '') return
+      setPurgeOpen(false)
+      setPurgeText('')
+      setPurgeError('')
+    },
+    title: t('purge.title'),
+    closeLabel: t('common.close'),
+    footer: h('div', { className: 'hm-row' },
+      h(ui.Button, {
+        size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+        onClick: () => { setPurgeOpen(false); setPurgeText(''); setPurgeError('') },
+      }, t('row.confirmDelete.cancel')),
+      h(ui.Button, {
+        size: 'sm',
+        variant: 'primary',
+        disabled: purgeBusy !== '' || purgeText.trim() !== 'PURGE',
+        onClick: () => { void confirmPurge() },
+      }, purgeBusy !== '' ? t('purge.busy') : t('purge.confirm'))),
+  },
+  h('p', { className: 'hm-muted' }, t('purge.body', { n: memoryTotal() ?? 0 })),
+  h('label', { className: 'hm-field hm-purgeField' },
+    h('span', { className: 'hm-fieldLabel' }, t('purge.hint')),
+    h('span', { className: 'hm-inputWrap' },
+      h('input', {
+        type: 'text',
+        className: 'hm-input',
+        value: purgeText,
+        placeholder: 'PURGE',
+        'aria-label': t('purge.hint'),
+        onChange: (event) => { setPurgeText(event.target.value) },
+      }))),
+  purgeError !== '' ? h('p', { className: 'hm-error', role: 'alert' }, t('purge.failed', { message: purgeError })) : null)
+
   const renderDupeModal = () => h(ui.Modal, {
     open: dupeOpen && dupeScan !== null,
     onClose: () => {
@@ -1657,10 +1785,7 @@ export function SettingsSection(props) {
         h('span', { className: 'hm-fieldLabel' }, t('diag.dataSize')),
         h('span', { className: 'hm-fieldValue' }, size)))
     }
-    const counts = status?.counts ?? null
-    const totalCount = counts === null
-      ? null
-      : asNumber(counts.personal) + asNumber(counts.project) + asNumber(counts.session)
+    const totalCount = memoryTotal()
     const context = status?.context ?? null
     const memoryTokens = asNumber(context?.memoryTokens)
     const totalTokens = asNumber(context?.totalTokens)
@@ -1695,6 +1820,24 @@ export function SettingsSection(props) {
             className: `hm-dupeHint${dupeError !== '' ? ' hm-error' : ''}`,
             role: 'status',
           }, dupeHint())
+          : null),
+      h('div', { className: 'hm-dupeRow' },
+        h(ui.Button, {
+          size: 'sm',
+          variant: 'outline',
+          disabled: purgeBusy !== '',
+          onClick: () => {
+            setPurgeText('')
+            setPurgeError('')
+            setPurgeDone(null)
+            setPurgeOpen(true)
+          },
+        }, purgeBusy !== '' ? t('purge.busy') : t('purge.action')),
+        purgeHint() !== ''
+          ? h('span', {
+            className: `hm-dupeHint${purgeError !== '' ? ' hm-error' : ''}`,
+            role: 'status',
+          }, purgeHint())
           : null),
       diagOpen ? h('dl', { className: 'hm-grid' }, details) : null,
       diagOpen ? h('pre', { className: 'hm-pre' }, JSON.stringify(status, null, 2)) : null)
@@ -1796,5 +1939,6 @@ export function SettingsSection(props) {
     renderDeleteModal(),
     renderForgetModal(),
     renderDupeModal(),
-    renderWhyModal())
+    renderWhyModal(),
+    renderPurgeModal())
 }

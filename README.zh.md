@@ -101,6 +101,11 @@ CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一�
 `memory_forget`（工具与 `/api/hy-memory/forget` 路由）删除一条记忆，并把它的文本哈希记进 `state.json`。晋升时会跳过哈希命中的行，所以用户明确
 要求忘掉的事实不会在下一次晋升里回来。普通的删除没有这个效果。
 
+## 智能体团队
+
+子代理会话的 `header.parentSession` 指向 lead 的会话 id。召回把父会话也算进会话层，所以队友一上来就能用上
+lead 的会话记忆，而不是从空白开始。捕获仍然按各自会话 id 写入，来源保持精确，lead 不会继承兄弟会话的记忆。
+
 ## 隐私
 
 捕获在内容离开进程前先过滤凭据：API key、GitHub token、AWS key、Slack token、Bearer 头、私钥块以及

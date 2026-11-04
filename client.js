@@ -109,13 +109,29 @@ function readStatus() {
   });
   return statusPromise;
 }
+var settingsPromise = null;
+function loadSettings() {
+  if (settingsPromise === null) {
+    settingsPromise = request("settings/get").then((data) => data?.settings ?? data ?? {}).catch((error) => {
+      settingsPromise = null;
+      throw error;
+    });
+  }
+  return settingsPromise;
+}
+function readSettings() {
+  settingsPromise = request("settings/get").then((data) => data?.settings ?? data ?? {}).catch((error) => {
+    settingsPromise = null;
+    throw error;
+  });
+  return settingsPromise;
+}
 var sessionPanelEnabled = null;
 var sessionPanelPromise = null;
 function getSessionPanelEnabled() {
   if (sessionPanelEnabled !== null) return Promise.resolve(sessionPanelEnabled);
   if (sessionPanelPromise === null) {
-    sessionPanelPromise = request("settings/get").then((data) => {
-      const settings = data?.settings ?? data ?? {};
+    sessionPanelPromise = loadSettings().then((settings) => {
       sessionPanelEnabled = settings?.ui?.sessionPanel !== false;
       return sessionPanelEnabled;
     }).catch(() => {
@@ -133,6 +149,9 @@ var api = {
   delete: (payload) => request("delete", payload),
   // Forget: delete the memory AND record its text so promotion cannot bring it back.
   forget: (id) => request("forget", { id }),
+  // Purge: archive every memory to JSONL then delete it. The host refuses
+  // anything but the literal confirmation string.
+  purge: (confirm) => request("purge", { confirm }),
   // Recall explanation: why (if ever) the host injected this memory.
   explain: (id) => request("explain", { id }),
   // Which memories appear in the recall log at all, and the text injected at one
@@ -146,6 +165,8 @@ var api = {
   activity: (since) => request("activity", since === void 0 ? {} : { since }),
   start: () => request("start"),
   getSettings: () => request("settings/get"),
+  loadSettings,
+  readSettings,
   setSettings: (patch) => request("settings/set", { patch }),
   // Workspace and session pickers: `projects` lists the projects the plugin
   // already knows, `sessions` the sessions that hold session-tier memories in
@@ -363,7 +384,18 @@ var zh_default = {
   "why.failed": "无法读取召回记录：{message}",
   "injected.open": "查看注入文本",
   "injected.title": "这次召回的文本",
-  "injected.missing": "这次召回的文本已不在记录里"
+  "injected.missing": "这次召回的文本已不在记录里",
+  "capture.disabled": "不捕获此项目",
+  "capture.disabledHint": "只停止该项目之后的新捕获，不会删除已有记忆。",
+  "capture.failed": "保存失败：{message}",
+  "purge.action": "彻底清除",
+  "purge.title": "彻底清除全部记忆？",
+  "purge.body": "将归档并删除全部 {n} 条记忆，此操作不可撤销。",
+  "purge.hint": "输入 PURGE 以确认",
+  "purge.confirm": "全部清除",
+  "purge.busy": "正在清除…",
+  "purge.done": "已清除 {n} 条并归档",
+  "purge.failed": "清除被拒绝：{message}"
 };
 
 // locale/en.json
@@ -567,7 +599,18 @@ var en_default = {
   "why.failed": "Could not read the recall record: {message}",
   "injected.open": "View injected text",
   "injected.title": "Text injected by this recall",
-  "injected.missing": "This recall’s text is no longer in the log"
+  "injected.missing": "This recall’s text is no longer in the log",
+  "capture.disabled": "Don’t capture this project",
+  "capture.disabledHint": "Stops new captures for this project only; existing memories are kept.",
+  "capture.failed": "Could not save: {message}",
+  "purge.action": "Purge everything",
+  "purge.title": "Purge every memory?",
+  "purge.body": "This archives and deletes all {n} memories. It cannot be undone.",
+  "purge.hint": "Type PURGE to confirm",
+  "purge.confirm": "Purge all",
+  "purge.busy": "Purging…",
+  "purge.done": "Purged {n} memories and archived them",
+  "purge.failed": "Purge refused: {message}"
 };
 
 // client-src/locale.js
@@ -1053,6 +1096,11 @@ var PANEL_CSS = `
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
 .hm-dupeHint { font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-captureToggle { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dsw-alias-label-secondary); cursor:pointer; }
+.hm-captureCheck { width:13px; height:13px; margin:0; accent-color:var(--dsw-alias-brand-primary); cursor:pointer; }
+.hm-captureCheck:disabled { cursor:not-allowed; opacity:0.5; }
+.hm-purgeField { align-items:center; }
+.hm-purgeField .hm-inputWrap { flex:1 1 auto; }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }
@@ -1797,6 +1845,14 @@ function SettingsSection(props) {
   const [dupeOpen, setDupeOpen] = React2.useState(false);
   const [dupeDone, setDupeDone] = React2.useState(null);
   const [dupeError, setDupeError] = React2.useState("");
+  const [permissions, setPermissions] = React2.useState(null);
+  const [captureBusy, setCaptureBusy] = React2.useState(false);
+  const [captureError, setCaptureError] = React2.useState("");
+  const [purgeOpen, setPurgeOpen] = React2.useState(false);
+  const [purgeText, setPurgeText] = React2.useState("");
+  const [purgeBusy, setPurgeBusy] = React2.useState("");
+  const [purgeDone, setPurgeDone] = React2.useState(null);
+  const [purgeError, setPurgeError] = React2.useState("");
   const [explainedIds, setExplainedIds] = React2.useState(() => /* @__PURE__ */ new Set());
   const [why, setWhy] = React2.useState(null);
   const [whyLoading, setWhyLoading] = React2.useState(false);
@@ -2143,6 +2199,66 @@ function SettingsSection(props) {
       setForgetting(false);
     }
   };
+  React2.useEffect(() => {
+    let cancelled = false;
+    api.loadSettings().then((settings) => {
+      if (cancelled) return;
+      setPermissions({
+        disabledCaptureProjects: asArray(settings?.permissions?.disabledCaptureProjects).filter((key) => typeof key === "string" && key !== "")
+      });
+    }).catch(() => {
+      if (cancelled) return;
+      setPermissions({ disabledCaptureProjects: [] });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const captureKeys = permissions?.disabledCaptureProjects ?? [];
+  const captureDisabled = projectKey !== "" && captureKeys.includes(projectKey);
+  const toggleCapture = async (next) => {
+    if (captureBusy || projectKey === "") return;
+    const updated = next ? captureKeys.includes(projectKey) ? captureKeys : [...captureKeys, projectKey] : captureKeys.filter((key) => key !== projectKey);
+    setCaptureBusy(true);
+    setCaptureError("");
+    try {
+      const data = await api.setSettings({ permissions: { disabledCaptureProjects: updated } });
+      const saved = data?.settings?.permissions?.disabledCaptureProjects;
+      setPermissions({
+        disabledCaptureProjects: Array.isArray(saved) ? saved.filter((key) => typeof key === "string" && key !== "") : updated
+      });
+    } catch (error) {
+      setCaptureError(errorMessage(error));
+    } finally {
+      setCaptureBusy(false);
+    }
+  };
+  const memoryTotal = () => {
+    const counts = status?.counts ?? null;
+    if (counts === null) return null;
+    return asNumber(counts.personal) + asNumber(counts.project) + asNumber(counts.session);
+  };
+  const confirmPurge = async () => {
+    if (purgeBusy !== "" || purgeText.trim() !== "PURGE") return;
+    setPurgeBusy("purge");
+    setPurgeError("");
+    try {
+      const data = await api.purge("PURGE");
+      setPurgeOpen(false);
+      setPurgeText("");
+      setPurgeDone(asNumber(data?.purged));
+      refresh();
+    } catch (error) {
+      setPurgeError(errorMessage(error));
+    } finally {
+      setPurgeBusy("");
+    }
+  };
+  const purgeHint = () => {
+    if (purgeError !== "") return t("purge.failed", { message: purgeError });
+    if (purgeDone !== null) return t("purge.done", { n: purgeDone });
+    return "";
+  };
   const openWhy = async (item) => {
     setWhy({ id: item.id, title: memoryTitle(item.content, t("row.untitled")), result: null });
     setWhyLoading(true);
@@ -2364,7 +2480,23 @@ function SettingsSection(props) {
     h("span", { className: "hm-divider", "aria-hidden": "true" }),
     h("span", { className: "hm-projectCount" }, t("count.memories", { n: workspaceCount })),
     renderSearchField(),
-    renderRefreshButton()
+    renderRefreshButton(),
+    h(
+      "label",
+      { className: "hm-captureToggle", title: t("capture.disabledHint") },
+      h("input", {
+        type: "checkbox",
+        className: "hm-captureCheck",
+        checked: captureDisabled,
+        disabled: captureBusy || projectKey === "" || permissions === null,
+        "aria-label": t("capture.disabled"),
+        onChange: (event) => {
+          void toggleCapture(event.target.checked);
+        }
+      }),
+      h("span", { className: "hm-captureLabel" }, t("capture.disabled"))
+    ),
+    captureError !== "" ? h("span", { className: "hm-error" }, t("capture.failed", { message: captureError })) : null
   );
   const renderBlockHead = (title, count) => h(
     "div",
@@ -2792,6 +2924,63 @@ function SettingsSection(props) {
       body
     );
   };
+  const renderPurgeModal = () => h(
+    ui.Modal,
+    {
+      open: purgeOpen,
+      onClose: () => {
+        if (purgeBusy !== "") return;
+        setPurgeOpen(false);
+        setPurgeText("");
+        setPurgeError("");
+      },
+      title: t("purge.title"),
+      closeLabel: t("common.close"),
+      footer: h(
+        "div",
+        { className: "hm-row" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "ghost",
+          "data-modal-autofocus": "",
+          onClick: () => {
+            setPurgeOpen(false);
+            setPurgeText("");
+            setPurgeError("");
+          }
+        }, t("row.confirmDelete.cancel")),
+        h(ui.Button, {
+          size: "sm",
+          variant: "primary",
+          disabled: purgeBusy !== "" || purgeText.trim() !== "PURGE",
+          onClick: () => {
+            void confirmPurge();
+          }
+        }, purgeBusy !== "" ? t("purge.busy") : t("purge.confirm"))
+      )
+    },
+    h("p", { className: "hm-muted" }, t("purge.body", { n: memoryTotal() ?? 0 })),
+    h(
+      "label",
+      { className: "hm-field hm-purgeField" },
+      h("span", { className: "hm-fieldLabel" }, t("purge.hint")),
+      h(
+        "span",
+        { className: "hm-inputWrap" },
+        h("input", {
+          type: "text",
+          className: "hm-input",
+          value: purgeText,
+          placeholder: "PURGE",
+          "aria-label": t("purge.hint"),
+          onChange: (event) => {
+            setPurgeText(event.target.value);
+          }
+        })
+      )
+    ),
+    purgeError !== "" ? h("p", { className: "hm-error", role: "alert" }, t("purge.failed", { message: purgeError })) : null
+  );
   const renderDupeModal = () => h(
     ui.Modal,
     {
@@ -2931,8 +3120,7 @@ function SettingsSection(props) {
         h("span", { className: "hm-fieldValue" }, size)
       ));
     }
-    const counts = status?.counts ?? null;
-    const totalCount = counts === null ? null : asNumber(counts.personal) + asNumber(counts.project) + asNumber(counts.session);
+    const totalCount = memoryTotal();
     const context = status?.context ?? null;
     const memoryTokens = asNumber(context?.memoryTokens);
     const totalTokens = asNumber(context?.totalTokens);
@@ -2980,6 +3168,25 @@ function SettingsSection(props) {
           className: `hm-dupeHint${dupeError !== "" ? " hm-error" : ""}`,
           role: "status"
         }, dupeHint()) : null
+      ),
+      h(
+        "div",
+        { className: "hm-dupeRow" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "outline",
+          disabled: purgeBusy !== "",
+          onClick: () => {
+            setPurgeText("");
+            setPurgeError("");
+            setPurgeDone(null);
+            setPurgeOpen(true);
+          }
+        }, purgeBusy !== "" ? t("purge.busy") : t("purge.action")),
+        purgeHint() !== "" ? h("span", {
+          className: `hm-dupeHint${purgeError !== "" ? " hm-error" : ""}`,
+          role: "status"
+        }, purgeHint()) : null
       ),
       diagOpen ? h("dl", { className: "hm-grid" }, details) : null,
       diagOpen ? h("pre", { className: "hm-pre" }, JSON.stringify(status, null, 2)) : null
@@ -3091,7 +3298,8 @@ function SettingsSection(props) {
     renderDeleteModal(),
     renderForgetModal(),
     renderDupeModal(),
-    renderWhyModal()
+    renderWhyModal(),
+    renderPurgeModal()
   );
 }
 

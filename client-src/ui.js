@@ -514,6 +514,11 @@ const PANEL_CSS = `
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
 .hm-dupeHint { font-size:11px; color:var(--dsw-alias-label-secondary); }
+.hm-captureToggle { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dsw-alias-label-secondary); cursor:pointer; }
+.hm-captureCheck { width:13px; height:13px; margin:0; accent-color:var(--dsw-alias-brand-primary); cursor:pointer; }
+.hm-captureCheck:disabled { cursor:not-allowed; opacity:0.5; }
+.hm-purgeField { align-items:center; }
+.hm-purgeField .hm-inputWrap { flex:1 1 auto; }
 .hm-select { appearance:none; border:1px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm, 7px); background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-primary); font:inherit; font-size:11px; padding:2px 6px; cursor:pointer; }
 .hm-select:focus { outline:none; border-color:var(--dsw-alias-brand-primary); }
 .hm-pillIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }

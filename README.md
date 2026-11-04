@@ -106,6 +106,13 @@ weighting is skipped when a memory has no timestamp.
 whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
 promotion pass. Ordinary delete does not do this.
 
+## Agent teams
+
+A subagent session carries `header.parentSession`, the lead's session id. Recall treats that parent as part
+of the session tier, so a teammate starts with the lead's session memory instead of an empty context. Capture
+still writes each session's turns under its own id, so provenance stays exact and a lead does not inherit a
+sibling's memories.
+
 ## Privacy
 
 Capture filters credentials before anything leaves the process: API keys, GitHub tokens, AWS keys, Slack

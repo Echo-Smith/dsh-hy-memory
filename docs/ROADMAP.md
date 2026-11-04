@@ -49,6 +49,11 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: `POST /api/hy-memory/purge {confirm:'PURGE'}` archives every memory to JSONL then deletes it; test covers the refusal without confirmation and the archive-then-delete path.
 - In flight: panel surface for purge and the project switch. Open: per-session switch, and a purge that names the count before deleting.
 
+## Agent teams (cross-cutting)
+
+- Done: subagent sessions inherit the lead's session-tier memory through `header.parentSession`; lead sessions keep only their own. Tests cover the inheriting and non-inheriting cases.
+- Open: panel labelling of lead versus subagent sessions, and promoting a subagent's findings to the lead session explicitly.
+
 ## Phase 6: MemHub
 
 MemHub already owns a sync path; the plugin should call it instead of reimplementing transport.

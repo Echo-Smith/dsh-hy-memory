@@ -89,6 +89,35 @@ export function readStatus() {
   return statusPromise
 }
 
+/**
+ * The persisted settings object, read once per page load. The session-pane flag
+ * and the panel's permissions both come from it, so they share one request.
+ */
+let settingsPromise = null
+
+export function loadSettings() {
+  if (settingsPromise === null) {
+    settingsPromise = request('settings/get')
+      .then((data) => data?.settings ?? data ?? {})
+      .catch((error) => {
+        settingsPromise = null
+        throw error
+      })
+  }
+  return settingsPromise
+}
+
+/** Force a fresh settings read (after a patch the caller cannot merge itself). */
+export function readSettings() {
+  settingsPromise = request('settings/get')
+    .then((data) => data?.settings ?? data ?? {})
+    .catch((error) => {
+      settingsPromise = null
+      throw error
+    })
+  return settingsPromise
+}
+
 /** The `ui.sessionPanel` flag, read once and cached for the page lifetime. */
 let sessionPanelEnabled = null
 let sessionPanelPromise = null
@@ -101,9 +130,8 @@ let sessionPanelPromise = null
 export function getSessionPanelEnabled() {
   if (sessionPanelEnabled !== null) return Promise.resolve(sessionPanelEnabled)
   if (sessionPanelPromise === null) {
-    sessionPanelPromise = request('settings/get')
-      .then((data) => {
-        const settings = data?.settings ?? data ?? {}
+    sessionPanelPromise = loadSettings()
+      .then((settings) => {
         sessionPanelEnabled = settings?.ui?.sessionPanel !== false
         return sessionPanelEnabled
       })
@@ -123,6 +151,9 @@ export const api = {
   delete: (payload) => request('delete', payload),
   // Forget: delete the memory AND record its text so promotion cannot bring it back.
   forget: (id) => request('forget', { id }),
+  // Purge: archive every memory to JSONL then delete it. The host refuses
+  // anything but the literal confirmation string.
+  purge: (confirm) => request('purge', { confirm }),
   // Recall explanation: why (if ever) the host injected this memory.
   explain: (id) => request('explain', { id }),
   // Which memories appear in the recall log at all, and the text injected at one
@@ -136,6 +167,8 @@ export const api = {
   activity: (since) => request('activity', since === undefined ? {} : { since }),
   start: () => request('start'),
   getSettings: () => request('settings/get'),
+  loadSettings,
+  readSettings,
   setSettings: (patch) => request('settings/set', { patch }),
   // Workspace and session pickers: `projects` lists the projects the plugin
   // already knows, `sessions` the sessions that hold session-tier memories in

@@ -179,6 +179,9 @@ function createRuntime(ctx, config) {
     const cwd = (typeof session?.header?.cwd === 'string' ? session.header.cwd : '') || lastCwd
     return {
       sessionId: sessionId ?? '',
+      // Subagent sessions name their lead here; sharing its memory is the
+      // difference between a teammate with context and one starting cold.
+      parentSessionId: typeof session?.header?.parentSession === 'string' ? session.header.parentSession : '',
       projectKey: projectKey(cwd),
       projectPath: cwd,
       sessionTitle: titles.get(sessionId ?? '') ?? '',

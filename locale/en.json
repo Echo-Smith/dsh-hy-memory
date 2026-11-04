@@ -198,5 +198,16 @@
   "why.failed": "Could not read the recall record: {message}",
   "injected.open": "View injected text",
   "injected.title": "Text injected by this recall",
-  "injected.missing": "This recall’s text is no longer in the log"
+  "injected.missing": "This recall’s text is no longer in the log",
+  "capture.disabled": "Don’t capture this project",
+  "capture.disabledHint": "Stops new captures for this project only; existing memories are kept.",
+  "capture.failed": "Could not save: {message}",
+  "purge.action": "Purge everything",
+  "purge.title": "Purge every memory?",
+  "purge.body": "This archives and deletes all {n} memories. It cannot be undone.",
+  "purge.hint": "Type PURGE to confirm",
+  "purge.confirm": "Purge all",
+  "purge.busy": "Purging…",
+  "purge.done": "Purged {n} memories and archived them",
+  "purge.failed": "Purge refused: {message}"
 }
