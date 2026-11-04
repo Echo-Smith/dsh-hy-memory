@@ -513,8 +513,8 @@ const PANEL_CSS = `
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-dupeRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:2px; }
-.hm-dangerAction { color:var(--dsw-alias-state-error-primary); }
-.hm-dangerAction:hover { border-color:var(--dsw-alias-state-error-primary); }
+.hm-dangerAction,
+.hm-dangerAction:hover { color:var(--dsw-alias-state-error-primary) !important; border-color:var(--dsw-alias-state-error-primary) !important; }
 .hm-dupeHint { font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-captureToggle { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dsw-alias-label-secondary); cursor:pointer; }
 .hm-captureCheck { width:13px; height:13px; margin:0; accent-color:var(--dsw-alias-brand-primary); cursor:pointer; }

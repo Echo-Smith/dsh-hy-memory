@@ -66,6 +66,16 @@ Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edi
 |---|---|---|
 | ![Personal](docs/screenshots/panel-personal.png) | ![Project and session](docs/screenshots/panel-workspace.png) | ![Update](docs/screenshots/panel-update.png) |
 
+| Row actions | Forget confirmation | Why recalled |
+|---|---|---|
+| ![Row actions](docs/screenshots/panel-row-actions.png) | ![Forget](docs/screenshots/panel-forget-confirm.png) | ![Why recalled](docs/screenshots/panel-why-recalled.png) |
+
+| Injected text | Duplicates | Purge |
+|---|---|---|
+| ![Injected text](docs/screenshots/panel-injected-text.png) | ![Duplicates](docs/screenshots/panel-duplicates.png) | ![Purge](docs/screenshots/panel-purge.png) |
+
+Project switch: [don't remember this project](docs/screenshots/panel-capture-switch.png)
+
 MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 
 ## Compatibility and limits
@@ -79,7 +89,7 @@ MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 
 ```bash
 npm run check         # syntax of entry points and the built bundle
-npm test              # 85 host tests
+npm test              # 102 host tests
 npm run test:smoke    # panel smoke, reads the built client.js
 npm run eval:recall   # offline fixtures: hit, noise, budget, injected size
 ```

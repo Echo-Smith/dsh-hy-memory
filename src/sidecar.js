@@ -141,10 +141,16 @@ export class Sidecar {
       }
       await mkdir(dirname(logPath()), { recursive: true })
       this.#set('starting')
-      this.#child = spawn(python, [BRIDGE, '--port', String(this.#port)], { env, stdio: ['ignore', 'pipe', 'pipe'] })
-      this.#child.stdout.on('data', (chunk) => this.#log(chunk))
-      this.#child.stderr.on('data', (chunk) => this.#log(chunk))
-      this.#child.on('exit', (code, signal) => this.#onExit(code, signal))
+      const child = spawn(python, [BRIDGE, '--port', String(this.#port)], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      this.#child = child
+      child.stdout.on('data', (chunk) => this.#log(chunk))
+      child.stderr.on('data', (chunk) => this.#log(chunk))
+      // A stopped child exits a moment later. Its exit must not clear a newer
+      // child that has already replaced it, which used to fail the wake-up.
+      child.on('exit', (code, signal) => {
+        if (this.#child !== child) return
+        this.#onExit(code, signal)
+      })
       await this.#waitHealthy()
       this.#startedAt = Date.now()
       this.#restarts = 0

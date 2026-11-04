@@ -53,6 +53,16 @@ dsh plugin --profile desktop add link:$(pwd)
 |---|---|---|
 | ![个人](docs/screenshots/panel-personal.png) | ![项目与会话](docs/screenshots/panel-workspace.png) | ![更新](docs/screenshots/panel-update.png) |
 
+| 行操作 | 永久遗忘确认 | 为什么召回 |
+|---|---|---|
+| ![行操作](docs/screenshots/panel-row-actions.png) | ![永久遗忘](docs/screenshots/panel-forget-confirm.png) | ![为什么召回](docs/screenshots/panel-why-recalled.png) |
+
+| 注入文本 | 重复整理 | 彻底清除 |
+|---|---|---|
+| ![注入文本](docs/screenshots/panel-injected-text.png) | ![重复整理](docs/screenshots/panel-duplicates.png) | ![彻底清除](docs/screenshots/panel-purge.png) |
+
+项目开关：[这个项目不记忆](docs/screenshots/panel-capture-switch.png)
+
 MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 
 ## 兼容与边界
