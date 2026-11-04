@@ -48,13 +48,19 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: `permissions.disabledCaptureProjects` skips capture for listed project keys.
 - Done: `POST /api/hy-memory/purge {confirm:'PURGE'}` archives every memory to JSONL then deletes it; test covers the refusal without confirmation and the archive-then-delete path.
 - Done: panel surface. 彻底清除 requires typing PURGE, states the live total, archives then deletes, and surfaces host refusals; 不捕获此项目 sits in the workspace row and writes `permissions.disabledCaptureProjects`. Smoke covers the gate, the refusal path and the settings payload.
-- Done (host): `permissions.disabledCaptureSessions` skips capture for a session id; test asserts no write and no queue entry.
-- Open: a panel toggle for the per-session switch (settings file only today), and per-row purge targeting (purge is all-or-nothing).
+- Cut: the per-session switch, after review. One global pause plus the per-project switch cover the real cases; a session-scoped key added surface without a UI. Concept is now one sentence: 这个项目不记忆.
+- Open: per-row purge targeting (purge is all-or-nothing).
 
 ## Agent teams (cross-cutting)
 
 - Done: subagent sessions inherit the lead's session-tier memory through `header.parentSession`; lead sessions keep only their own. Tests cover the inheriting and non-inheriting cases.
 - Open: panel labelling of lead versus subagent sessions, and promoting a subagent's findings to the lead session explicitly.
+
+## Phase 6: MemHub (started)
+
+- Done: paired this Harness with MemHub through its one-time code, credential stored 0600 under `$DSH_HOME/memhub`, `mcp-one-memory` added to the profile as a stdio MCP client, host reloaded, and an authenticated `MemHub_recall` call succeeded (empty result, no auth error).
+- Done: status exposes `memhub.pairing` (credential count plus loopback broker state) and the MemHub card points at MemHub's own sync switch instead of duplicating it.
+- Open: verified end-to-end sync (enable it in MemHub, confirm imported conversations appear), and deciding whether the local export/pull/import actions stay once sync is on.
 
 ## Phase 6: MemHub
 

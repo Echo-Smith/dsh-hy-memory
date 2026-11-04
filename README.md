@@ -117,8 +117,9 @@ sibling's memories.
 
 Capture filters credentials before anything leaves the process: API keys, GitHub tokens, AWS keys, Slack
 tokens, bearer headers, private-key blocks and `password=` patterns cause the whole message to be
-dropped from the batch (`looksSensitive`). `permissions.disabledCaptureProjects` lists project keys whose turn capture is skipped entirely, and
-`permissions.disabledCaptureSessions` does the same for individual session ids. `POST /api/hy-memory/purge {confirm:'PURGE'}` writes every memory to a
+dropped from the batch (`looksSensitive`). `permissions.disabledCaptureProjects` lists project keys whose turn capture is skipped entirely: the
+"don't remember this project" switch, for a client repo or private code where memory elsewhere keeps
+working. `POST /api/hy-memory/purge {confirm:'PURGE'}` writes every memory to a
 JSONL archive under the integration directory first, then deletes them; a wrong or missing confirmation
 is refused.
 
@@ -128,6 +129,13 @@ Every injection appends one entry to `state.json` under `recallLog` (last 50), h
 the source (semantic, lexical or both) and, per item, tier, score and rank. `POST /api/hy-memory/explain
 {id}` returns the newest entry that contains a memory id, so the panel can answer "why is this row here"
 instead of showing an opaque list. The log is capped and stores ids and scores, not memory text.
+
+## MemHub pairing
+
+`mcp-one-memory` runs MemHub's own `mcp.cjs` over stdio, so this Harness can call `MemHub_recall` and
+friends directly. Pairing is detected by counting credential files under `$DSH_HOME/memhub` and reading
+the loopback broker's discovery file; the status route reports `memhub.pairing` and the MemHub card says
+whether sync should be turned on in MemHub's own panel. The plugin does not reimplement MemHub sync.
 
 ## Duplicates
 

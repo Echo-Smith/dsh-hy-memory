@@ -14,12 +14,12 @@
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { integrationDir, venvDir } from './paths.js'
+import { dshHome, integrationDir, venvDir } from './paths.js'
 import { normalizeItem, resolveUser, writeScope } from './tiers.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
 
@@ -564,4 +564,25 @@ export function createMemHub(deps = {}) {
   }
 
   return { detect: () => detectMemHub({ home: resolveHome() }), exportOurs, importFile, pull }
+}
+
+
+/**
+ * Whether this Harness has already paired with MemHub. Reports only counts and
+ * a loopback address; credential contents are never read into memory here.
+ */
+export function detectPairing({ home = dshHome(), brokerFile = join(homedir(), '.one-memory', 'integrations', 'cursor-broker.json') } = {}) {
+  const result = { paired: false, credentials: 0, brokerRunning: false, host: '', port: 0 }
+  try {
+    result.credentials = readdirSync(join(home, 'memhub')).filter((name) => name.endsWith('.credential')).length
+    result.paired = result.credentials > 0
+  } catch {}
+  try {
+    const broker = JSON.parse(readFileSync(brokerFile, 'utf8'))
+    const loopback = broker?.host === '127.0.0.1' || broker?.host === '::1' || broker?.host === 'localhost'
+    result.brokerRunning = broker?.status === 'running' && loopback
+    result.host = loopback ? String(broker.host) : ''
+    result.port = Number(broker?.port) || 0
+  } catch {}
+  return result
 }

@@ -385,8 +385,8 @@ var zh_default = {
   "injected.open": "查看注入文本",
   "injected.title": "这次召回的文本",
   "injected.missing": "这次召回的文本已不在记录里",
-  "capture.disabled": "不捕获此项目",
-  "capture.disabledHint": "只停止该项目之后的新捕获，不会删除已有记忆。",
+  "capture.disabled": "这个项目不记忆",
+  "capture.disabledHint": "只停止这个项目之后的新捕获，不会删除已有记忆。",
   "capture.failed": "保存失败：{message}",
   "purge.action": "彻底清除",
   "purge.title": "彻底清除全部记忆？",
@@ -395,7 +395,9 @@ var zh_default = {
   "purge.confirm": "全部清除",
   "purge.busy": "正在清除…",
   "purge.done": "已清除 {n} 条并归档",
-  "purge.failed": "清除被拒绝：{message}"
+  "purge.failed": "清除被拒绝：{message}",
+  "memhub.paired": "已与 MemHub 配对，同步在 MemHub 面板里开启。",
+  "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。"
 };
 
 // locale/en.json
@@ -600,7 +602,7 @@ var en_default = {
   "injected.open": "View injected text",
   "injected.title": "Text injected by this recall",
   "injected.missing": "This recall’s text is no longer in the log",
-  "capture.disabled": "Don’t capture this project",
+  "capture.disabled": "Don’t remember this project",
   "capture.disabledHint": "Stops new captures for this project only; existing memories are kept.",
   "capture.failed": "Could not save: {message}",
   "purge.action": "Purge everything",
@@ -610,7 +612,9 @@ var en_default = {
   "purge.confirm": "Purge all",
   "purge.busy": "Purging…",
   "purge.done": "Purged {n} memories and archived them",
-  "purge.failed": "Purge refused: {message}"
+  "purge.failed": "Purge refused: {message}",
+  "memhub.paired": "Paired with MemHub; turn sync on in the MemHub panel.",
+  "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel."
 };
 
 // client-src/locale.js
@@ -1687,6 +1691,7 @@ function MemhubCard(props) {
         }
       }, detailsOpen ? t("common.hideDetails") : t("common.details"))
     ),
+    memhub?.pairing?.paired === true ? h("p", { className: "hm-muted" }, memhub?.pairing?.brokerRunning === true ? t("memhub.pairedBroker") : t("memhub.paired")) : null,
     h("dl", { className: "hm-grid" }, fields),
     actions,
     importForm,

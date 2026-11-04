@@ -3,7 +3,7 @@
  * connection carrier. Every route answers JSON, including failures.
  */
 import { readFileSync } from 'node:fs'
-import { MemHubError } from './memhub.js'
+import { MemHubError, detectPairing } from './memhub.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
 
 export const PANEL_PREFIX = '/api/hy-memory'
@@ -159,11 +159,18 @@ export function createPanelApi(deps) {
 
   /** Cheap read-only detection; a status poll must never fail because of it. */
   function detectMemHubStatus() {
-    if (!memhub) return { ...EMPTY_MEMHUB }
+    const pairing = (() => {
+      try {
+        return detectPairing()
+      } catch {
+        return { paired: false, credentials: 0, brokerRunning: false, host: '', port: 0 }
+      }
+    })()
+    if (!memhub) return { ...EMPTY_MEMHUB, pairing }
     try {
-      return memhub.detect()
+      return { ...memhub.detect(), pairing }
     } catch {
-      return { ...EMPTY_MEMHUB }
+      return { ...EMPTY_MEMHUB, pairing }
     }
   }
 

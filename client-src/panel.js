@@ -474,6 +474,9 @@ function MemhubCard(props) {
         variant: 'ghost',
         onClick: () => { setDetailsOpen((value) => !value) },
       }, detailsOpen ? t('common.hideDetails') : t('common.details'))),
+    memhub?.pairing?.paired === true
+      ? h('p', { className: 'hm-muted' }, memhub?.pairing?.brokerRunning === true ? t('memhub.pairedBroker') : t('memhub.paired'))
+      : null,
     h('dl', { className: 'hm-grid' }, fields),
     actions,
     importForm,

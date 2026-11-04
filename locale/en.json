@@ -199,7 +199,7 @@
   "injected.open": "View injected text",
   "injected.title": "Text injected by this recall",
   "injected.missing": "This recall’s text is no longer in the log",
-  "capture.disabled": "Don’t capture this project",
+  "capture.disabled": "Don’t remember this project",
   "capture.disabledHint": "Stops new captures for this project only; existing memories are kept.",
   "capture.failed": "Could not save: {message}",
   "purge.action": "Purge everything",
@@ -209,5 +209,7 @@
   "purge.confirm": "Purge all",
   "purge.busy": "Purging…",
   "purge.done": "Purged {n} memories and archived them",
-  "purge.failed": "Purge refused: {message}"
+  "purge.failed": "Purge refused: {message}",
+  "memhub.paired": "Paired with MemHub; turn sync on in the MemHub panel.",
+  "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel."
 }

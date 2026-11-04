@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -132,21 +132,19 @@ test('purge archives before deleting and requires confirmation', async () => {
   rmSync(home, { recursive: true, force: true })
 })
 
-test('a disabled session skips capture entirely', async () => {
-  let adds = 0
-  const client = { add: async () => { adds += 1; return { success: true } }, bridgeList: async () => ({ memories: [] }) }
-  const state = { data: { capture: { sessions: {}, queue: [] } }, save() {}, flush: async () => {} }
-  const settings = {
-    enabled: true,
-    capture: { enabled: true, windowTurns: 1, idleFlushMs: 50, includeToolCalls: false },
-    promotion: { enabled: false },
-    permissions: { disabledCaptureSessions: ['quiet-sess'] },
-  }
-  const capture = createCapture({ settings: () => settings, state, activity: { record() {} }, getClient: () => client, getLlm: () => null, modelFor: () => null, log: () => {} })
-  const session = { id: 'quiet-sess', header: { cwd: '/tmp' } }
-  capture.handleSessionEvent(session, { seq: 1, type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'private turn' }] } })
-  capture.handleSessionEvent(session, { seq: 2, type: 'turn/end', data: { turn: 1, reason: { kind: 'stop' } } })
-  await new Promise((resolve) => setTimeout(resolve, 300))
-  assert.equal(adds, 0)
-  assert.equal(state.data.capture.queue.length, 0)
+test('pairing detection reports credentials and a loopback broker without reading them', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-pair-'))
+  mkdirSync(join(home, 'memhub'), { recursive: true })
+  writeFileSync(join(home, 'memhub', 'custom-test.credential'), 'secret\n')
+  const brokerFile = join(home, 'broker.json')
+  writeFileSync(brokerFile, JSON.stringify({ status: 'running', host: '127.0.0.1', port: 18765 }))
+  const { detectPairing } = await import('../src/memhub.js')
+  const paired = detectPairing({ home, brokerFile })
+  assert.equal(paired.paired, true)
+  assert.equal(paired.brokerRunning, true)
+  assert.equal(paired.port, 18765)
+  const absent = detectPairing({ home: join(home, 'nope'), brokerFile: join(home, 'nope.json') })
+  assert.equal(absent.paired, false)
+  assert.equal(absent.brokerRunning, false)
+  rmSync(home, { recursive: true, force: true })
 })

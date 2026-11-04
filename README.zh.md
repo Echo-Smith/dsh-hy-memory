@@ -109,8 +109,8 @@ lead 的会话记忆，而不是从空白开始。捕获仍然按各自会话 id
 ## 隐私
 
 捕获在内容离开进程前先过滤凭据：API key、GitHub token、AWS key、Slack token、Bearer 头、私钥块以及
-`password=` 形式的内容会让整条消息从批次里被丢弃（`looksSensitive`）。`permissions.disabledCaptureProjects` 列出不捕获的项目键，`permissions.disabledCaptureSessions`
-按会话 id 关闭捕获。`POST /api/hy-memory/purge {confirm:'PURGE'}` 先把所有记忆写成集成目录下的 JSONL
+`password=` 形式的内容会让整条消息从批次里被丢弃（`looksSensitive`）。`permissions.disabledCaptureProjects` 列出不捕获的项目键，对应面板里的「这个项目不记忆」，适合客户代码、
+私有仓库这类「这里不记，别处照常」的场景。`POST /api/hy-memory/purge {confirm:'PURGE'}` 先把所有记忆写成集成目录下的 JSONL
 归档，再删除；确认词不对或缺失会被拒绝。
 
 ## 这条为什么被召回
@@ -119,6 +119,12 @@ lead 的会话记忆，而不是从空白开始。捕获仍然按各自会话 id
 词面或两者），以及每个条目的层级、分数与排名。`POST /api/hy-memory/explain {id}` 返回包含该记忆 id 的
 最新一条记录，面板因此能解释「这行为什么在这里」，而不是只给一个不透明的列表。日志有上限，只存 id 与
 分数，不存记忆原文。
+
+## 与 MemHub 配对
+
+`mcp-one-memory` 用 stdio 跑 MemHub 自带的 `mcp.cjs`，所以这个 Harness 可以直接调用 `MemHub_recall`
+等工具。配对状态通过统计 `$DSH_HOME/memhub` 下的凭据文件、并读取本机 broker 的发现文件来判断，状态路由
+返回 `memhub.pairing`，面板的 MemHub 卡片据此提示「同步在 MemHub 面板里开启」。插件本身不重写同步。
 
 ## 重复项
 
