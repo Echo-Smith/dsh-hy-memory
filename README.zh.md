@@ -47,7 +47,7 @@ dsh plugin --profile desktop add link:$(pwd)
 
 ### 从 npm 安装
 
-已发布为 [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory)（0.1.1）。profile 需要两件事：把包作为依赖，
+已发布为 [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory)（0.1.2）。profile 需要两件事：把包作为依赖，
 以及把包名写进 `dsh.profile.bundles`；脚本两步都做，并验证装好的入口确实导出 `apply()`：
 
 ```bash
@@ -62,7 +62,7 @@ node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.1），也就是仓库 Packages
+另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.2），也就是仓库 Packages
 页里能看到的那个。读取它需要一个带 `read:packages` 的 token：
 
 ```bash
@@ -76,14 +76,14 @@ node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
 也可以直接从 GitHub Release 安装（依赖写成 tarball 地址）：
 
 ```bash
-node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.1/dsh-hy-memory-0.1.1.tgz --apply
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.2/dsh-hy-memory-0.1.2.tgz --apply
 ```
 
 自己出包或本地验证时：
 
 ```bash
 node scripts/prepare-publish.mjs                                  # 以公开包名暂存、打包、自检
-node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.1.tgz --apply
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.2.tgz --apply
 ```
 
 发布是需要你自己凭据的人工步骤：`npm publish ./dist/<tarball> --access public`。

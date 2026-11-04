@@ -38,7 +38,7 @@ Then open Settings > 记忆. First use bootstraps the Python environment; the mo
 
 ### From npm
 
-Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory) (0.1.1). A profile needs the
+Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory) (0.1.2). A profile needs the
 package as a dependency *and* its name in `dsh.profile.bundles`; the installer does both, then verifies the
 installed entry exports `apply()`:
 
@@ -55,7 +55,7 @@ Plugin market index for DSH's own detail page:
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.1), which is what
+A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.2), which is what
 shows under the repository's Packages tab. Reading it needs a token with `read:packages`:
 
 ```bash
@@ -69,14 +69,14 @@ The workflow that publishes it is `.github/workflows/publish-github-packages.yml
 a published release. A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
 
 ```bash
-node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.1/dsh-hy-memory-0.1.1.tgz --apply
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.2/dsh-hy-memory-0.1.2.tgz --apply
 ```
 
 For a local build or a release you are publishing yourself:
 
 ```bash
 node scripts/prepare-publish.mjs                                  # stages under the public name, packs, verifies
-node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.1.tgz --apply
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.2.tgz --apply
 ```
 
 Publishing is a human step with your own credentials: `npm publish ./dist/<tarball> --access public`.
