@@ -151,7 +151,9 @@ whether sync should be turned on in MemHub's own panel. The plugin does not reim
 
 `scripts/bench-startup.mjs` spawns the bridge against a scratch data directory and reports the real cost:
 about 0.9 to 2.8 seconds from spawn to `/healthz` on this machine, then 5 to 8 ms for the first bridge
-call. `sidecar.prewarm` defaults to true, so the process is started when the plugin loads instead of on
+call. `scripts/bench-wake.mjs` drives a throwaway DSH_HOME through a full idle stop and measures the
+wake: 1.6 s cold, 61 s idle window, 1.6 s to wake again, so a stopped sidecar costs the same as a cold
+start. `sidecar.prewarm` defaults to true, so the process is started when the plugin loads instead of on
 the first turn, and recall waits up to `recall.waitForStartMs` (2500 ms default) for a starting sidecar
 rather than silently skipping the turn.
 
