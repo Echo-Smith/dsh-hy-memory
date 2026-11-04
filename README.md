@@ -49,6 +49,12 @@ node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 Restart or reload DSH afterwards. By hand, that is `pnpm add dsh-hy-memory` inside the profile plus the
 name in `dsh.profile.bundles`.
 
+A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
+
+```bash
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.1/dsh-hy-memory-0.1.1.tgz --apply
+```
+
 For a local build or a release you are publishing yourself:
 
 ```bash
