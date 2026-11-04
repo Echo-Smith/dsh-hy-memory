@@ -32,7 +32,8 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 
 - Done: time decay in recall ranking. `recall.halfLifeDays` defaults to 30, thresholding still uses the raw score, and items without timestamps skip the weighting. Three tests cover ordering and the off switch.
 - Done: `memory_forget` deletes a memory and records its text hash; promotion filters lines whose hash was forgotten. Ordinary delete stays non-blocking.
-- Still open: a capacity cap per tier with archival, panel merge of duplicates, and exposing forget in the panel (today it is a tool, not a button).
+- Done: opt-in capacity guard. `lifecycle.archiveOnCap` appends the oldest overflow rows to a JSONL archive under the integration directory, then deletes them; off by default. Covered by a test that archives and removes exactly the overflow.
+- Still open: panel merge of duplicates, a forget button in the panel, and a measured run at real store size.
 
 ## Phase 4: explainable recall
 

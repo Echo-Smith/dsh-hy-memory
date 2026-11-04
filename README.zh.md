@@ -98,8 +98,14 @@ CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一�
 排序不只看相似度：同样相关时，一年前的记忆会排在新记忆后面。半衰期默认 30 天（`recall.halfLifeDays`），
 阈值仍然按原始分数判断，没有时间戳的记忆不做衰减。
 
-`memory_forget` 删除一条记忆，并把它的文本哈希记进 `state.json`。晋升时会跳过哈希命中的行，所以用户明确
+`memory_forget`（工具与 `/api/hy-memory/forget` 路由）删除一条记忆，并把它的文本哈希记进 `state.json`。晋升时会跳过哈希命中的行，所以用户明确
 要求忘掉的事实不会在下一次晋升里回来。普通的删除没有这个效果。
+
+## 容量
+
+`lifecycle.maxPerTier` 默认 2000，`lifecycle.archiveOnCap` 默认关闭。打开后，超出上限的最旧行会先追加到
+`$DSH_HOME/integrations/hy-memory/archive/capacity-<ts>.jsonl`，再删除，归档文件就是恢复路径。默认关闭是因为
+删除记忆不可逆。
 
 ## 参与
 

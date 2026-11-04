@@ -25,6 +25,7 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'memhub/pull', request: '{}' },
   { name: 'projects', request: '{}' },
   { name: 'sessions', request: '{ projectKey? }' },
+  { name: 'forget', request: '{ id }' },
   { name: 'update/check', request: '{}' },
 ])
 
@@ -330,6 +331,8 @@ export function createPanelApi(deps) {
         await ops.start()
         return jsonResponse(await statusPayload())
       }
+      case 'forget':
+        return jsonResponse(await ops.forget({ id: body?.id }))
       case 'update/check':
         return jsonResponse(await checkUpdate(body))
       case 'projects':

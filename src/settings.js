@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   embedding: { mode: 'local' },
   ui: { sessionPanel: true },
   sidecar: { pythonPath: '', port: 0, idleStopMs: 1800000 },
+  lifecycle: { maxPerTier: 2000, archiveOnCap: false },
 })
 
 function isObject(value) {

@@ -102,9 +102,16 @@ Ranking is not purely similarity: an equally relevant memory that is a year old 
 The half-life defaults to 30 days (`recall.halfLifeDays`), thresholding stays on the raw score, and the
 weighting is skipped when a memory has no timestamp.
 
-`memory_forget` deletes a memory and records a hash of its text in `state.json`. Promotion skips lines
+`memory_forget` (tool and `/api/hy-memory/forget`) deletes a memory and records a hash of its text in `state.json`. Promotion skips lines
 whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
 promotion pass. Ordinary delete does not do this.
+
+## Capacity
+
+`lifecycle.maxPerTier` defaults to 2000 and `lifecycle.archiveOnCap` is off. Turning it on appends the
+oldest rows beyond the cap to `$DSH_HOME/integrations/hy-memory/archive/capacity-<ts>.jsonl` before
+deleting them, so the archive is the recovery path. It is off by default because deleting memories is
+irreversible.
 
 ## Contributing
 

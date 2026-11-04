@@ -57,3 +57,9 @@ Predicate: move memories from a store built for one embedder into a store built 
 - Recency weighting added to `selectRecall`: rank score is `score * 0.5^(ageDays/halfLifeDays)`, default half-life 30 days, `halfLifeDays: 0` disables it. Thresholding still uses the raw score so an old-but-relevant memory is not dropped outright. Tests cover fresh-before-old and the off switch.
 - `memory_forget` deletes by id and records `contentHash(text)` in `state.json`; both promotion sites filter forgotten lines. Test covers the delete call and the recorded hash.
 - Live evaluation after the change: still 9/10 hits at 941 average characters. Latency read 385 ms on this run against a cold sidecar, which is not comparable to the earlier 149 ms.
+
+## Phase 3 addendum: capacity guard and panel route
+
+- Added `/api/hy-memory/forget` so the panel can call the same forget semantics as the tool; route count moved to 16 and the contract test follows.
+- Capacity guard: `lifecycle.maxPerTier` (default 2000) with `archiveOnCap` off. Enabling it writes a JSONL archive of the overflow first, then deletes. Test: 60 rows, cap 50, ten archived lines, ten deletes, one archive file. VERIFIED.
+- Not done: panel merge of duplicates, a forget button, and any run against a real store at the cap.

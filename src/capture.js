@@ -10,6 +10,9 @@
 import { randomUUID } from 'node:crypto'
 import { collectSearchItems, truncateChars } from './recall.js'
 import { contentHash, projectAgentId, projectKey, projectTitleForPath, pickScene, resolveUser, workspaceIdFor, writeScope } from './tiers.js'
+import { integrationDir } from './paths.js'
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 
 export const MAX_BUFFER_EVENTS = 400
 export const MAX_QUEUE_JOBS = 60
@@ -445,6 +448,7 @@ export function createCapture(deps) {
           } else {
             queue.shift()
             state.save()
+            void enforceCapacity(client, job)
             activity?.record({
               kind: 'capture',
               tier: 'session',
@@ -510,6 +514,45 @@ export function createCapture(deps) {
     } catch (error) {
       log('lite fallback failed', error)
       return false
+    }
+  }
+
+  /**
+   * Optional capacity guard. Off by default because deleting memories is
+   * irreversible: when enabled, the oldest rows beyond the cap are appended to a
+   * JSONL archive under the integration directory first, then deleted.
+   */
+  async function enforceCapacity(client, entry) {
+    const policy = settings()?.lifecycle ?? {}
+    if (policy.archiveOnCap !== true) return
+    const cap = Math.max(50, Number(policy.maxPerTier) || 2000)
+    try {
+      const user = resolveUser(settings())
+      const page = await client.bridgeList({ user_ids: [user], scene: 'all', limit: cap + 100, offset: 0 })
+      const rows = Array.isArray(page?.memories) ? page.memories : []
+      if (rows.length <= cap) return
+      const sorted = [...rows].sort((left, right) => Number(left.created_at ?? left.memory_at ?? 0) - Number(right.created_at ?? right.memory_at ?? 0))
+      const extras = sorted.slice(0, rows.length - cap)
+      if (extras.length === 0) return
+      const dir = join(integrationDir(), 'archive')
+      mkdirSync(dir, { recursive: true })
+      const file = join(dir, `capacity-${Date.now()}.jsonl`)
+      for (const row of extras) appendFileSync(file, `${JSON.stringify(row)}
+`)
+      let removed = 0
+      for (const row of extras) {
+        try {
+          const payload = { id: row.memory_id, kind: row.kind ?? 'chat' }
+          if (row.scene && row.scene !== 'chat') payload.variant = row.scene
+          await client.bridgeDelete(payload)
+          removed += 1
+        } catch (error) {
+          log('capacity delete failed', error)
+        }
+      }
+      activity?.record({ kind: 'delete', tier: 'session', summary: `archived ${extras.length} old memories over the cap`, detail: `removed ${removed}`, ok: true })
+    } catch (error) {
+      log('capacity guard failed', error)
     }
   }
 
