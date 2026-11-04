@@ -377,6 +377,7 @@ function createRuntime(ctx, config) {
             store.recallLog.push({
               at: Date.now(),
               query: String(info.query ?? '').slice(0, 200),
+              text: String(info.text ?? '').slice(0, 4000),
               source: info.source ?? 'semantic',
               items: info.entries,
             })

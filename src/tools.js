@@ -411,6 +411,47 @@ export function createMemoryOps(deps) {
     return { forgotten: true, content: text.slice(0, 160) }
   }
 
+  /** Delete every memory for this user, after writing a JSONL archive. */
+  async function purge(scope = {}) {
+    assertEnabled()
+    if (scope.confirm !== 'PURGE') throw new MemoryRequestError('confirm PURGE is required', 'confirm_required')
+    const ctx = context(scope)
+    const client = ready()
+    const tiers = normalizeTierList(undefined, ['personal', 'project', 'session'])
+    const rows = []
+    for (const tier of tiers) {
+      if (tier !== 'personal' && !ctx.projectKey) continue
+      if (tier === 'session' && !ctx.sessionId) continue
+      const page = await list({ tier, limit: 500, offset: 0, projectKey: ctx.projectKey, sessionId: ctx.sessionId })
+      for (const item of page.items ?? []) rows.push({ tier, id: item.id, content: item.content })
+    }
+    if (rows.length === 0) return { purged: 0, archived: 0 }
+    const { mkdirSync, appendFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const { integrationDir } = await import('./paths.js')
+    const dir = join(integrationDir(), 'archive')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `purge-${Date.now()}.jsonl`)
+    for (const row of rows) appendFileSync(file, `${JSON.stringify(row)}\n`)
+    let purged = 0
+    for (const row of rows) {
+      try {
+        const raw = await locate(client, ctx, row.id, optionsOf(scope))
+        if (!raw) continue
+        const payload = { id: row.id, kind: kindOf(raw) }
+        const scene = sceneOf(raw)
+        if (isProductivityScene(scene)) payload.variant = scene
+        await bridgeMethod(client, 'bridgeDelete')(payload, optionsOf(scope))
+        purged += 1
+      } catch (error) {
+        log('purge delete failed', error)
+      }
+    }
+    countCache.clear()
+    activity?.record({ kind: 'delete', tier: 'personal', summary: `purged ${purged} memories`, detail: `archive ${file}`, ok: true })
+    return { purged, archived: rows.length, archive: file }
+  }
+
   /** Groups of memories whose text is identical after whitespace and case folding. */
   async function duplicates(scope = {}) {
     assertEnabled()
@@ -529,7 +570,7 @@ export function createMemoryOps(deps) {
     }
   }
 
-  return { search, forget, merge, duplicates, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
+  return { search, forget, merge, duplicates, purge, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
 }
 
 const TEXT_OUTPUT = {

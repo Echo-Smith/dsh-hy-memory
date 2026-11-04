@@ -42,11 +42,12 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - In flight: the panel row action that shows the explanation (query, tier, score, rank, time).
 - Still open: linking an activity-feed recall to the exact injected text.
 
-## Phase 5: privacy and permission
+## Phase 5: privacy and permission (started)
 
-- Per-project and per-session switch to disable capture.
-- Secret filtering at the capture boundary (API keys, tokens, private paths) before anything leaves the process.
-- Export and purge all memories for one user, with a confirmation that names the count.
+- Done: credential filtering at the capture boundary. `looksSensitive` drops any message matching API keys, GitHub/AWS/Slack tokens, bearer headers, private-key blocks or `password=` patterns; tested against a key-bearing turn.
+- Done: `permissions.disabledCaptureProjects` skips capture for listed project keys.
+- Done: `POST /api/hy-memory/purge {confirm:'PURGE'}` archives every memory to JSONL then deletes it; test covers the refusal without confirmation and the archive-then-delete path.
+- In flight: panel surface for purge and the project switch. Open: per-session switch, and a purge that names the count before deleting.
 
 ## Phase 6: MemHub
 

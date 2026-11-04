@@ -28,6 +28,9 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'forget', request: '{ id }' },
   { name: 'duplicates', request: '{ tier? }' },
   { name: 'explain', request: '{ id }' },
+  { name: 'explained', request: '{}' },
+  { name: 'injected', request: '{ at }' },
+  { name: 'purge', request: '{ confirm }' },
   { name: 'merge', request: '{ tier, keep?, drop }' },
   { name: 'update/check', request: '{}' },
 ])
@@ -336,6 +339,21 @@ export function createPanelApi(deps) {
       }
       case 'forget':
         return jsonResponse(await ops.forget({ id: body?.id }))
+      case 'explained': {
+        const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []
+        const ids = new Set()
+        for (const entry of log) for (const item of entry.items ?? []) if (item.id) ids.add(item.id)
+        return jsonResponse({ ids: [...ids] })
+      }
+      case 'purge':
+        return jsonResponse(await ops.purge({ confirm: body?.confirm }))
+      case 'injected': {
+        const at = Number(body?.at)
+        const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []
+        const entry = log.find((candidate) => candidate.at === at)
+        if (!entry) return jsonResponse({ found: false })
+        return jsonResponse({ found: true, at: entry.at, query: entry.query, source: entry.source, text: entry.text ?? '' })
+      }
       case 'explain': {
         const id = String(body?.id ?? '')
         const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []

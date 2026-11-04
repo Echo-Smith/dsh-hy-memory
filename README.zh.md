@@ -101,6 +101,13 @@ CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一�
 `memory_forget`（工具与 `/api/hy-memory/forget` 路由）删除一条记忆，并把它的文本哈希记进 `state.json`。晋升时会跳过哈希命中的行，所以用户明确
 要求忘掉的事实不会在下一次晋升里回来。普通的删除没有这个效果。
 
+## 隐私
+
+捕获在内容离开进程前先过滤凭据：API key、GitHub token、AWS key、Slack token、Bearer 头、私钥块以及
+`password=` 形式的内容会让整条消息从批次里被丢弃（`looksSensitive`）。`permissions.disabledCaptureProjects`
+列出不捕获的项目键。`POST /api/hy-memory/purge {confirm:'PURGE'}` 先把所有记忆写成集成目录下的 JSONL
+归档，再删除；确认词不对或缺失会被拒绝。
+
 ## 这条为什么被召回
 
 每次注入都会往 `state.json` 的 `recallLog`（最多 50 条）追加一条记录，内容是这一轮的查询、来源（语义、

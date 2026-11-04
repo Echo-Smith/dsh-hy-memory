@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { selectRecall } from '../src/recall.js'
@@ -81,4 +84,49 @@ test('duplicates groups identical text and merge deletes the rest', async () => 
   const merged = await ops.merge({ tier: 'personal', keep: 'a2', drop: ['a1'] })
   assert.equal(merged.merged, 1)
   assert.deepEqual(deleted, ['a1'])
+})
+
+test('credentials never reach the capture batch', async () => {
+  const { buildBatch, looksSensitive } = await import('../src/capture.js')
+  assert.equal(looksSensitive('token is sk-abcdefghijklmnopqrstuvwx'), true)
+  assert.equal(looksSensitive('just a normal sentence'), false)
+  const batch = buildBatch({
+    items: [
+      { role: 'user', content: 'here is my key sk-abcdefghijklmnopqrstuvwx' },
+      { role: 'assistant', content: 'noted, I will not store it' },
+    ],
+    tools: [],
+  }, { capture: { includeToolCalls: false } })
+  assert.equal(batch.messages.length, 1)
+  assert.match(batch.messages[0].content, /noted/)
+})
+
+test('purge archives before deleting and requires confirmation', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-purge-'))
+  process.env.DSH_HOME = home
+  const deleted = []
+  const rows = [
+    { memory_id: 'p1', content: 'one', agent_id: 'personal', session_id: 'personal' },
+    { memory_id: 'j1', content: 'two', agent_id: 'project:p1', session_id: 'project' },
+  ]
+  const client = {
+    bridgeList: async () => ({ memories: rows }),
+    get: async (id) => rows.find((row) => row.memory_id === id) ?? null,
+    bridgeDelete: async (payload) => { deleted.push(payload.id); return { success: true } },
+  }
+  const ops = createMemoryOps({
+    settings: () => ({ enabled: true }),
+    state: { data: {}, save() {} },
+    activity: { record() {} },
+    getClient: () => client,
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1' }),
+    log: () => {},
+  })
+  await assert.rejects(() => ops.purge({}), (error) => error.code === 'confirm_required')
+  const result = await ops.purge({ confirm: 'PURGE' })
+  assert.equal(result.purged, 2)
+  assert.equal(deleted.length, 2)
+  const archives = readdirSync(join(home, 'integrations', 'hy-memory', 'archive'))
+  assert.equal(archives.length, 1)
+  rmSync(home, { recursive: true, force: true })
 })

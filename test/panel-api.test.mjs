@@ -66,12 +66,15 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/forget',
     '/api/hy-memory/duplicates',
     '/api/hy-memory/explain',
+    '/api/hy-memory/explained',
+    '/api/hy-memory/injected',
+    '/api/hy-memory/purge',
     '/api/hy-memory/merge',
     '/api/hy-memory/update/check',
   ])
-  assert.equal(PANEL_ROUTE_DEFS.length, 19)
+  assert.equal(PANEL_ROUTE_DEFS.length, 22)
   const { api } = harness()
-  assert.equal(api.routes.length, 19)
+  assert.equal(api.routes.length, 22)
   for (const route of api.routes) {
     assert.deepEqual(route.methods, ['POST'])
     assert.equal(route.requestBody, 'buffered')
@@ -181,4 +184,25 @@ test('explain returns the newest recall that injected the memory', async () => {
   assert.equal(body.data.query, 'new query')
   assert.equal(body.data.source, 'lexical')
   assert.equal(body.data.rank, 1)
+})
+
+test('explained lists recalled ids and injected returns the injected text', async () => {
+  const { api, state } = harness()
+  state.data.recallLog = [{
+    at: 5000,
+    query: 'why is this here',
+    source: 'both',
+    text: 'Recalled memory for this request\n1. [personal] a fact',
+    items: [{ id: 'm1', tier: 'personal', score: 0.8, rank: 1 }],
+  }]
+  const explained = await api.routes.find((entry) => entry.path.endsWith('/explained')).fetch(post('explained', {}))
+  assert.deepEqual((await explained.json()).data.ids, ['m1'])
+
+  const injected = await api.routes.find((entry) => entry.path.endsWith('/injected')).fetch(post('injected', { at: 5000 }))
+  const body = await injected.json()
+  assert.equal(body.data.found, true)
+  assert.match(body.data.text, /a fact/)
+
+  const missing = await api.routes.find((entry) => entry.path.endsWith('/injected')).fetch(post('injected', { at: 1 }))
+  assert.equal((await missing.json()).data.found, false)
 })

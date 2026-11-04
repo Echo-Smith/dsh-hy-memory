@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   ui: { sessionPanel: true },
   sidecar: { pythonPath: '', port: 0, idleStopMs: 1800000 },
   lifecycle: { maxPerTier: 2000, archiveOnCap: false },
+  permissions: { disabledCaptureProjects: [] },
 })
 
 function isObject(value) {

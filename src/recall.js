@@ -444,6 +444,7 @@ export function createRecall(deps) {
           tiers: merged.items.map((item) => item.tier),
           source: lexicalUsed ? (semanticUsed ? 'both' : 'lexical') : 'semantic',
           query,
+          text: merged.text.slice(0, 4000),
           entries: merged.items.map((item, index) => ({
             id: item.id,
             tier: item.tier,

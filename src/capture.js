@@ -20,6 +20,22 @@ export const MAX_QUEUE_ATTEMPTS = 20
 export const BACKOFF_BASE_MS = 1000
 export const BACKOFF_CAP_MS = 600_000
 
+const SECRET_PATTERNS = [
+  /\bsk-[A-Za-z0-9_-]{16,}\b/,
+  /\bgh[pousr]_[A-Za-z0-9]{16,}\b/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/,
+  /\bBearer\s+[A-Za-z0-9._-]{20,}/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /\bpassword\s*[:=]\s*\S{6,}/i,
+]
+
+/** True when a message looks like it carries a credential. */
+export function looksSensitive(text) {
+  const value = String(text ?? '')
+  return SECRET_PATTERNS.some((pattern) => pattern.test(value))
+}
+
 const ADD_TIMEOUT_MS = 240_000
 const SEARCH_TIMEOUT_MS = 15_000
 const PROMOTE_TIMEOUT_MS = 90_000
@@ -80,6 +96,11 @@ export function buildBatch(buffer, settings = {}) {
     }
     if (item.role === 'user' || item.role === 'assistant') messages.push({ role: item.role, content })
   }
+  // Never ship a credential to the sidecar, even inside a normal turn.
+  const safeMessages = messages.filter((message) => !looksSensitive(message.content))
+  const dropped = messages.length - safeMessages.length
+  messages.length = 0
+  messages.push(...safeMessages)
   let scene = includeTools ? pickScene(tools) : 'chat'
   if (scene !== 'chat' && !messages.some((message) => message.role === 'tool')) scene = 'chat'
 
@@ -305,6 +326,15 @@ export function createCapture(deps) {
     entry.flushing = true
     try {
       const config = settings()
+      const captureKey = projectKey(entry.cwd)
+      if (Array.isArray(config.permissions?.disabledCaptureProjects) && config.permissions.disabledCaptureProjects.includes(captureKey)) {
+        entry.buffer = []
+        entry.tools = []
+        entry.turnsSinceFlush = 0
+        persistEntry(entry)
+        activity?.record({ kind: 'capture', tier: 'session', summary: 'capture skipped for a disabled project', detail: captureKey, ok: true })
+        return
+      }
       const toolsSeen = entry.tools.map((tool) => tool.name)
       const batch = buildBatch({ items: entry.buffer, tools: entry.tools }, config)
       // Keep tools and text together: an idle flush can arrive when only tool
