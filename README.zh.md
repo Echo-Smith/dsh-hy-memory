@@ -62,6 +62,17 @@ node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
+另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.1），也就是仓库 Packages
+页里能看到的那个。读取它需要一个带 `read:packages` 的 token：
+
+```bash
+# ~/.npmrc
+# @echo-smith:registry=https://npm.pkg.github.com
+# //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
+```
+
+发布它的是 `.github/workflows/publish-github-packages.yml`，可手动触发，也会在发布 Release 时自动跑。
 也可以直接从 GitHub Release 安装（依赖写成 tarball 地址）：
 
 ```bash

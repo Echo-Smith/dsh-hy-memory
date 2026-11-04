@@ -55,7 +55,18 @@ Plugin market index for DSH's own detail page:
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
+A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.1), which is what
+shows under the repository's Packages tab. Reading it needs a token with `read:packages`:
+
+```bash
+# ~/.npmrc
+# @echo-smith:registry=https://npm.pkg.github.com
+# //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
+```
+
+The workflow that publishes it is `.github/workflows/publish-github-packages.yml`, triggered manually or by
+a published release. A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
 
 ```bash
 node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.1/dsh-hy-memory-0.1.1.tgz --apply
