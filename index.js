@@ -7,7 +7,7 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { ActivityLog } from './src/activity.js'
 import { createCapture } from './src/capture.js'
 import { createMemHub } from './src/memhub.js'

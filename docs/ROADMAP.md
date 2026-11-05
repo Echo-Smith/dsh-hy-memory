@@ -103,3 +103,5 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Nav alignment: the hider now removes the shell icon's whole slot, because hiding only the `svg` left a fixed-width wrapper that pushed our glyph one slot to the right.
 - Project picker titles: the merge now prefers the entry that carries a path, because `state.json` still held key-only placeholders that shadowed the recovered names. Covered by a panel-api test.
 - Update line shows local and published versions side by side instead of a single number.
+- Bug found by audit: the single-writer lease called `dirname` without importing it; the ReferenceError was swallowed and the lease could never be acquired, so every `state.save()` silently did nothing (state.json stayed a two-key marker, the project index and promotions never persisted). Fixed by importing it; verified by the lease file appearing and state.json regaining `projects`, `capture`, `promotions`, `lastFlush`.
+
