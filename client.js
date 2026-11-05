@@ -675,6 +675,25 @@ var dictionaries = {
   en: strings(en_default)
 };
 
+// client-src/nav.js
+function hideForeignNavIcons(doc, attr) {
+  if (!doc || typeof doc.querySelectorAll !== "function") return [];
+  const hidden = [];
+  for (const label of doc.querySelectorAll(".hm-navLabel")) {
+    const row = typeof label.closest === "function" ? label.closest('button, a, [role="menuitem"], li') : null;
+    if (!row || typeof row.querySelectorAll !== "function") continue;
+    for (const svg of row.querySelectorAll("svg")) {
+      const owned = typeof svg.closest === "function" && svg.closest(".hm-navBrain") !== null;
+      if (owned) continue;
+      if (typeof svg.getAttribute === "function" && svg.getAttribute(attr) === "1") continue;
+      if (typeof svg.setAttribute === "function") svg.setAttribute(attr, "1");
+      if (svg.style !== void 0) svg.style.display = "none";
+      hidden.push(svg);
+    }
+  }
+  return hidden;
+}
+
 // client-src/panel.js
 var React2 = __toESM(require("react"), 1);
 
@@ -3771,8 +3790,11 @@ var NAV_STYLE_ID = "hy-memory-nav-glyph";
 var NAV_CSS = [
   ".hm-navLabel{display:inline-flex;align-items:center;gap:8px;min-width:0}",
   ".hm-navBrain{flex:none;color:currentColor}",
-  "button:has(> span > .hm-navLabel) > svg:first-child{display:none}"
+  // Kept as a fast path only; the runtime hider below does not depend on the
+  // shell's markup shape.
+  "button:has(.hm-navLabel) > svg:first-child{display:none}"
 ].join("");
+var NAV_HIDDEN_ATTR = "data-hm-nav-hidden";
 function navLabelNode(t) {
   return React4.createElement(
     "span",
@@ -3792,14 +3814,50 @@ function installNavGlyph() {
     return () => {
     };
   }
-  if (document.getElementById(NAV_STYLE_ID) !== null) return () => {
+  const hidden = [];
+  const hideShellIcons = () => {
+    for (const svg of hideForeignNavIcons(document, NAV_HIDDEN_ATTR)) hidden.push(svg);
   };
-  const style = document.createElement("style");
-  style.id = NAV_STYLE_ID;
-  style.textContent = NAV_CSS;
-  document.head.appendChild(style);
+  let style = document.getElementById(NAV_STYLE_ID);
+  if (style === null) {
+    style = document.createElement("style");
+    style.id = NAV_STYLE_ID;
+    style.textContent = NAV_CSS;
+    document.head.appendChild(style);
+  }
+  hideShellIcons();
+  let observer = null;
+  let scheduled = null;
+  if (typeof MutationObserver === "function" && document.body !== void 0 && document.body !== null) {
+    observer = new MutationObserver(() => {
+      if (scheduled !== null) return;
+      scheduled = setTimeout(() => {
+        scheduled = null;
+        hideShellIcons();
+      }, 120);
+      scheduled.unref?.();
+    });
+    try {
+      observer.observe(document.body, { childList: true, subtree: true });
+    } catch {
+      observer = null;
+    }
+  }
   return () => {
-    if (style.parentNode !== null) style.parentNode.removeChild(style);
+    if (scheduled !== null) clearTimeout(scheduled);
+    scheduled = null;
+    try {
+      observer?.disconnect();
+    } catch {
+    }
+    for (const svg of hidden.splice(0)) {
+      try {
+        svg.style.display = "";
+        svg.removeAttribute(NAV_HIDDEN_ATTR);
+      } catch {
+      }
+    }
+    if (style !== null && style.parentNode !== null) style.parentNode.removeChild(style);
   };
 }
 var inject = ["slots", "locale"];

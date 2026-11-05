@@ -951,6 +951,7 @@ function createHarness({
   vm.runInContext(source, sandbox, { filename: 'client.js' })
 
   return {
+    source,
     sandbox,
     loaded,
     requireStub,
@@ -1364,8 +1365,10 @@ function exerciseNavLabel(harness) {
 
   const styles = harness.document.head.children.filter((child) => child.id === 'hy-memory-nav-glyph')
   assert.equal(styles.length, 1, 'exactly one nav stylesheet is injected')
-  assert.ok(styles[0].textContent.includes('button:has(> span > .hm-navLabel) > svg:first-child{display:none}'),
-    'the scoped rule hides the shell gear that precedes the label')
+  assert.ok(styles[0].textContent.includes('button:has(.hm-navLabel) > svg:first-child{display:none}'),
+    'the stylesheet keeps a fast-path rule for the shell icon')
+  assert.ok(harness.source.includes('data-hm-nav-hidden'),
+    'the bundle also hides other row icons at runtime, independent of the DOM shape')
 }
 
 async function exerciseMasterSwitch(harness) {

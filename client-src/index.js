@@ -10,6 +10,7 @@
 import * as React from 'react'
 import { api, getSessionPanelEnabled, loadStatus } from './api.js'
 import { NS, dictionaries } from './locale.js'
+import { hideForeignNavIcons } from './nav.js'
 import { SettingsSection } from './panel.js'
 import { SessionMemoryView } from './session-panel.js'
 import { Icon, PanelErrorBoundary, useLocaleSubscription } from './ui.js'
@@ -32,8 +33,11 @@ const NAV_STYLE_ID = 'hy-memory-nav-glyph'
 const NAV_CSS = [
   '.hm-navLabel{display:inline-flex;align-items:center;gap:8px;min-width:0}',
   '.hm-navBrain{flex:none;color:currentColor}',
-  'button:has(> span > .hm-navLabel) > svg:first-child{display:none}',
+  // Kept as a fast path only; the runtime hider below does not depend on the
+  // shell's markup shape.
+  'button:has(.hm-navLabel) > svg:first-child{display:none}',
 ].join('')
+const NAV_HIDDEN_ATTR = 'data-hm-nav-hidden'
 
 /** The nav label node: an outlined brain plus the translated name. */
 function navLabelNode(t) {
@@ -53,13 +57,59 @@ function installNavGlyph() {
   if (typeof document === 'undefined' || document.head === undefined || document.head === null) {
     return () => {}
   }
-  if (document.getElementById(NAV_STYLE_ID) !== null) return () => {}
-  const style = document.createElement('style')
-  style.id = NAV_STYLE_ID
-  style.textContent = NAV_CSS
-  document.head.appendChild(style)
+  const hidden = []
+  /**
+   * Hide the shell's own section icon next to our label.
+   *
+   * The section list renders a default icon before the label node. Relying on a
+   * CSS child combinator broke when the shell wrapped that icon in another
+   * element, leaving both a gear and a brain in the row. Walking up from our own
+   * label and hiding every other svg in that row does not depend on the shape.
+   */
+  const hideShellIcons = () => {
+    for (const svg of hideForeignNavIcons(document, NAV_HIDDEN_ATTR)) hidden.push(svg)
+  }
+
+  let style = document.getElementById(NAV_STYLE_ID)
+  if (style === null) {
+    style = document.createElement('style')
+    style.id = NAV_STYLE_ID
+    style.textContent = NAV_CSS
+    document.head.appendChild(style)
+  }
+  hideShellIcons()
+
+  let observer = null
+  let scheduled = null
+  if (typeof MutationObserver === 'function' && document.body !== undefined && document.body !== null) {
+    observer = new MutationObserver(() => {
+      if (scheduled !== null) return
+      scheduled = setTimeout(() => {
+        scheduled = null
+        hideShellIcons()
+      }, 120)
+      scheduled.unref?.()
+    })
+    try {
+      observer.observe(document.body, { childList: true, subtree: true })
+    } catch {
+      observer = null
+    }
+  }
+
   return () => {
-    if (style.parentNode !== null) style.parentNode.removeChild(style)
+    if (scheduled !== null) clearTimeout(scheduled)
+    scheduled = null
+    try {
+      observer?.disconnect()
+    } catch {}
+    for (const svg of hidden.splice(0)) {
+      try {
+        svg.style.display = ''
+        svg.removeAttribute(NAV_HIDDEN_ATTR)
+      } catch {}
+    }
+    if (style !== null && style.parentNode !== null) style.parentNode.removeChild(style)
   }
 }
 

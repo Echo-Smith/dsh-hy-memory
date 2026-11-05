@@ -88,3 +88,8 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: the engine is a standalone card, collapsed by default with a one-line model summary; expanding it shows the follow-DSH-default choice labelled with the resolved model, the pinned current setting, and every provider/model this profile offers.
 - Done: mechanical guard against the loader-id mistake — `npm run check:id` (also in CI) and `scripts/deploy-local.mjs`, which builds with the installed package name and verifies before copying. The constraint itself is also stored as a memory.
 - Open: release the changes (0.1.6).
+
+## Phase 10: nav glyph robustness (local)
+
+- The settings row showed the shell gear next to our brain after a shell markup change made the CSS  rule stop matching. The hiding is now a runtime walk from our label to its row (, ), which hides any other svg in that row and keeps ours; the CSS rule stays only as a fast path.
+- Covered by  (fake DOM): foreign icon hidden, ours kept, second pass idempotent, absent label tolerated. Suite 107 tests.
