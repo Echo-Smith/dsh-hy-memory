@@ -31,8 +31,12 @@ const NAV_STYLE_ID = 'hy-memory-nav-glyph'
  * `NAV_CSS` hides that svg; the label node itself needs no global styles.
  */
 const NAV_CSS = [
-  '.hm-navLabel{display:inline-flex;align-items:center;gap:8px;min-width:0}',
-  '.hm-navBrain{flex:none;color:currentColor}',
+  // An inline-flex box aligns on its first child's baseline by default, so the
+  // brain could sit a pixel or two off the neighbouring rows' icon. Centering
+  // the whole box and pinning the glyph box removes that ambiguity.
+  '.hm-navLabel{display:inline-flex;align-items:center;gap:8px;min-width:0;vertical-align:middle;line-height:1.2}',
+  '.hm-navLabel .hm-navText{display:inline-block;line-height:inherit}',
+  '.hm-navBrain{flex:none;display:block;width:16px;height:16px;color:currentColor}',
   // Kept as a fast path only; the runtime hider below does not depend on the
   // shell's markup shape.
   'button:has(.hm-navLabel) > svg:first-child{display:none}',

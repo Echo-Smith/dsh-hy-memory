@@ -49,7 +49,7 @@ execFileSync(process.execPath, ['build.mjs'], {
 })
 execFileSync(process.execPath, ['scripts/check-client-id.mjs', '--package', staging], { cwd: ROOT, stdio: 'inherit' })
 
-const FILES = ['index.js', 'client.js', 'cordis.patch.yml', 'src', 'bridge', 'locale', 'icon.svg']
+const FILES = ['index.js', 'client.js', 'cordis.patch.yml', 'package.json', 'src', 'bridge', 'locale', 'icon.svg']
 for (const relative of FILES) {
   mkdirSync(dirname(join(target, relative)), { recursive: true })
   execFileSync('rsync', ['-a', '--delete', join(staging, relative), join(target, relative)], { stdio: 'pipe' })
