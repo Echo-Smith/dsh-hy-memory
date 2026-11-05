@@ -101,3 +101,5 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - `deploy-local.mjs` copies by replacement after `rsync` left `index.js` newer than `src/tiers.js` and broke the import.
 - Project titles now recover from session directory names (`client-src`-free `src/session-path.js`), with ambiguity resolved by disk existence and project-key match: the picker shows `default-workspace`, `mirror-memory`-style names instead of `project:<sha1>` keys.
 - Nav alignment: the hider now removes the shell icon's whole slot, because hiding only the `svg` left a fixed-width wrapper that pushed our glyph one slot to the right.
+- Project picker titles: the merge now prefers the entry that carries a path, because `state.json` still held key-only placeholders that shadowed the recovered names. Covered by a panel-api test.
+- Update line shows local and published versions side by side instead of a single number.

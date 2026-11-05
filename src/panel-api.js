@@ -288,7 +288,17 @@ export function createPanelApi(deps) {
     if (Object.keys(state?.data?.projects ?? {}).length === 0 && recoverProjects !== null) {
       await recoverProjects().catch(() => 0)
     }
-    const known = { ...(readProjectIndex() ?? {}), ...(state?.data?.projects ?? {}) }
+    // Merge per key, preferring the entry that carries a real path: the state
+    // file may still hold key-only placeholders written during recovery, and
+    // those would otherwise overwrite recovered titles.
+    const known = {}
+    for (const source of [state?.data?.projects ?? {}, readProjectIndex() ?? {}]) {
+      for (const [key, entry] of Object.entries(source)) {
+        const current = known[key]
+        const better = current === undefined || (!current?.path && entry?.path)
+        if (better) known[key] = entry
+      }
+    }
     const items = []
     for (const [key, meta] of Object.entries(known)) {
       let projectCount = 0

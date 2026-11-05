@@ -152,6 +152,9 @@ Project switch: [don't remember this project](docs/screenshots/panel-capture-swi
 
 MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 
+The footer's update line reports both numbers — `Up to date · local v0.1.6 / published v0.1.5` — because an
+unreleased local build is expected while developing, and a single number hid which side it meant.
+
 ## Compatibility and limits
 
 - Project memories belong to a project; session memories follow the project they were created in, so switching projects hides them.

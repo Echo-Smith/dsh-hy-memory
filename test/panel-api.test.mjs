@@ -12,7 +12,7 @@ function fakeState() {
   }
 }
 
-function harness({ settings = DEFAULT_SETTINGS, getClient = () => null } = {}) {
+function harness({ settings = DEFAULT_SETTINGS, getClient = () => null, readProjectIndex = () => ({}) } = {}) {
   const state = fakeState()
   const activity = new ActivityLog()
   const current = settings
@@ -35,6 +35,7 @@ function harness({ settings = DEFAULT_SETTINGS, getClient = () => null } = {}) {
     describeModel: () => ({ ready: false, provider: '', model: '', source: 'dsh' }),
     contextOf: () => ({ projectKey: 'p1', sessionId: 's1', sessionTitle: 'Fixing the build' }),
     onSettingsChange: async (patch) => mergeSettings(current, patch),
+    readProjectIndex,
   })
   return { api, state, activity }
 }
@@ -213,4 +214,17 @@ test('status carries the MemHub pairing block', async () => {
   const body = await (await route.fetch(post('status', {}))).json()
   assert.equal(typeof body.data.memhub.pairing, 'object')
   assert.equal(typeof body.data.memhub.pairing.paired, 'boolean')
+})
+
+
+test('a recovered project title wins over a key-only placeholder in state', async () => {
+  const { api, state } = harness({
+    getClient: () => ({ bridgeList: async () => ({ memories: [] }) }),
+    readProjectIndex: () => ({ abc123: { title: 'default-workspace', path: '/Users/me/Documents/app' } }),
+  })
+  state.data.projects = { abc123: { title: 'abc123', path: '' } }
+  const route = api.routes.find((entry) => entry.path.endsWith('/projects'))
+  const body = await (await route.fetch(post('projects', {}))).json()
+  const item = (body.data.items ?? []).find((entry) => entry.key === 'abc123')
+  assert.equal(item?.title, 'default-workspace', 'the entry with a real path supplies the title')
 })

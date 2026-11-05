@@ -2084,14 +2084,17 @@ export function SettingsSection(props) {
     }
     if (updateResult.behind) {
       return h('span', { className: 'hm-footerResult' },
-        t('update.behind', { version: updateResult.latest }),
+        t('update.behind', { latest: updateResult.latest, current: updateResult.current || '' }),
         ' ',
         updateResult.url !== ''
           ? h('a', { href: updateResult.url, target: '_blank', rel: 'noopener noreferrer' }, t('update.open'))
           : null)
     }
+    if (!updateResult.latest) {
+      return h('span', { className: 'hm-footerResult' }, t('update.localOnly', { current: updateResult.current || '' }))
+    }
     return h('span', { className: 'hm-footerResult' },
-      t('update.latest', { version: updateResult.latest || updateResult.current }))
+      t('update.latest', { current: updateResult.current || '', latest: updateResult.latest }))
   }
 
   const renderFooter = () => h('footer', { className: 'hm-footer' },

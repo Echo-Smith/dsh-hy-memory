@@ -162,8 +162,8 @@
   "update.repo": "GitHub 仓库",
   "update.check": "检查更新",
   "update.checking": "检查中…",
-  "update.latest": "已是最新 v{version}",
-  "update.behind": "发现新版本 v{version}",
+  "update.latest": "已是最新 · 本地 v{current} / 线上 v{latest}",
+  "update.behind": "线上 v{latest} 可用（本地 v{current}）",
   "update.open": "查看",
   "update.failed": "检查更新失败，请稍后再试",
   "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok",
@@ -233,5 +233,6 @@
   "engine.modelHint": "「跟随 DSH 默认模型」使用 DSH 当前路由；指定模型则固定用它处理记忆写入。",
   "engine.summaryFollow": "跟随 DSH 默认 · {model}",
   "engine.summaryPinned": "指定模型 · {model}",
-  "engine.currentOption": "当前配置 · {provider}/{model}"
+  "engine.currentOption": "当前配置 · {provider}/{model}",
+  "update.localOnly": "本地 v{current}"
 }

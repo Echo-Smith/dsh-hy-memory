@@ -1718,8 +1718,8 @@ async function exerciseFooterAndTokens(harness) {
   assert.ok(findButton(harness, t('update.check')) !== undefined, 'the update check button renders')
   await click(harness, t('update.check'))
   assertPost(harness, '/api/hy-memory/update/check', { force: true })
-  assert.ok(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })),
-    'a current install reports 已是最新 vX.Y.Z')
+  assert.ok(harness.mini.text().includes(t('update.latest', { current: '0.1.0', latest: '0.1.0' })),
+    'a current install reports both the local and the published version')
 
   // A tab switch and a full re-mount never re-run the automatic check.
   await click(harness, t('tabs.workspace'))
@@ -1732,8 +1732,8 @@ async function exerciseFooterAndTokens(harness) {
 async function exerciseUpdateBehind(harness) {
   const t = await mountSection(harness, 'zh')
   await click(harness, t('update.check'))
-  assert.ok(harness.mini.text().includes(t('update.behind', { version: '0.2.0' })),
-    'a newer release renders 发现新版本 vA.B.C')
+  assert.ok(harness.mini.text().includes(t('update.behind', { latest: '0.2.0', current: '0.1.0' })),
+    'a newer release names the published version and the local one')
   const release = hostsOf(harness).find((node) => (
     node.type === 'a' && String((node.props ?? {}).href ?? '').includes('/releases/tag/v0.2.0')
   ))
@@ -1745,7 +1745,7 @@ async function exerciseUpdateError(harness) {
   const t = await mountSection(harness, 'zh')
   await click(harness, t('update.check'))
   assert.ok(harness.mini.text().includes(t('update.failed')), 'a failed check renders a short failure line')
-  assert.equal(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })), false,
+  assert.equal(harness.mini.text().includes(t('update.latest', { current: '0.1.0', latest: '0.1.0' })), false,
     'a failed check makes no up-to-date claim')
   assert.equal(harness.mini.text().includes(t('diag.memoryTokens', { round: 120, total: 3400 })), false,
     'the token line is hidden when status.context is absent')
@@ -1769,7 +1769,7 @@ async function exerciseAutoUpdateNotice(harness) {
   await click(harness, t('update.check'))
   assertPost(harness, '/api/hy-memory/update/check', { force: true })
   assert.equal(pills().length, 0, 'the manual result clears the automatic notice')
-  assert.ok(harness.mini.text().includes(t('update.latest', { version: '0.1.0' })),
+  assert.ok(harness.mini.text().includes(t('update.latest', { current: '0.1.0', latest: '0.1.0' })),
     'the manual result renders its own line')
 }
 

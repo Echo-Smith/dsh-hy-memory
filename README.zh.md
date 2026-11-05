@@ -134,6 +134,9 @@ https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.jso
 
 MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 
+页脚的更新行会同时给出两个版本：`已是最新 · 本地 v0.1.6 / 线上 v0.1.5`。开发期本地版本领先于已发布版本是
+正常状态，只显示一个数字会让人分不清是哪一侧。
+
 ## 兼容与边界
 
 - 项目记忆绑定项目；会话记忆跟随它创建时所在的项目，换项目看不到。

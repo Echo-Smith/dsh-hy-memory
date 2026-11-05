@@ -348,8 +348,8 @@ var zh_default = {
   "update.repo": "GitHub 仓库",
   "update.check": "检查更新",
   "update.checking": "检查中…",
-  "update.latest": "已是最新 v{version}",
-  "update.behind": "发现新版本 v{version}",
+  "update.latest": "已是最新 · 本地 v{current} / 线上 v{latest}",
+  "update.behind": "线上 v{latest} 可用（本地 v{current}）",
   "update.open": "查看",
   "update.failed": "检查更新失败，请稍后再试",
   "diag.memoryTokens": "记忆占用 · 本轮约 {round} tok，累计 {total} tok",
@@ -419,7 +419,8 @@ var zh_default = {
   "engine.modelHint": "「跟随 DSH 默认模型」使用 DSH 当前路由；指定模型则固定用它处理记忆写入。",
   "engine.summaryFollow": "跟随 DSH 默认 · {model}",
   "engine.summaryPinned": "指定模型 · {model}",
-  "engine.currentOption": "当前配置 · {provider}/{model}"
+  "engine.currentOption": "当前配置 · {provider}/{model}",
+  "update.localOnly": "本地 v{current}"
 };
 
 // locale/en.json
@@ -587,8 +588,8 @@ var en_default = {
   "update.repo": "GitHub repository",
   "update.check": "Check for updates",
   "update.checking": "Checking…",
-  "update.latest": "Up to date · v{version}",
-  "update.behind": "New version v{version}",
+  "update.latest": "Up to date · local v{current} / published v{latest}",
+  "update.behind": "Published v{latest} available (local v{current})",
   "update.open": "View",
   "update.failed": "Update check failed, try again later",
   "diag.memoryTokens": "Memory footprint · about {round} tok this round, {total} tok total",
@@ -658,7 +659,8 @@ var en_default = {
   "engine.modelHint": "Following the DSH default uses whatever route DSH currently selects; a pinned model is always used for memory writes.",
   "engine.summaryFollow": "Following DSH default · {model}",
   "engine.summaryPinned": "Pinned model · {model}",
-  "engine.currentOption": "Current setting · {provider}/{model}"
+  "engine.currentOption": "Current setting · {provider}/{model}",
+  "update.localOnly": "Local v{current}"
 };
 
 // client-src/locale.js
@@ -3568,15 +3570,18 @@ function SettingsSection(props) {
       return h(
         "span",
         { className: "hm-footerResult" },
-        t("update.behind", { version: updateResult.latest }),
+        t("update.behind", { latest: updateResult.latest, current: updateResult.current || "" }),
         " ",
         updateResult.url !== "" ? h("a", { href: updateResult.url, target: "_blank", rel: "noopener noreferrer" }, t("update.open")) : null
       );
     }
+    if (!updateResult.latest) {
+      return h("span", { className: "hm-footerResult" }, t("update.localOnly", { current: updateResult.current || "" }));
+    }
     return h(
       "span",
       { className: "hm-footerResult" },
-      t("update.latest", { version: updateResult.latest || updateResult.current })
+      t("update.latest", { current: updateResult.current || "", latest: updateResult.latest })
     );
   };
   const renderFooter = () => h(
