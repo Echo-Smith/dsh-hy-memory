@@ -99,3 +99,5 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Fixed `state.json` being overwritten by the virtualenv marker (`venv.json` now), the state lease never being taken over after a reload overlap, and the project index being unreadable after either event. `projects.json` is now the panel's authority and is rebuilt from the store at boot.
 - Fixed the nav glyph: our brain was hidden by our own icon hider because the icon component did not forward the ownership class; the wrapper `.hm-navGlyph` now owns it and the hider matches the wrapper.
 - `deploy-local.mjs` copies by replacement after `rsync` left `index.js` newer than `src/tiers.js` and broke the import.
+- Project titles now recover from session directory names (`client-src`-free `src/session-path.js`), with ambiguity resolved by disk existence and project-key match: the picker shows `default-workspace`, `mirror-memory`-style names instead of `project:<sha1>` keys.
+- Nav alignment: the hider now removes the shell icon's whole slot, because hiding only the `svg` left a fixed-width wrapper that pushed our glyph one slot to the right.

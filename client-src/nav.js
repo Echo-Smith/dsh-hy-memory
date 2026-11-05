@@ -1,15 +1,16 @@
 /**
- * Hide the shell's own section icon beside our nav label.
+ * Remove the shell's own section icon from our nav row.
  *
- * The settings section list renders a default icon before a section's label
- * node. Hiding it from CSS needs the shell's exact wrapper shape, and that shape
- * changed once already (leaving a gear next to the brain). This walk only needs
- * `closest` and `querySelectorAll`, both long-standing DOM APIs, so it survives
- * markup changes. Pure over the document it is given, so it is testable.
+ * Hiding only the `<svg>` left its fixed-width wrapper in the layout, so our
+ * glyph started one icon-slot to the right of every other row's icon and the
+ * row looked misaligned. This hides the slot itself — the row's direct child
+ * that contains the foreign icon — and never a subtree that contains our glyph.
  *
- * @param doc - a Document-like object with querySelectorAll`.
- * @param attr - the marker attribute used so a second pass stays idempotent.
- * @returns the svg elements hidden by this call.
+ * Pure over the document it receives, so it is testable.
+ *
+ * @param doc - a Document-like object with `querySelectorAll`.
+ * @param attr - marker attribute that keeps repeated passes idempotent.
+ * @returns the elements hidden by this call.
  */
 export function hideForeignNavIcons(doc, attr) {
   if (!doc || typeof doc.querySelectorAll !== 'function') return []
@@ -20,14 +21,16 @@ export function hideForeignNavIcons(doc, attr) {
       : null
     if (!row || typeof row.querySelectorAll !== 'function') continue
     for (const svg of row.querySelectorAll('svg')) {
-      // Our own glyph lives inside `.hm-navGlyph`; the class used to sit on the
-      // svg itself, which failed when the icon component ignored it.
-      const owned = typeof svg.closest === 'function' && svg.closest('.hm-navGlyph') !== null
-      if (owned) continue
-      if (typeof svg.getAttribute === 'function' && svg.getAttribute(attr) === '1') continue
-      if (typeof svg.setAttribute === 'function') svg.setAttribute(attr, '1')
-      if (svg.style !== undefined) svg.style.display = 'none'
-      hidden.push(svg)
+      if (typeof svg.closest === 'function' && svg.closest('.hm-navGlyph') !== null) continue
+      // Climb to the row's direct child: that is the icon slot whose width the
+      // shell reserves. Hide it, not just the glyph inside it.
+      let slot = svg
+      while (slot.parentElement && slot.parentElement !== row) slot = slot.parentElement
+      if (typeof slot.querySelector === 'function' && slot.querySelector('.hm-navGlyph') !== null) continue
+      if (typeof slot.getAttribute === 'function' && slot.getAttribute(attr) === '1') continue
+      if (typeof slot.setAttribute === 'function') slot.setAttribute(attr, '1')
+      if (slot.style !== undefined) slot.style.display = 'none'
+      hidden.push(slot)
     }
   }
   return hidden

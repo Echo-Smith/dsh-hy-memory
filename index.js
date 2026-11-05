@@ -5,8 +5,8 @@
  * Nothing in this module may throw out of a session/event or pre-step
  * listener: a memory failure degrades to one log line and an activity record.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ActivityLog } from './src/activity.js'
 import { createCapture } from './src/capture.js'
@@ -16,8 +16,9 @@ import { createRecall } from './src/recall.js'
 import { createMemoryOps, createTools } from './src/tools.js'
 import { describeModel as describeModelRoute, readDotEnv, readProviders, resolveDshRoute } from './src/model.js'
 import { DEFAULT_SETTINGS, loadSettings, mergeSettings, saveSettings } from './src/settings.js'
-import { integrationDir, projectsPath, statePath } from './src/paths.js'
+import { dshHome, integrationDir, projectsPath, statePath } from './src/paths.js'
 import { projectKeysFromRows, projectKey, projectTitleForPath, resolveUser } from './src/tiers.js'
+import { sessionDirPathCandidates } from './src/session-path.js'
 import { Sidecar } from './src/sidecar.js'
 
 export const name = 'hy-memory'
@@ -331,9 +332,34 @@ function createRuntime(ctx, config) {
         known[key] = { title: key, path: '' }
         added += 1
       }
+      // Names come from session directories: one directory per workspace cwd, so
+      // the key in `project:<sha1>` can be matched back to a real path and title.
+      const named = {}
+      try {
+        const wanted = new Set(keys)
+        for (const entry of await readdir(join(dshHome(), 'sessions'), { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue
+          // The directory name is ambiguous about literal hyphens, so test the
+          // candidates against the disk and against the keys we are recovering.
+          for (const candidate of sessionDirPathCandidates(entry.name)) {
+            const key = projectKey(candidate)
+            if (!wanted.has(key) || named[key]) continue
+            if (!existsSync(candidate)) continue
+            named[key] = { path: candidate, title: projectTitleForPath(candidate) }
+            break
+          }
+        }
+      } catch {}
+
       const standaloneBefore = readProjectIndex()
+      const recovered = {}
+      for (const key of keys) recovered[key] = standaloneBefore[key]?.path ? standaloneBefore[key] : { title: key, path: '' }
+      const merged = { ...recovered, ...named }
       const toAdd = {}
-      for (const key of keys) if (!standaloneBefore[key]) toAdd[key] = { title: key, path: '' }
+      for (const [key, entry] of Object.entries(merged)) {
+        if (standaloneBefore[key]?.path === entry.path && standaloneBefore[key]?.title === entry.title) continue
+        toAdd[key] = entry
+      }
       if (Object.keys(toAdd).length > 0) writeProjectIndex(toAdd)
       if (state?.data) {
         // Visible evidence for the panel and for debugging: recovery used to run

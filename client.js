@@ -683,12 +683,14 @@ function hideForeignNavIcons(doc, attr) {
     const row = typeof label.closest === "function" ? label.closest('button, a, [role="menuitem"], li') : null;
     if (!row || typeof row.querySelectorAll !== "function") continue;
     for (const svg of row.querySelectorAll("svg")) {
-      const owned = typeof svg.closest === "function" && svg.closest(".hm-navGlyph") !== null;
-      if (owned) continue;
-      if (typeof svg.getAttribute === "function" && svg.getAttribute(attr) === "1") continue;
-      if (typeof svg.setAttribute === "function") svg.setAttribute(attr, "1");
-      if (svg.style !== void 0) svg.style.display = "none";
-      hidden.push(svg);
+      if (typeof svg.closest === "function" && svg.closest(".hm-navGlyph") !== null) continue;
+      let slot = svg;
+      while (slot.parentElement && slot.parentElement !== row) slot = slot.parentElement;
+      if (typeof slot.querySelector === "function" && slot.querySelector(".hm-navGlyph") !== null) continue;
+      if (typeof slot.getAttribute === "function" && slot.getAttribute(attr) === "1") continue;
+      if (typeof slot.setAttribute === "function") slot.setAttribute(attr, "1");
+      if (slot.style !== void 0) slot.style.display = "none";
+      hidden.push(slot);
     }
   }
   return hidden;

@@ -277,8 +277,11 @@ Two failures shared one cause and are now separated:
   writer, and a read-only instance now takes the lease over once the holder exits
   instead of never persisting again.
 - The project index is additionally written to `projects.json`, which the panel
-  reads directly, and it is rebuilt from the memory store at boot when missing, so
-  other workspaces stay reachable even after a partial state loss.
+  reads directly, and it is rebuilt at boot from two local sources: the memory
+  store (which projects exist) and the session directory names (which workspace
+  each one is). Titles therefore come back as real names, not keys. A session
+  directory name is ambiguous — a literal `-` looks like a separator — so every
+  split is tried and the candidate that exists on disk wins.
 
 Memory rows themselves were never affected: they live in the SDK store.
 
