@@ -217,7 +217,7 @@
   "diag.pendingHint": "抓取队列积压；数值持续增长说明写入跟不上。",
   "engine.title": "记忆引擎",
   "engine.model": "模型",
-  "engine.modelAuto": "跟随 DSH 默认模型",
+  "engine.modelAuto": "跟随 DSH 默认模型（当前 {model}）",
   "engine.maxTokens": "最大 tokens",
   "engine.timeoutMs": "超时（毫秒）",
   "engine.halfLife": "召回半衰期（天）",
@@ -230,5 +230,8 @@
   "engine.failed": "保存失败：{message}",
   "engine.hint": "思考模式会吃掉输出预算，导致写入返回空文本。",
   "engine.maxAttempts": "失败重试上限",
-  "engine.modelHint": "「跟随 DSH 默认模型」使用 DSH 当前路由；指定模型则固定用它处理记忆写入。"
+  "engine.modelHint": "「跟随 DSH 默认模型」使用 DSH 当前路由；指定模型则固定用它处理记忆写入。",
+  "engine.summaryFollow": "跟随 DSH 默认 · {model}",
+  "engine.summaryPinned": "指定模型 · {model}",
+  "engine.currentOption": "当前配置 · {provider}/{model}"
 }

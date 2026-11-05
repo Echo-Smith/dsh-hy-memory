@@ -204,6 +204,8 @@ function createRuntime(ctx, config) {
   let state = null
   let sidecar = null
   let route = null
+  let defaultRoute = null
+  let defaultRouteAt = 0
   let routeResolvedAt = 0
   let routeRefresh = null
   let startAttemptedAt = 0
@@ -270,6 +272,24 @@ function createRuntime(ctx, config) {
     } catch {
       return []
     }
+  }
+
+  /**
+   * What DSH would pick with no plugin override. The panel shows this next to
+   * "follow the DSH default" so the choice is never abstract.
+   */
+  async function resolveDshDefaultRoute() {
+    if (defaultRoute && Date.now() - defaultRouteAt < ROUTE_REFRESH_MS) return defaultRoute
+    try {
+      const dotEnv = await readDotEnv()
+      const providers = await readProviders()
+      const top = { ...(settings.llm ?? {}), provider: '', model: '' }
+      defaultRoute = resolveDshRoute(providers, {}, { ...settings, llm: top }, dotEnv)
+    } catch {
+      defaultRoute = null
+    }
+    defaultRouteAt = Date.now()
+    return defaultRoute
   }
 
   async function refreshRoute() {
@@ -503,6 +523,7 @@ function createRuntime(ctx, config) {
         contextUsage: () => memoryContext,
         queueDepth: () => capture?.queueDepth?.() ?? 0,
         listModelOptions,
+        describeDefaultModel: async () => describeModelRoute(await resolveDshDefaultRoute(), settings),
         ops,
         activity,
         state,

@@ -668,6 +668,8 @@ export function SettingsSection(props) {
   const [engineBusy, setEngineBusy] = React.useState(false)
   const [engineError, setEngineError] = React.useState('')
   const [engineSaved, setEngineSaved] = React.useState(false)
+  // Collapsed like the diagnostics card: the panel stays compact until asked.
+  const [engineOpen, setEngineOpen] = React.useState(false)
   const [projects, setProjects] = React.useState(emptyPicker)
   const [projectChoice, setProjectChoice] = React.useState(null)
   const [sessions, setSessions] = React.useState(emptyPicker)
@@ -1949,10 +1951,21 @@ export function SettingsSection(props) {
     if (engine === null) return null
     const options = (status?.model?.options ?? [])
     const pinned = `${engine.provider}\u0000${engine.model}`
+    const defaultModel = status?.model?.dshDefault ?? null
+    const defaultLabel = defaultModel?.model || t('diag.unknown')
+    const activeLabel = engine.provider === '' && engine.model === ''
+      ? t('engine.summaryFollow', { model: defaultLabel })
+      : t('engine.summaryPinned', { model: engine.model })
+    const listed = options.some((option) => option.provider === engine.provider && option.model === engine.model)
     return h('section', { className: 'hm-card' },
       h('div', { className: 'hm-cardHead' },
         h('h2', { className: 'hm-h2' }, t('engine.title')),
-        engineSaved ? h('span', { className: 'hm-muted', role: 'status' }, t('engine.saved')) : null),
+        h(ui.Button, {
+          size: 'sm', variant: 'ghost',
+          onClick: () => { setEngineOpen((value) => !value) },
+        }, engineOpen ? t('common.hideDetails') : t('common.details'))),
+      h('p', { className: 'hm-muted' }, activeLabel),
+      engineOpen ? h('div', null,
       h('p', { className: 'hm-muted' }, t('engine.modelHint')),
       h('div', { className: 'hm-engineGrid' },
         h('label', { className: 'hm-field' },
@@ -1970,7 +1983,10 @@ export function SettingsSection(props) {
               setEngine({ ...engine, provider, model })
             },
           },
-          h('option', { value: '' }, t('engine.modelAuto')),
+          h('option', { value: '' }, t('engine.modelAuto', { model: defaultLabel })),
+          engine.provider !== '' && engine.model !== '' && !listed
+            ? h('option', { value: pinned }, t('engine.currentOption', { provider: engine.provider, model: engine.model }))
+            : null,
           options.map((option) => h('option', {
             key: `${option.provider}:${option.model}`,
             value: `${option.provider}\u0000${option.model}`,
@@ -2028,7 +2044,7 @@ export function SettingsSection(props) {
       h('div', { className: 'hm-row' },
         h(ui.Button, { size: 'sm', variant: 'primary', disabled: engineBusy, onClick: () => { void saveEngine() } },
           engineBusy ? t('engine.saving') : t('engine.save'))),
-      engineError !== '' ? h('p', { className: 'hm-error', role: 'alert' }, t('engine.failed', { message: engineError })) : null)
+      engineError !== '' ? h('p', { className: 'hm-error', role: 'alert' }, t('engine.failed', { message: engineError })) : null) : null)
   }
 
   // MemHub is a separate product; its card reads the detection folded into

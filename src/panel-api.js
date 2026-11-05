@@ -89,6 +89,7 @@ export function createPanelApi(deps) {
   const contextUsage = typeof deps.contextUsage === 'function' ? deps.contextUsage : () => null
   const queueDepth = typeof deps.queueDepth === 'function' ? deps.queueDepth : () => 0
   const listModelOptions = typeof deps.listModelOptions === 'function' ? deps.listModelOptions : async () => []
+  const describeDefaultModel = typeof deps.describeDefaultModel === 'function' ? deps.describeDefaultModel : async () => null
   const onSettingsChange = deps.onSettingsChange ?? (() => {})
 
   function contextOfRequest(body) {
@@ -110,6 +111,7 @@ export function createPanelApi(deps) {
     } catch {}
     const status = sidecar.status()
     const model = describeModel()
+    const defaultModel = await describeDefaultModel().catch(() => null)
     const embedding = config.embedding ?? { mode: 'local' }
     const embeddingReady = embedding.mode === 'local'
       ? status.state === 'ready' && status.venvReady === true
@@ -135,6 +137,14 @@ export function createPanelApi(deps) {
         timeoutMs: Number((config.llm ?? {}).timeoutMs) || 180000,
         disableReasoning: (config.llm ?? {}).disableReasoning !== false,
         options: await listModelOptions(),
+        dshDefault: (() => {
+          const fallback = defaultModel
+          return {
+            provider: fallback?.provider ?? '',
+            model: fallback?.model ?? '',
+            ready: fallback?.ready === true,
+          }
+        })(),
       },
       counts,
       scene: state?.data?.lastScene ?? 'chat',

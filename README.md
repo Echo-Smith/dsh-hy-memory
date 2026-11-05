@@ -239,9 +239,10 @@ rows. Nothing runs automatically; the panel exposes it as one button in the diag
 
 ## Engine settings and write health
 
-The diagnostics card shows the capture backlog (`N pending writes`). The **Memory engine** is its own card:
-model (either *follow the DSH default* or a pinned provider/model), max tokens, request timeout, recall
-half-life, write concurrency, per-drain cap and the retry limit per job. Saving writes `llm`, `recall` and
+The diagnostics card shows the capture backlog (`N pending writes`). The **Memory engine** is its own card and starts collapsed, showing one summary line such as
+`Following DSH default · auto/glm-5.3-flash`. Expanding it reveals the model choice (*follow the DSH default*,
+labelled with the model DSH currently resolves, or a pinned provider/model), max tokens, request timeout,
+recall half-life, write concurrency, per-drain cap and the retry limit per job. Saving writes `llm`, `recall` and
 `capture` through the same settings route the switch uses; changes apply on the next sidecar start.
 
 Two scripts keep a local deploy honest, after a bundle whose loader id did not match the installed package

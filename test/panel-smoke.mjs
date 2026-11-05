@@ -28,7 +28,8 @@ const STATUS = Object.freeze({
   enabled: true,
   sidecar: { state: 'ready', port: 4310, pid: 42, startedAt: 1, lastError: '', venvReady: true },
   model: {
-    ready: true, provider: 'dsh', model: 'test-model', source: 'dsh',
+    ready: true, provider: '', model: '', source: 'dsh',
+    dshDefault: { ready: true, provider: 'magpie', model: 'auto/glm-5.3-flash' },
     maxTokens: 4096, timeoutMs: 180000, disableReasoning: true,
     options: [{ provider: 'magpie', model: 'auto/glm-5.3-flash', label: 'auto/glm-5.3-flash · magpie' }],
   },
@@ -1639,8 +1640,8 @@ async function exerciseMemhubMissing(harness) {
   assert.equal(findButton(harness, t('memhub.import')), undefined, 'import is hidden when MemHub is absent')
   assert.equal(hostsOf(harness).filter((node) => String(node.props?.className ?? '').includes('hm-cardMissing')).length, 1,
     'the absent card uses the dashed variant')
-  assert.equal(findButtons(harness, t('common.details')).length, 1,
-    'only the diagnostics card keeps its details toggle')
+  assert.equal(findButtons(harness, t('common.details')).length, 2,
+    'the absent MemHub card adds no toggle: only diagnostics and the engine keep one')
 }
 
 async function exerciseFooterAndTokens(harness) {
@@ -1669,9 +1670,19 @@ async function exerciseFooterAndTokens(harness) {
   const engineCard = hostsOf(harness).find((node) => node.type === 'section'
     && String(harness.mini.textOf(node)).includes(t('engine.title')))
   assert.ok(engineCard !== undefined, 'the engine is its own card, not a diagnostics disclosure')
+  assert.equal(hostsOf(harness).filter((node) => node.type === 'select'
+    && String(node.props?.className ?? '').includes('hm-input')).length, 0,
+    'the engine card starts collapsed')
+  assert.ok(harness.mini.text().includes(t('engine.summaryFollow', { model: 'auto/glm-5.3-flash' })),
+    'the collapsed card states which model it follows')
+  // Cards render in order diagnostics, engine, MemHub; the engine toggle is the
+  // second one.
+  const detailsButtons = findButtons(harness, t('common.details'))
+  assert.ok(detailsButtons.length >= 2, 'diagnostics and engine each keep a details toggle')
+  await activate(harness, detailsButtons[1], 'the engine expand toggle')
   const picker = hostsOf(harness).find((node) => node.type === 'select' && String(node.props?.className ?? '').includes('hm-input'))
   assert.ok(picker !== undefined, 'the engine form has a model picker')
-  assert.ok(hostsOf(harness).some((node) => node.props?.value === 'auto/glm-5.3-flash' || node.props?.value === 'magpie\u0000auto/glm-5.3-flash'),
+  assert.ok(hostsOf(harness).some((node) => node.props?.value === 'magpie\u0000auto/glm-5.3-flash'),
     'the picker lists a model option from status.model.options')
   const numbers = hostsOf(harness).filter((node) => node.type === 'input' && node.props?.type === 'number')
   assert.ok(numbers.length >= 6, 'the engine form exposes budget, timeout, half-life, concurrency, cap and retry limit')
