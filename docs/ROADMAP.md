@@ -91,5 +91,5 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 
 ## Phase 10: nav glyph robustness (local)
 
-- The settings row showed the shell gear next to our brain after a shell markup change made the CSS  rule stop matching. The hiding is now a runtime walk from our label to its row (, ), which hides any other svg in that row and keeps ours; the CSS rule stays only as a fast path.
-- Covered by  (fake DOM): foreign icon hidden, ours kept, second pass idempotent, absent label tolerated. Suite 107 tests.
+- The settings row showed the shell gear next to our brain after a shell markup change made the CSS `:has(> span > ...)` rule stop matching. Hiding is now a runtime walk from our label to its row (`client-src/nav.js`, `hideForeignNavIcons`): it hides any other svg in that row and keeps ours, and the CSS rule stays only as a fast path.
+- Covered by `test/nav-icons.test.mjs` with a fake DOM: foreign icon hidden, ours kept, a second pass idempotent, a page without the label tolerated. Suite: 107 tests.
