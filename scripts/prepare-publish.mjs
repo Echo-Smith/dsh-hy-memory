@@ -82,7 +82,9 @@ try {
   // release: the artifact itself is unchanged.
   const bundle = readFileSync(join(staging, 'client.js'), 'utf8')
   if (!bundle.includes(sourceName)) throw error
-  writeFileSync(join(staging, 'client.js'), bundle.replaceAll('@local/dsh-hy-memory', name))
+  // Rewrite from the manifest name, not a remembered literal: the repository was
+  // renamed once and a hard-coded old name made this branch a no-op in CI.
+  writeFileSync(join(staging, 'client.js'), bundle.replaceAll(sourceName, name))
   console.log('esbuild unavailable; patched the loader id in the committed bundle')
 }
 exec(process.execPath, ['--check', 'client.js'])
