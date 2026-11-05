@@ -47,7 +47,7 @@ dsh plugin --profile desktop add link:$(pwd)
 
 ### 从 npm 安装
 
-已发布为 [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory)（0.1.2）。profile 需要两件事：把包作为依赖，
+已发布为 [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory)（0.1.6）。profile 需要两件事：把包作为依赖，
 以及把包名写进 `dsh.profile.bundles`；脚本两步都做，并验证装好的入口确实导出 `apply()`：
 
 ```bash
@@ -62,7 +62,7 @@ node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.2），也就是仓库 Packages
+另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.6），也就是仓库 Packages
 页里能看到的那个。读取它需要一个带 `read:packages` 的 token：
 
 ```bash
@@ -76,14 +76,14 @@ node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
 也可以直接从 GitHub Release 安装（依赖写成 tarball 地址）：
 
 ```bash
-node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.2/dsh-hy-memory-0.1.2.tgz --apply
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
 自己出包或本地验证时：
 
 ```bash
 node scripts/prepare-publish.mjs                                  # 以公开包名暂存、打包、自检
-node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.2.tgz --apply
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
 发布是需要你自己凭据的人工步骤：`npm publish ./dist/<tarball> --access public`。推送 `v*` 标签还会触发
@@ -116,6 +116,11 @@ https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.jso
 
 每次发版把 `versions` 更新一下，详情页就会显示有可用版本；设置面板里那条「只提示不安装」的检查保持不变。
 
+## 并发与重试
+
+捕获队列的默认并发是 3（`capture.concurrency`），每轮最多处理 8 条（`maxPerDrain`），单条失败重试上限 20
+（`maxAttempts`，超过后原文降级写入 lite 层）。这三个值都能在面板的「记忆引擎」里改。
+
 ## 截图
 
 | 个人记忆 | 项目与会话 | 更新检查 |
@@ -134,10 +139,14 @@ https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.jso
 
 MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 
-页脚的更新行会同时给出两个版本：`已是最新 · 本地 v0.1.6 / 线上 v0.1.5`。开发期本地版本领先于已发布版本是
+页脚的更新行会同时给出两个版本：`已是最新 · 本地 v0.1.6 / 线上 v0.1.6`。开发期本地版本领先于已发布版本是
 正常状态，只显示一个数字会让人分不清是哪一侧。
 
 ## 兼容与边界
+
+- coding 检索时日志里可能出现 `[search-coding] fact layer empty under scope workspace…`：它表示该工作区的
+  coding 事实层为空，本次检索退回经验层（结果照常返回）。这是 SDK 的可观测提示，不是写入失败；把所有
+  WARNING 关掉会连带藏起真正的失败，所以保留。
 
 - 项目记忆绑定项目；会话记忆跟随它创建时所在的项目，换项目看不到。
 - working / coding 的存储只有带 workspace id 的检索才可见，因此捕获默认走 chat 库，只有显式打开 productivity 才分流。

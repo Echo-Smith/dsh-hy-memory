@@ -38,7 +38,7 @@ Then open Settings > 记忆. First use bootstraps the Python environment; the mo
 
 ### From npm
 
-Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory) (0.1.2). A profile needs the
+Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory) (0.1.6). A profile needs the
 package as a dependency *and* its name in `dsh.profile.bundles`; the installer does both, then verifies the
 installed entry exports `apply()`:
 
@@ -55,7 +55,7 @@ Plugin market index for DSH's own detail page:
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.2), which is what
+A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.6), which is what
 shows under the repository's Packages tab. Reading it needs a token with `read:packages`:
 
 ```bash
@@ -69,14 +69,14 @@ The workflow that publishes it is `.github/workflows/publish-github-packages.yml
 a published release. A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
 
 ```bash
-node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.2/dsh-hy-memory-0.1.2.tgz --apply
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
 For a local build or a release you are publishing yourself:
 
 ```bash
 node scripts/prepare-publish.mjs                                  # stages under the public name, packs, verifies
-node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.2.tgz --apply
+node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
 Publishing is a human step with your own credentials: `npm publish ./dist/<tarball> --access public`.
@@ -110,6 +110,7 @@ Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edi
 | `recall.maxItems` / `maxChars` / `minScore` | 5 / 1200 / 0.56 | recall budget and relevance floor per step |
 | `capture.windowTurns` | 3 | turns per captured batch |
 | `capture.productivity` | off | route batches to the working/coding stores instead of chat |
+| `capture.concurrency` / `maxPerDrain` / `maxAttempts` | 3 / 8 / 20 | parallel writes, per-drain cap, retries before a job is demoted to the lite layer |
 | `promotion.everyTurns` | 8 | turns between promotion passes |
 | `embedding.mode` | local | `local` ONNX (384 dims, ~80 MB downloaded once into `~/.cache/chroma`) or `remote` with `baseURL`/`model`/`apiKey`/`dims` |
 
@@ -152,10 +153,14 @@ Project switch: [don't remember this project](docs/screenshots/panel-capture-swi
 
 MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 
-The footer's update line reports both numbers — `Up to date · local v0.1.6 / published v0.1.5` — because an
+The footer's update line reports both numbers — `Up to date · local v0.1.6 / published v0.1.6` — because an
 unreleased local build is expected while developing, and a single number hid which side it meant.
 
 ## Compatibility and limits
+
+- A `[search-coding] fact layer empty under scope workspace…` line in the sidecar log means the coding fact
+  layer is empty for that workspace and the query fell back to experiences (results still return). It is
+  SDK observability, not a failed write; silencing all warnings would also hide real failures, so it stays.
 
 - Project memories belong to a project; session memories follow the project they were created in, so switching projects hides them.
 - Productivity stores are only visible to a search that carries a workspace id, so capture writes to the chat store unless `capture.productivity` is on.
