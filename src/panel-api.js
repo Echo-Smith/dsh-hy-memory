@@ -90,6 +90,8 @@ export function createPanelApi(deps) {
   const queueDepth = typeof deps.queueDepth === 'function' ? deps.queueDepth : () => 0
   const listModelOptions = typeof deps.listModelOptions === 'function' ? deps.listModelOptions : async () => []
   const describeDefaultModel = typeof deps.describeDefaultModel === 'function' ? deps.describeDefaultModel : async () => null
+  const recoverProjects = typeof deps.recoverProjects === 'function' ? deps.recoverProjects : null
+  const readProjectIndex = typeof deps.readProjectIndex === 'function' ? deps.readProjectIndex : () => ({})
   const onSettingsChange = deps.onSettingsChange ?? (() => {})
 
   function contextOfRequest(body) {
@@ -281,7 +283,12 @@ export function createPanelApi(deps) {
 
   /** Projects known to the plugin, each with its project and session tier counts. */
   async function listProjects() {
-    const known = state?.data?.projects ?? {}
+    // A lost project index must not hide other workspaces: re-derive it from the
+    // store on first use instead of returning an empty picker.
+    if (Object.keys(state?.data?.projects ?? {}).length === 0 && recoverProjects !== null) {
+      await recoverProjects().catch(() => 0)
+    }
+    const known = { ...(readProjectIndex() ?? {}), ...(state?.data?.projects ?? {}) }
     const items = []
     for (const [key, meta] of Object.entries(known)) {
       let projectCount = 0

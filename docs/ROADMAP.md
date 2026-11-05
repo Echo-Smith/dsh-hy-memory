@@ -93,3 +93,9 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 
 - The settings row showed the shell gear next to our brain after a shell markup change made the CSS `:has(> span > ...)` rule stop matching. Hiding is now a runtime walk from our label to its row (`client-src/nav.js`, `hideForeignNavIcons`): it hides any other svg in that row and keeps ours, and the CSS rule stays only as a fast path.
 - Covered by `test/nav-icons.test.mjs` with a fake DOM: foreign icon hidden, ours kept, a second pass idempotent, a page without the label tolerated. Suite: 107 tests.
+
+## Phase 11: restart durability and nav glyph (local)
+
+- Fixed `state.json` being overwritten by the virtualenv marker (`venv.json` now), the state lease never being taken over after a reload overlap, and the project index being unreadable after either event. `projects.json` is now the panel's authority and is rebuilt from the store at boot.
+- Fixed the nav glyph: our brain was hidden by our own icon hider because the icon component did not forward the ownership class; the wrapper `.hm-navGlyph` now owns it and the hider matches the wrapper.
+- `deploy-local.mjs` copies by replacement after `rsync` left `index.js` newer than `src/tiers.js` and broke the import.

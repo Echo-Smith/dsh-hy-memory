@@ -10,6 +10,7 @@ import {
   pickScene,
   projectAgentId,
   projectKey,
+  projectKeysFromRows,
   projectTitleForPath,
   recallPlan,
   resolveUser,
@@ -139,4 +140,14 @@ test('tier of a persisted memory follows agent and session columns', () => {
   assert.equal(tierOfItem({ agent_id: 'project:p1', session_id: 's1' }, { projectKey: 'p1' }), 'session')
   assert.equal(tierOfItem({ agent_id: 'project:other', session_id: 'project' }, { projectKey: 'p1' }), null)
   assert.equal(tierOfItem({ agent_id: 'someone', session_id: 'x' }), null)
+})
+
+test('project keys can be recovered from stored rows', () => {
+  const rows = [
+    { agent_id: 'personal', session_id: 'personal' },
+    { agent_id: 'project:16f4d16f7ca2', session_id: 'project' },
+    { agent_id: 'project:abcdef012345', session_id: 'sess-1' },
+    { agent_id: 'project:', session_id: 'project' },
+  ]
+  assert.deepEqual(projectKeysFromRows(rows).sort(), ['16f4d16f7ca2', 'abcdef012345'])
 })

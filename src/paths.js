@@ -25,6 +25,11 @@ export function statePath() {
   return join(integrationDir(), 'state.json')
 }
 
+/** Project index kept apart from state.json so a lease race cannot hide it. */
+export function projectsPath() {
+  return join(integrationDir(), 'projects.json')
+}
+
 export function logPath() {
   return join(integrationDir(), 'sidecar.log')
 }

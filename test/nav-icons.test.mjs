@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { hideForeignNavIcons } from '../client-src/nav.js'
 
 function svg(className = '') {
-  const node = { className, attrs: {}, style: {}, closest(selector) { return selector === '.hm-navBrain' && className.includes('hm-navBrain') ? this : null } }
+  const node = { className, attrs: {}, style: {}, closest(selector) { return selector === '.hm-navGlyph' && className.includes('hm-navGlyph') ? this : null } }
   node.setAttribute = (key, value) => { node.attrs[key] = value }
   node.getAttribute = (key) => node.attrs[key] ?? null
   return node
@@ -15,7 +15,7 @@ function fakeDoc(row, label) {
 
 test('the row keeps our brain and hides the shell icon wherever it sits', () => {
   const gear = svg('shell-gear')
-  const brain = svg('hm-navBrain')
+  const brain = svg('hm-navGlyph')
   const label = { closest: (selector) => (selector.includes('button') ? row : null) }
   function row() {}
   const rowNode = { querySelectorAll: (selector) => (selector === 'svg' ? [gear, brain] : []) }
@@ -30,7 +30,7 @@ test('the row keeps our brain and hides the shell icon wherever it sits', () => 
 
 test('a second pass hides nothing more', () => {
   const gear = svg('shell-gear')
-  const brain = svg('hm-navBrain')
+  const brain = svg('hm-navGlyph')
   const rowNode = { querySelectorAll: (selector) => (selector === 'svg' ? [gear, brain] : []) }
   const label = { closest: () => rowNode }
   const doc = fakeDoc(rowNode, label)

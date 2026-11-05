@@ -51,8 +51,12 @@ execFileSync(process.execPath, ['scripts/check-client-id.mjs', '--package', stag
 
 const FILES = ['index.js', 'client.js', 'cordis.patch.yml', 'package.json', 'src', 'bridge', 'locale', 'icon.svg']
 for (const relative of FILES) {
-  mkdirSync(dirname(join(target, relative)), { recursive: true })
-  execFileSync('rsync', ['-a', '--delete', join(staging, relative), join(target, relative)], { stdio: 'pipe' })
+  // Copy by replacing, not by rsync's mtime heuristic: a stale file here once
+  // left index.js new and src/tiers.js old, so the plugin failed to import.
+  const destination = join(target, relative)
+  mkdirSync(dirname(destination), { recursive: true })
+  rmSync(destination, { recursive: true, force: true })
+  execFileSync('cp', ['-R', join(staging, relative), destination], { stdio: 'pipe' })
 }
 rmSync(staging, { recursive: true, force: true })
 console.log(`deployed into ${target}; reload DSH to pick it up`)

@@ -1358,9 +1358,11 @@ function exerciseNavLabel(harness) {
   const node = section.options.label()
   assert.equal(typeof node, 'object', 'the label thunk returns a React node (the shell renders it as children)')
   assert.equal(node.props?.className, 'hm-navLabel', 'the nav label node is scoped by class')
-  const [icon, text] = node.props.children
-  assert.equal(icon.props?.name, 'brain', 'the nav row asks for the brain icon')
-  assert.equal(icon.props?.className, 'hm-navBrain', 'the nav glyph is scoped by class')
+  const [glyph, text] = node.props.children
+  assert.equal(glyph.props?.className, 'hm-navGlyph', 'the nav glyph wrapper owns the slot')
+  const glyphChildren = glyph.props?.children
+  const icon = Array.isArray(glyphChildren) ? glyphChildren[0] : glyphChildren
+  assert.equal(icon?.props?.name, 'brain', 'the nav row asks for the brain icon')
   assert.deepEqual(text.props?.children, ['记忆'], 'the nav row keeps the section name after the glyph')
 
   const styles = harness.document.head.children.filter((child) => child.id === 'hy-memory-nav-glyph')

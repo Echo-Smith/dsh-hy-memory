@@ -275,3 +275,14 @@ export function inferTier(content) {
 export function contentHash(content) {
   return createHash('sha256').update(String(content ?? '').replace(/\s+/g, ' ').trim().toLowerCase()).digest('hex')
 }
+
+
+/** Project keys named by `project:<key>` agent ids in store rows, for recovery. */
+export function projectKeysFromRows(rows) {
+  const keys = new Set()
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const agent = String(row?.agent_id ?? '')
+    if (agent.startsWith('project:') && agent.length > 'project:'.length) keys.add(agent.slice('project:'.length))
+  }
+  return [...keys]
+}

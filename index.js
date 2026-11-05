@@ -16,8 +16,8 @@ import { createRecall } from './src/recall.js'
 import { createMemoryOps, createTools } from './src/tools.js'
 import { describeModel as describeModelRoute, readDotEnv, readProviders, resolveDshRoute } from './src/model.js'
 import { DEFAULT_SETTINGS, loadSettings, mergeSettings, saveSettings } from './src/settings.js'
-import { integrationDir, statePath } from './src/paths.js'
-import { projectKey, projectTitleForPath } from './src/tiers.js'
+import { integrationDir, projectsPath, statePath } from './src/paths.js'
+import { projectKeysFromRows, projectKey, projectTitleForPath, resolveUser } from './src/tiers.js'
 import { Sidecar } from './src/sidecar.js'
 
 export const name = 'hy-memory'
@@ -73,6 +73,7 @@ class StateStore {
   #timer = null
   #writing = null
   #owner = false
+  #retryAt = 0
 
   constructor(path, data, owner = false) {
     this.#path = path
@@ -82,6 +83,10 @@ class StateStore {
 
   get owner() {
     return this.#owner
+  }
+
+  static async tryAcquire() {
+    return StateStore.#acquireOwner()
   }
 
   static async #acquireOwner() {
@@ -132,7 +137,13 @@ class StateStore {
   }
 
   save() {
-    if (!this.#owner) return
+    if (!this.#owner) {
+      // Probe for a released lease at most every few seconds: save() is hot.
+      if (Date.now() < this.#retryAt) return
+      this.#retryAt = Date.now() + 5_000
+      void this.flush()
+      return
+    }
     if (this.#timer) return
     this.#timer = setTimeout(() => {
       this.#timer = null
@@ -145,12 +156,21 @@ class StateStore {
     if (!this.#owner) return
     this.#owner = false
     try {
+      // Delete only our own lease: a reload can hand it to the next instance
+      // before this one finishes disposing.
+      const current = JSON.parse(await readFile(`${this.#path}.owner.json`, 'utf8'))
+      if (Number(current?.pid) !== process.pid) return
       await rm(`${this.#path}.owner.json`, { force: true })
     } catch {}
   }
 
   async flush() {
-    if (!this.#owner) return
+    if (!this.#owner) {
+      // The previous instance may have held the lease when this one started; if
+      // it has exited, take the lease instead of staying read-only forever.
+      if (!(await StateStore.tryAcquire())) return
+      this.#owner = true
+    }
     if (this.#timer) {
       clearTimeout(this.#timer)
       this.#timer = null
@@ -252,6 +272,81 @@ function createRuntime(ctx, config) {
     } catch {}
     if (route) return { provider: route.provider, model: route.model }
     return null
+  }
+
+  /**
+   * Rebuild the project index from the store.
+   *
+   * Project keys used to be recorded only in state.json, which a venv-marker
+   * write could erase, taking the panel's project picker with it. The store is
+   * the authority for which projects exist, so it can be re-derived at boot.
+   */
+  /** Read the standalone project index; tolerant of a missing or broken file. */
+  function readProjectIndex() {
+    try {
+      return JSON.parse(readFileSync(projectsPath(), 'utf8'))
+    } catch {
+      return {}
+    }
+  }
+
+  /** Merge into the standalone index; the panel reads it directly. */
+  function writeProjectIndex(entries) {
+    try {
+      const merged = { ...readProjectIndex(), ...entries }
+      writeFileSync(projectsPath(), `${JSON.stringify(merged, null, 2)}\n`, 'utf8')
+      return merged
+    } catch {
+      return null
+    }
+  }
+
+  async function recoverProjects(attempt = 0) {
+    const store = state?.data
+    const client = sidecar?.client
+    if (store) {
+      // Record every attempt, including the ones that cannot run yet, so a silent
+      // no-op is distinguishable from "never called".
+      store.projectsRecovery = { at: Date.now(), attempt, client: Boolean(client) }
+      state.save()
+    }
+    if (!store || !client || typeof client.bridgeList !== 'function') {
+      // The sidecar may still be starting when the prewarm chain resolves.
+      if (attempt < 5) setTimeout(() => { void recoverProjects(attempt + 1) }, 4000).unref?.()
+      return 0
+    }
+    const known = store.projects && typeof store.projects === 'object' ? store.projects : (store.projects = {})
+    try {
+      const user = resolveUser(settings)
+      const keys = new Set()
+      for (let offset = 0; offset < 5000; offset += 200) {
+        const page = await client.bridgeList({ user_ids: [user], scene: 'all', limit: 200, offset })
+        const rows = Array.isArray(page?.memories) ? page.memories : []
+        for (const key of projectKeysFromRows(rows)) keys.add(key)
+        if (rows.length < 200) break
+      }
+      let added = 0
+      for (const key of keys) {
+        if (known[key]) continue
+        known[key] = { title: key, path: '' }
+        added += 1
+      }
+      const standaloneBefore = readProjectIndex()
+      const toAdd = {}
+      for (const key of keys) if (!standaloneBefore[key]) toAdd[key] = { title: key, path: '' }
+      if (Object.keys(toAdd).length > 0) writeProjectIndex(toAdd)
+      if (state?.data) {
+        // Visible evidence for the panel and for debugging: recovery used to run
+        // silently and could not be told apart from "never ran".
+        state.data.projectsRecovery = { at: Date.now(), attempt, looked: keys.size, added, standalone: Object.keys(readProjectIndex()).length }
+        state.save()
+      }
+      if (added > 0) log(`recovered ${added} project key(s) from the memory store`)
+      return added
+    } catch (error) {
+      log('project recovery failed', error)
+      return 0
+    }
   }
 
   /** OpenAI-compatible providers/models this profile offers, for the panel picker. */
@@ -444,6 +539,7 @@ function createRuntime(ctx, config) {
       // does not have to spend it, and an idle stop later is invisible.
       if (settings?.enabled !== false && settings?.sidecar?.prewarm !== false) {
         void sidecar.ensureStarted()
+          .then(() => recoverProjects())
           .then(() => log('sidecar prewarmed'))
           .catch((error) => log('sidecar prewarm failed', error?.message ?? error))
       }
@@ -523,6 +619,8 @@ function createRuntime(ctx, config) {
         contextUsage: () => memoryContext,
         queueDepth: () => capture?.queueDepth?.() ?? 0,
         listModelOptions,
+        recoverProjects,
+        readProjectIndex,
         describeDefaultModel: async () => describeModelRoute(await resolveDshDefaultRoute(), settings),
         ops,
         activity,

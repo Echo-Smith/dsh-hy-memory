@@ -20,7 +20,9 @@ export function hideForeignNavIcons(doc, attr) {
       : null
     if (!row || typeof row.querySelectorAll !== 'function') continue
     for (const svg of row.querySelectorAll('svg')) {
-      const owned = typeof svg.closest === 'function' && svg.closest('.hm-navBrain') !== null
+      // Our own glyph lives inside `.hm-navGlyph`; the class used to sit on the
+      // svg itself, which failed when the icon component ignored it.
+      const owned = typeof svg.closest === 'function' && svg.closest('.hm-navGlyph') !== null
       if (owned) continue
       if (typeof svg.getAttribute === 'function' && svg.getAttribute(attr) === '1') continue
       if (typeof svg.setAttribute === 'function') svg.setAttribute(attr, '1')

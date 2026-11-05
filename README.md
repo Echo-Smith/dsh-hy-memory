@@ -266,6 +266,22 @@ The capture queue also moved out of `state.json` into `capture-queue.json`. A ho
 previous plugin instance alive; two instances writing one state file reset retry counters and oscillated the
 queue, so the queue now has a single file and the state file a single-writer lease.
 
+## State that must survive a restart
+
+Two failures shared one cause and are now separated:
+
+- The Python virtualenv marker used to be written into `state.json`, so rebuilding
+  the environment erased the plugin's project index, capture cursors and promotions.
+  The marker lives in `venv.json` now.
+- A host reload can overlap two plugin instances; the state file has a single
+  writer, and a read-only instance now takes the lease over once the holder exits
+  instead of never persisting again.
+- The project index is additionally written to `projects.json`, which the panel
+  reads directly, and it is rebuilt from the memory store at boot when missing, so
+  other workspaces stay reachable even after a partial state loss.
+
+Memory rows themselves were never affected: they live in the SDK store.
+
 ## Capacity
 
 `lifecycle.maxPerTier` defaults to 2000 and `lifecycle.archiveOnCap` is off. Turning it on appends the

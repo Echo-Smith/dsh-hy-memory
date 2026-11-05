@@ -88,7 +88,9 @@ export class Sidecar {
       await run(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], log)
       await run(python, ['-m', 'pip', 'install', `${SDK_PACKAGE}==${SDK_VERSION}`], log)
     }
-    await writeFile(join(integrationDir(), 'state.json'), JSON.stringify({ sdkVersion: SDK_VERSION, installedAt: new Date().toISOString() }, null, 2))
+    // A marker of its own: writing this into state.json used to erase the plugin's
+    // projects, capture cursors and promotions whenever the venv was rebuilt.
+    await writeFile(join(integrationDir(), 'venv.json'), JSON.stringify({ sdkVersion: SDK_VERSION, installedAt: new Date().toISOString() }, null, 2))
     this.#set('idle')
     return python
   }

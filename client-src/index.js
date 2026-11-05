@@ -36,7 +36,8 @@ const NAV_CSS = [
   // the whole box and pinning the glyph box removes that ambiguity.
   '.hm-navLabel{display:inline-flex;align-items:center;gap:8px;min-width:0;vertical-align:middle;line-height:1.2}',
   '.hm-navLabel .hm-navText{display:inline-block;line-height:inherit}',
-  '.hm-navBrain{flex:none;display:block;width:16px;height:16px;color:currentColor}',
+  '.hm-navGlyph{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;color:currentColor}',
+  '.hm-navGlyph svg{display:block;width:16px;height:16px}',
   // Kept as a fast path only; the runtime hider below does not depend on the
   // shell's markup shape.
   'button:has(.hm-navLabel) > svg:first-child{display:none}',
@@ -46,13 +47,15 @@ const NAV_HIDDEN_ATTR = 'data-hm-nav-hidden'
 /** The nav label node: an outlined brain plus the translated name. */
 function navLabelNode(t) {
   return React.createElement('span', { className: 'hm-navLabel' },
-    React.createElement(Icon, {
-      name: 'brain',
-      size: 16,
-      strokeWidth: 1.5,
-      className: 'hm-navBrain',
-      style: { flex: 'none' },
-    }),
+    // The wrapper, not the svg, carries the ownership class: an Icon component
+    // may render its own <svg> without forwarding `className`, and the hider
+    // then mistook our glyph for the shell's and hid it.
+    React.createElement('span', { className: 'hm-navGlyph' },
+      React.createElement(Icon, {
+        name: 'brain',
+        size: 16,
+        strokeWidth: 1.5,
+      })),
     React.createElement('span', { className: 'hm-navText' }, t('nav.label')))
 }
 

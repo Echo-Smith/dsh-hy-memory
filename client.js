@@ -683,7 +683,7 @@ function hideForeignNavIcons(doc, attr) {
     const row = typeof label.closest === "function" ? label.closest('button, a, [role="menuitem"], li') : null;
     if (!row || typeof row.querySelectorAll !== "function") continue;
     for (const svg of row.querySelectorAll("svg")) {
-      const owned = typeof svg.closest === "function" && svg.closest(".hm-navBrain") !== null;
+      const owned = typeof svg.closest === "function" && svg.closest(".hm-navGlyph") !== null;
       if (owned) continue;
       if (typeof svg.getAttribute === "function" && svg.getAttribute(attr) === "1") continue;
       if (typeof svg.setAttribute === "function") svg.setAttribute(attr, "1");
@@ -3793,7 +3793,8 @@ var NAV_CSS = [
   // the whole box and pinning the glyph box removes that ambiguity.
   ".hm-navLabel{display:inline-flex;align-items:center;gap:8px;min-width:0;vertical-align:middle;line-height:1.2}",
   ".hm-navLabel .hm-navText{display:inline-block;line-height:inherit}",
-  ".hm-navBrain{flex:none;display:block;width:16px;height:16px;color:currentColor}",
+  ".hm-navGlyph{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;color:currentColor}",
+  ".hm-navGlyph svg{display:block;width:16px;height:16px}",
   // Kept as a fast path only; the runtime hider below does not depend on the
   // shell's markup shape.
   "button:has(.hm-navLabel) > svg:first-child{display:none}"
@@ -3803,13 +3804,18 @@ function navLabelNode(t) {
   return React4.createElement(
     "span",
     { className: "hm-navLabel" },
-    React4.createElement(Icon, {
-      name: "brain",
-      size: 16,
-      strokeWidth: 1.5,
-      className: "hm-navBrain",
-      style: { flex: "none" }
-    }),
+    // The wrapper, not the svg, carries the ownership class: an Icon component
+    // may render its own <svg> without forwarding `className`, and the hider
+    // then mistook our glyph for the shell's and hid it.
+    React4.createElement(
+      "span",
+      { className: "hm-navGlyph" },
+      React4.createElement(Icon, {
+        name: "brain",
+        size: 16,
+        strokeWidth: 1.5
+      })
+    ),
     React4.createElement("span", { className: "hm-navText" }, t("nav.label"))
   );
 }
