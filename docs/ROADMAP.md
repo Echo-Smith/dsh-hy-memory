@@ -78,3 +78,11 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: the installer prints `installed: <name> <old> -> <new>` before changing anything; `scripts/sync-market-index.mjs` rewrites the index from `package.json`; `.github/workflows/publish-npm.yml` publishes on `v*` tags and skips with a warning when `NPM_TOKEN` is absent or rejected.
 - Done: 0.1.3 fixes the second page-sync failure (`settings.section` seat occupied) by shadowing at a higher priority instead of aborting the sync; smoke covers the occupied-seat case.
 - Open: a release job that also bumps the market index itself (today that commit is manual).
+
+## Phase 9: write health and engine controls (local only)
+
+- Done: `reasoning_effort: "none"` through `MEMORY_LLM_EXTRA_BODY` replaces the per-model `thinking` patch; verified on the gateway that other knobs leave reasoning_content non-zero.
+- Done: engine form in diagnostics (model, max tokens, timeout, half-life, concurrency, per-drain cap) plus the pending-write line; both covered by panel smoke.
+- Done: capture queue moved to `capture-queue.json` with a single-writer lease on `state.json`; drain gained concurrency, a per-drain cap, a configurable retry limit and a watchdog that advances hung batches instead of latching.
+- Measured locally: writes 9–16 s, backlog 60 → 0–2, tests 104 pass, panel smoke pass.
+- Open: release the changes (0.1.6), and decide whether `maxAttempts` belongs in the engine form.

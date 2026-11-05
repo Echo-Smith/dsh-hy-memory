@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { createCapture } from '../src/capture.js'
 import { createRecall } from '../src/recall.js'
@@ -13,6 +16,10 @@ const RECALL_SETTINGS = {
   recall: { enabled: true, maxItems: 5, maxChars: 1600, minScore: 0.3, timeoutMs: 60 },
   capture: { enabled: false },
   promotion: { enabled: false },
+}
+
+function tempQueuePath() {
+  return join(mkdtempSync(join(tmpdir(), 'hy-queue-')), 'capture-queue.json')
 }
 
 function userMessage(text) {
@@ -123,6 +130,8 @@ test('capture flush calls add() once with the session scope and scene', async ()
   }
   const calls = []
   const capture = createCapture({
+    queuePath: tempQueuePath(),
+    queuePath: tempQueuePath(),
     settings: () => settings,
     state,
     activity: new ActivityLog(),
@@ -159,6 +168,8 @@ test('capture retries a failed write and keeps the job queued', async () => {
   }
   let attempts = 0
   const capture = createCapture({
+    queuePath: tempQueuePath(),
+    queuePath: tempQueuePath(),
     settings: () => settings,
     state,
     activity: new ActivityLog(),

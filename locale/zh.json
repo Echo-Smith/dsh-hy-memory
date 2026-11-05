@@ -212,5 +212,22 @@
   "purge.failed": "清除被拒绝：{message}",
   "memhub.paired": "已与 MemHub 配对，同步在 MemHub 面板里开启。",
   "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。",
-  "row.expand": "展开记忆内容"
+  "row.expand": "展开记忆内容",
+  "diag.pending": "待写入 {n} 条",
+  "diag.pendingHint": "抓取队列积压；数值持续增长说明写入跟不上。",
+  "engine.title": "记忆引擎",
+  "engine.model": "模型",
+  "engine.modelAuto": "跟随 DSH 默认模型",
+  "engine.maxTokens": "最大 tokens",
+  "engine.timeoutMs": "超时（毫秒）",
+  "engine.halfLife": "召回半衰期（天）",
+  "engine.concurrency": "并发写入",
+  "engine.maxPerDrain": "每轮最多处理",
+  "engine.disableReasoning": "关闭模型思考模式",
+  "engine.save": "保存",
+  "engine.saving": "保存中…",
+  "engine.saved": "已保存，下一轮生效",
+  "engine.failed": "保存失败：{message}",
+  "engine.hint": "思考模式会吃掉输出预算，导致写入返回空文本。",
+  "engine.maxAttempts": "失败重试上限"
 }

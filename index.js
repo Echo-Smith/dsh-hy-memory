@@ -6,7 +6,7 @@
  * listener: a memory failure degrades to one log line and an activity record.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ActivityLog } from './src/activity.js'
 import { createCapture } from './src/capture.js'
@@ -58,15 +58,55 @@ function writeBootMarker() {
   } catch {}
 }
 
+/**
+ * One writer, many readers.
+ *
+ * A host reload can leave the previous plugin instance alive for a while. Both
+ * instances then hold their own copy of `state.json` and each save overwrites
+ * the other: queue progress oscillates and retry counters reset to zero, so the
+ * backlog never drains. The instance that wins `state.owner.json` writes; anyone
+ * who finds a live owner treats the file as read-only instead of clobbering it.
+ */
 class StateStore {
   #path
   #data
   #timer = null
   #writing = null
+  #owner = false
 
-  constructor(path, data) {
+  constructor(path, data, owner = false) {
     this.#path = path
     this.#data = data
+    this.#owner = owner
+  }
+
+  get owner() {
+    return this.#owner
+  }
+
+  static async #acquireOwner() {
+    const ownerPath = `${statePath()}.owner.json`
+    const alive = (pid) => {
+      if (!Number.isFinite(pid) || pid <= 0) return false
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch (error) {
+        return error?.code === 'EPERM'
+      }
+    }
+    try {
+      const current = JSON.parse(await readFile(ownerPath, 'utf8'))
+      const pid = Number(current?.pid)
+      if (pid !== process.pid && alive(pid)) return false
+    } catch {}
+    try {
+      await mkdir(dirname(ownerPath), { recursive: true })
+      await writeFile(ownerPath, `${JSON.stringify({ pid: process.pid, at: Date.now() })}\n`, 'utf8')
+      return true
+    } catch {
+      return false
+    }
   }
 
   static async open() {
@@ -83,7 +123,8 @@ class StateStore {
     data.promotions = stored.promotions && typeof stored.promotions === 'object' ? stored.promotions : {}
     if (!data.promotions.sessions || typeof data.promotions.sessions !== 'object') data.promotions.sessions = {}
     if (!data.promotions.projects || typeof data.promotions.projects !== 'object') data.promotions.projects = {}
-    return new StateStore(statePath(), data)
+    const owner = await StateStore.#acquireOwner()
+    return new StateStore(statePath(), data, owner)
   }
 
   get data() {
@@ -91,6 +132,7 @@ class StateStore {
   }
 
   save() {
+    if (!this.#owner) return
     if (this.#timer) return
     this.#timer = setTimeout(() => {
       this.#timer = null
@@ -99,7 +141,16 @@ class StateStore {
     this.#timer.unref?.()
   }
 
+  async release() {
+    if (!this.#owner) return
+    this.#owner = false
+    try {
+      await rm(`${this.#path}.owner.json`, { force: true })
+    } catch {}
+  }
+
   async flush() {
+    if (!this.#owner) return
     if (this.#timer) {
       clearTimeout(this.#timer)
       this.#timer = null
@@ -199,6 +250,26 @@ function createRuntime(ctx, config) {
     } catch {}
     if (route) return { provider: route.provider, model: route.model }
     return null
+  }
+
+  /** OpenAI-compatible providers/models this profile offers, for the panel picker. */
+  async function listModelOptions() {
+    try {
+      const providers = await readProviders()
+      const options = []
+      for (const [providerName, provider] of Object.entries(providers)) {
+        if (!provider || provider.api !== 'openai-completions') continue
+        const models = Array.isArray(provider.models) ? provider.models : []
+        for (const entry of models) {
+          const id = typeof entry?.id === 'string' ? entry.id : ''
+          if (!id) continue
+          options.push({ provider: providerName, model: id, label: `${id} · ${providerName}` })
+        }
+      }
+      return options
+    } catch {
+      return []
+    }
   }
 
   async function refreshRoute() {
@@ -430,6 +501,8 @@ function createRuntime(ctx, config) {
         settings: settingsNow,
         sidecar,
         contextUsage: () => memoryContext,
+        queueDepth: () => capture?.queueDepth?.() ?? 0,
+        listModelOptions,
         ops,
         activity,
         state,
@@ -484,6 +557,9 @@ function createRuntime(ctx, config) {
     } catch {}
     try {
       if (state) await state.flush()
+    } catch {}
+    try {
+      if (state) await state.release()
     } catch {}
     try {
       sidecar?.stop()

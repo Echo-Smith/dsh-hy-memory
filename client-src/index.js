@@ -1,5 +1,5 @@
 /**
- * Client half of @local/dsh-hy-memory.
+ * Client half of dsh-hy-memory.
  *
  * One settings section (`settings.section`, id `hy-memory`) hosts the memory
  * manager. An optional keyed tab type (`sidebarRightTabs` + the

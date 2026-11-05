@@ -82,6 +82,28 @@ export function buildModelEnv(route, settings) {
     if (configured.model) env.MEMORY_LLM_MODEL = configured.model
     if (configured.apiKey) env.MEMORY_LLM_API_KEY = configured.apiKey
   }
+  // Generation budget: a reasoning model can spend a small default entirely on
+  // reasoning_content and answer with empty content, which the SDK reports as
+  // EMPTY_RESPONSE. Both knobs are fixed here so a routed model cannot silently
+  // starve extraction.
+  const maxTokens = Number(configured.maxTokens)
+  if (Number.isFinite(maxTokens) && maxTokens > 0) {
+    env.MEMORY_LLM_MAX_TOKENS = String(Math.floor(maxTokens))
+    env.MEMORY_AGENT_MAX_TOKENS = String(Math.floor(Number(configured.agentMaxTokens) || maxTokens))
+  }
+  const timeoutMs = Number(configured.timeoutMs)
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) env.MEMORY_LLM_TIMEOUT = String(Math.ceil(timeoutMs / 1000))
+  // The standard switch is `reasoning_effort: "none"`: verified on the gateway to
+  // take reasoning_content to zero across glm, kimi and deepseek routes. Writing
+  // it as an extra_body override beats per-model `thinking` patches, which only
+  // worked for the model names the SDK happened to hard-code.
+  const extraBody = configured.extraBody && typeof configured.extraBody === 'object' && !Array.isArray(configured.extraBody)
+    ? { ...configured.extraBody }
+    : {}
+  if (configured.disableReasoning !== false && extraBody.reasoning_effort === undefined) {
+    extraBody.reasoning_effort = 'none'
+  }
+  if (Object.keys(extraBody).length > 0) env.MEMORY_LLM_EXTRA_BODY = JSON.stringify(extraBody)
   return env
 }
 

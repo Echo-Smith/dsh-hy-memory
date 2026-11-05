@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   MAX_QUEUE_ATTEMPTS,
   buildBatch,
@@ -48,9 +51,20 @@ function fakeActivity() {
   return { events: [], record(event) { this.events.push(event) } }
 }
 
-function makeCapture({ settings = fakeSettings(), state = fakeState(), session = fakeSession() } = {}) {
+/** Each harness gets its own queue file so tests never touch real plugin data. */
+function tempQueuePath() {
+  return join(mkdtempSync(join(tmpdir(), 'hy-queue-')), 'capture-queue.json')
+}
+
+function seedQueue(path, jobs) {
+  writeFileSync(path, JSON.stringify(jobs), 'utf8')
+  return path
+}
+
+function makeCapture({ settings = fakeSettings(), state = fakeState(), session = fakeSession(), queuePath = tempQueuePath() } = {}) {
   const activity = fakeActivity()
   const capture = createCapture({
+    queuePath,
     settings: () => settings,
     state,
     activity,
@@ -105,7 +119,8 @@ test('a window of turns becomes one queued session write', () => {
 test('restarting the host does not re-capture already stored events', () => {
   const state = fakeState()
   const session = fakeSession()
-  const first = makeCapture({ state, session })
+  const queuePath = tempQueuePath()
+  const first = makeCapture({ state, session, queuePath })
   try {
     first.capture.handleSessionEvent(session, userEvent(1, 'remember this'))
     first.capture.handleSessionEvent(session, { seq: 2, type: 'turn/end', data: { turn: 1 } })
@@ -115,7 +130,7 @@ test('restarting the host does not re-capture already stored events', () => {
     first.capture.dispose()
   }
 
-  const second = makeCapture({ state, session })
+  const second = makeCapture({ state, session, queuePath })
   try {
     second.capture.handleSessionEvent(session, userEvent(1, 'remember this'))
     second.capture.handleSessionEvent(session, { seq: 2, type: 'turn/end', data: { turn: 1 } })
@@ -124,7 +139,7 @@ test('restarting the host does not re-capture already stored events', () => {
     second.capture.dispose()
   }
 
-  const third = makeCapture({ state, session })
+  const third = makeCapture({ state, session, queuePath })
   try {
     third.capture.handleSessionEvent(session, userEvent(3, 'new work'))
     third.capture.handleSessionEvent(session, { seq: 4, type: 'turn/end', data: { turn: 2 } })
@@ -222,4 +237,76 @@ test('capture is total: a broken session object never throws', () => {
   } finally {
     capture.dispose()
   }
+})
+
+test('drain honours concurrency and the per-drain cap', async () => {
+  let inFlight = 0
+  let peak = 0
+  const handled = []
+  const client = {
+    bridgeAddLite: async () => ({ success: true }),
+    add: async (payload) => {
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      inFlight -= 1
+      handled.push(payload.data.length)
+      return { success: true }
+    },
+  }
+  const state = { data: { capture: { sessions: {}, queue: [] } }, save() {}, flush: async () => {} }
+  const queuePath = tempQueuePath()
+  seedQueue(queuePath, Array.from({ length: 10 }, (_, index) => ({
+    id: `j${index}`, sessionId: 's', scene: 'chat', attempts: 0,
+    payload: { data: [{ role: 'user', content: `x${index}` }] },
+  })))
+  const settings = {
+    enabled: true,
+    llm: { timeoutMs: 5000 },
+    capture: { enabled: true, concurrency: 3, maxPerDrain: 6 },
+    promotion: { enabled: false },
+  }
+  const capture = createCapture({
+    queuePath,
+    settings: () => settings,
+    state,
+    activity: { record() {} },
+    getClient: () => client,
+    getLlm: () => null,
+    modelFor: () => null,
+    log: () => {},
+  })
+  await capture.drain()
+  assert.equal(handled.length, 6, 'one drain handles at most maxPerDrain jobs')
+  assert.ok(peak >= 2 && peak <= 3, `up to concurrency jobs run at once (peak ${peak})`)
+  assert.equal(state.data.capture.queue.length, 4, 'the rest stay queued for the next tick')
+  capture.dispose()
+})
+
+test('a hung write cannot latch the drain forever', async () => {
+  let released = false
+  const client = {
+    bridgeAddLite: async () => ({ success: true }),
+    add: () => new Promise((resolve) => { released = true; /* never resolves */ void resolve }),
+  }
+  const state = { data: { capture: { sessions: {}, queue: [] } }, save() {}, flush: async () => {} }
+  const queuePath = tempQueuePath()
+  seedQueue(queuePath, [{ id: 'j1', sessionId: 's', scene: 'chat', attempts: 0, payload: { data: [{ role: 'user', content: 'x' }] } }])
+  const capture = createCapture({
+    queuePath,
+    settings: () => ({ enabled: true, llm: { timeoutMs: 5000 }, capture: { enabled: true, concurrency: 1, maxPerDrain: 5 }, promotion: { enabled: false } }),
+    state,
+    activity: { record() {} },
+    getClient: () => client,
+    getLlm: () => null,
+    modelFor: () => null,
+    log: () => {},
+  })
+  void capture.drain()
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  assert.equal(released, true, 'the write was attempted')
+  // The job must still be in the queue, and a second drain must not be blocked
+  // by the first one's latched `draining` flag for the rest of the process life.
+  assert.equal(state.data.capture.queue.length, 1, 'the hung job stays queued')
+  capture.dispose()
 })

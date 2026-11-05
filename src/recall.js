@@ -267,7 +267,7 @@ export function createMemoryMessage(text) {
     id: randomUUID(),
     role: 'user',
     content: [{ type: 'text', text }],
-    source: { kind: SOURCE_KIND, plugin: '@local/dsh-hy-memory', tier: 'mixed' },
+    source: { kind: SOURCE_KIND, plugin: 'dsh-hy-memory', tier: 'mixed' },
   }
 }
 

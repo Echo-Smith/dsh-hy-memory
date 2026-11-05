@@ -11,12 +11,18 @@ import { randomUUID } from 'node:crypto'
 import { collectSearchItems, truncateChars } from './recall.js'
 import { contentHash, projectAgentId, projectKey, projectTitleForPath, pickScene, resolveUser, workspaceIdFor, writeScope } from './tiers.js'
 import { integrationDir } from './paths.js'
-import { appendFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 export const MAX_BUFFER_EVENTS = 400
 export const MAX_QUEUE_JOBS = 60
 export const MAX_QUEUE_ATTEMPTS = 20
+
+/** Attempts before a job is demoted to the lite layer; configurable per queue. */
+function maxAttempts(settingsValue) {
+  const configured = Number(settingsValue?.capture?.maxAttempts)
+  return Number.isFinite(configured) && configured > 0 ? Math.min(50, Math.floor(configured)) : MAX_QUEUE_ATTEMPTS
+}
 export const BACKOFF_BASE_MS = 1000
 export const BACKOFF_CAP_MS = 600_000
 
@@ -37,11 +43,51 @@ export function looksSensitive(text) {
 }
 
 const ADD_TIMEOUT_MS = 240_000
+// One drain batch can legitimately take minutes on a slow model, but a hung
+// request must never leave `draining` latched forever: that stalls the queue
+// until the plugin reloads.
+const DRAIN_WATCHDOG_MIN_MS = 60_000
+
+/** A batch may take its configured request timeout plus slack before it counts as hung. */
+function drainWatchdogMs(settingsValue) {
+  const timeout = Number(settingsValue?.llm?.timeoutMs)
+  return Math.max(DRAIN_WATCHDOG_MIN_MS, (Number.isFinite(timeout) && timeout > 0 ? timeout : 180_000) + 15_000)
+}
 const SEARCH_TIMEOUT_MS = 15_000
 const PROMOTE_TIMEOUT_MS = 90_000
 const PROMPT_INPUT_CHARS = 6000
 const SESSION_TRACK_LIMIT = 200
 const MISSING_CLIENT_RETRY_MS = 15_000
+
+/**
+ * The capture queue lives in its own file.
+ *
+ * A host reload can leave the previous plugin instance running; it keeps writing
+ * its own copy of `state.json`, which used to reset this queue and every retry
+ * counter. A dedicated file with a single reader/writer keeps progress stable
+ * even while such an instance is still around.
+ */
+function captureQueuePath(explicit) {
+  return explicit || join(integrationDir(), 'capture-queue.json')
+}
+
+function readCaptureQueue(path = captureQueuePath()) {
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'))
+    if (Array.isArray(parsed)) return parsed.filter((job) => job && typeof job === 'object' && job.payload)
+  } catch {}
+  return []
+}
+
+function writeCaptureQueue(jobs, path = captureQueuePath()) {
+  try {
+    mkdirSync(dirname(path), { recursive: true })
+    const target = path
+    const temp = `${target}.${process.pid}.tmp`
+    writeFileSync(temp, `${JSON.stringify(jobs)}\n`, 'utf8')
+    renameSync(temp, target)
+  } catch {}
+}
 
 export function nextBackoff(attempt, base = BACKOFF_BASE_MS, cap = BACKOFF_CAP_MS) {
   const exponent = Math.max(0, Math.min(10, (Number(attempt) || 1) - 1))
@@ -163,7 +209,15 @@ export function createCapture(deps) {
 
   const sessions = new Map()
   let draining = false
+  // Queue state is persisted on its own; see captureQueuePath().
+  let queue = []
+  let queueTimer = null
+  const queuePath = typeof deps.queuePath === 'string' && deps.queuePath !== '' ? deps.queuePath : captureQueuePath()
   let retryTimer = null
+  // A queue survives a plugin reload, but drain used to be triggered only by a
+  // flush or a retry timer owned by the previous instance. A ticker keeps a
+  // backlog moving even when no new turn arrives.
+  let drainTicker = null
   let promoting = false
   let pendingPromotion = null
   let disposed = false
@@ -413,13 +467,25 @@ export function createCapture(deps) {
 
   function enqueue(job) {
     const data = ensureState()
-    const queue = data.capture.queue
     queue.push(job)
+    persistQueue()
     if (queue.length > MAX_QUEUE_JOBS) {
       const dropped = queue.splice(0, queue.length - MAX_QUEUE_JOBS)
       activity?.record({ kind: 'error', summary: `dropped ${dropped.length} queued captures`, ok: false })
     }
     state.save()
+  }
+
+  function persistQueue() {
+    if (state?.data) state.data.capture.queue = queue.slice()
+    if (queueTimer !== null) return
+    queueTimer = setTimeout(() => {
+      queueTimer = null
+      writeCaptureQueue(queue, queuePath)
+      // Mirror for the status route and diagnostics; the file stays the truth.
+      if (state?.data) state.data.capture.queue = queue.slice()
+    }, 200)
+    queueTimer.unref?.()
   }
 
   function scheduleRetry(delayMs) {
@@ -431,84 +497,138 @@ export function createCapture(deps) {
     retryTimer.unref?.()
   }
 
+  /**
+   * Send one queued job. Returns 'ok', 'retry' (kept in the queue with backoff)
+   * or 'drop' (handled: fallback written or deliberately discarded).
+   */
+  async function sendJob(job) {
+    const client = getClient()
+    if (!client) return 'retry'
+    const configured = Number(settings()?.llm?.timeoutMs)
+    const watchdogMs = drainWatchdogMs(settings())
+    const timeoutMs = Math.min(configured > 0 ? configured : ADD_TIMEOUT_MS, watchdogMs - 5_000)
+    try {
+      const addScene = typeof client.bridgeAddScene === 'function'
+        && job.scene !== 'chat'
+        && job.payload?.scene !== 'chat'
+        ? client.bridgeAddScene(job.payload, { timeoutMs })
+        : client.add(job.payload, { timeoutMs })
+      const result = await addScene
+      if (result?.success === false) {
+        const code = String(result?.agent_error_code ?? result?.error_code ?? 'unknown')
+        if (state?.data) {
+          state.data.lastAddError = { at: Date.now(), code, keys: Object.keys(result ?? {}).slice(0, 12), scene: job.scene }
+        }
+        if (transientFailure(result) && (job.attempts ?? 0) < maxAttempts(settings())) return 'retry'
+        const kept = await fallbackToLite(client, job)
+        activity?.record({
+          kind: 'error',
+          summary: kept ? 'capture reconcile failed; raw text kept' : 'capture write rejected',
+          detail: code,
+          ok: false,
+        })
+        return 'drop'
+      }
+      void enforceCapacity(client, job)
+      activity?.record({
+        kind: 'capture',
+        tier: 'session',
+        summary: `wrote ${job.payload.data.length} messages to session memory`,
+        detail: job.scene,
+        ok: true,
+      })
+      return 'ok'
+    } catch (error) {
+      job.attempts = (job.attempts ?? 0) + 1
+      const retryable = error?.retryable !== false && (error?.status === undefined || error.status === 0 || error.status === 429 || error.status >= 500)
+      if (retryable && job.attempts < maxAttempts(settings())) return 'retry'
+      log('capture write dropped', error)
+      const kept = await fallbackToLite(client, job)
+      activity?.record({
+        kind: 'error',
+        summary: kept ? 'capture write dropped; raw text kept' : 'capture write dropped after retries',
+        detail: String(error?.message ?? error),
+        ok: false,
+      })
+      return 'drop'
+    }
+  }
+
   async function drain() {
     if (disposed || draining) return
     draining = true
     try {
       const data = ensureState()
-      const queue = data.capture.queue
-      while (queue.length > 0 && !disposed) {
-        const job = queue[0]
-        const client = getClient()
-        if (!client) {
-          scheduleRetry(MISSING_CLIENT_RETRY_MS)
-          return
-        }
-        try {
-          // Productivity batches must go through the scene-aware route: the
-          // SDK's HTTP add re-derives the scene from the payload and would put a
-          // coding batch back into the chat store.
-          const addScene = typeof client.bridgeAddScene === 'function'
-            && job.scene !== 'chat'
-            && job.payload?.scene !== 'chat'
-            ? client.bridgeAddScene(job.payload, { timeoutMs: ADD_TIMEOUT_MS })
-            : client.add(job.payload, { timeoutMs: ADD_TIMEOUT_MS })
-          const result = await addScene
-          if (result?.success === false) {
-            const code = String(result?.agent_error_code ?? result?.error_code ?? 'unknown')
-            if (state?.data) {
-              state.data.lastAddError = { at: Date.now(), code, keys: Object.keys(result ?? {}).slice(0, 12), scene: job.scene }
+      const config = settings()?.capture ?? {}
+      const concurrency = Math.min(4, Math.max(1, Math.floor(Number(config.concurrency) || 1)))
+      const maxPerDrain = Math.min(50, Math.max(1, Math.floor(Number(config.maxPerDrain) || 8)))
+      const watchdogMs = drainWatchdogMs(settings())
+      let handled = 0
+      let needsRetry = false
+      while (queue.length > 0 && !disposed && handled < maxPerDrain) {
+        const batch = queue.slice(0, Math.min(concurrency, maxPerDrain - handled))
+        if (batch.length === 0) break
+        const outcomes = await Promise.race([
+          Promise.all(batch.map((job) => sendJob(job))),
+          new Promise((resolve) => {
+            // unref so a dangling watchdog never keeps the process (or a test
+            // run) alive; it still fires while the event loop is busy.
+            const timer = setTimeout(() => resolve(null), watchdogMs)
+            timer.unref?.()
+          }),
+        ])
+        if (outcomes === null) {
+          // A request that outlives the watchdog must count as a failed attempt,
+          // otherwise the same jobs are retried forever and the backlog never
+          // moves.
+          for (const job of batch) {
+            job.attempts = (job.attempts ?? 0) + 1
+            if (job.attempts >= maxAttempts(settings())) {
+              const kept = await fallbackToLite(getClient(), job).catch(() => false)
+              activity?.record({
+                kind: 'error',
+                tier: 'session',
+                summary: kept ? 'capture write timed out; raw text kept' : 'capture write timed out',
+                detail: `watchdog ${watchdogMs}ms`,
+                ok: false,
+              })
             }
-            // Retry before dequeuing: the job must stay queued for the backoff
-            // attempt, otherwise a transient reconcile failure drops the turn.
-            if (transientFailure(result) && (job.attempts ?? 0) < MAX_QUEUE_ATTEMPTS) {
-              job.attempts = (job.attempts ?? 0) + 1
-              state.save()
-              scheduleRetry(nextBackoff(job.attempts))
-              return
-            }
-            queue.shift()
-            state.save()
-            const kept = await fallbackToLite(client, job)
-            activity?.record({
-              kind: 'error',
-              summary: kept ? 'capture reconcile failed; raw text kept' : 'capture write rejected',
-              detail: code,
-              ok: false,
-            })
-          } else {
-            queue.shift()
-            state.save()
-            void enforceCapacity(client, job)
-            activity?.record({
-              kind: 'capture',
-              tier: 'session',
-              summary: `wrote ${job.payload.data.length} messages to session memory`,
-              detail: job.scene,
-              ok: true,
-            })
           }
-        } catch (error) {
-          job.attempts = (job.attempts ?? 0) + 1
+          const limit = maxAttempts(settings())
+          const exhausted = new Set(batch.filter((job) => (job.attempts ?? 0) >= limit))
+          if (exhausted.size > 0) {
+            const remaining = queue.filter((job) => !exhausted.has(job))
+            queue.length = 0
+            queue.push(...remaining)
+          }
+          if (state?.data) state.data.lastAddError = { at: Date.now(), code: 'DRAIN_TIMEOUT', scene: batch[0]?.scene ?? 'chat' }
           state.save()
-          const retryable = error?.retryable !== false && (error?.status === undefined || error.status === 0 || error.status === 429 || error.status >= 500)
-          if (!retryable || job.attempts >= MAX_QUEUE_ATTEMPTS) {
-            queue.shift()
-            state.save()
-            log('capture write dropped', error)
-            const kept = await fallbackToLite(client, job)
-            activity?.record({
-              kind: 'error',
-              summary: kept ? 'capture write dropped; raw text kept' : 'capture write dropped after retries',
-              detail: String(error?.message ?? error),
-              ok: false,
-            })
-          } else {
-            scheduleRetry(nextBackoff(job.attempts))
-            return
-          }
+          log('capture drain watchdog: batch marked as failed attempts')
+          scheduleRetry(MISSING_CLIENT_RETRY_MS)
+          break
+        }
+        handled += batch.length
+        // Remove finished jobs by identity: completions may land out of order.
+        const done = new Set()
+        batch.forEach((job, index) => {
+          if (outcomes[index] !== 'retry') done.add(job)
+        })
+        if (done.size > 0) {
+          const remaining = queue.filter((job) => !done.has(job))
+          queue.length = 0
+          queue.push(...remaining)
+          persistQueue()
+        }
+        const retried = batch.find((job, index) => outcomes[index] === 'retry')
+        if (retried !== undefined) {
+          needsRetry = true
+          scheduleRetry(nextBackoff(retried.attempts))
+          break
         }
       }
+      // Leftover backlog continues on the ticker; an immediate retry here would
+      // spin when the sidecar is still starting.
+      if (!needsRetry && queue.length > 0) scheduleRetry(MISSING_CLIENT_RETRY_MS)
     } catch (error) {
       log('capture queue failed', error)
     } finally {
@@ -520,7 +640,9 @@ export function createCapture(deps) {
   function transientFailure(result) {
     const code = String(result?.agent_error_code ?? result?.error_code ?? '').toUpperCase()
     if (code === '') return false
-    return /RECONCILE|EMPTY_RESPONSE|TIMEOUT|INTERNAL|RATE|OVERLOAD|UNAVAILABLE|502|503|504/.test(code)
+    // JSON_PARSE failures come from a model answering with malformed JSON, not
+    // from a bad payload: retrying once or twice usually lands a usable answer.
+    return /RECONCILE|EMPTY_RESPONSE|JSON_PARSE|TIMEOUT|INTERNAL|RATE|OVERLOAD|UNAVAILABLE|502|503|504/.test(code)
   }
 
   /** Last resort: keep the raw text in the lite layer instead of losing the turn. */
@@ -859,8 +981,31 @@ export function createCapture(deps) {
     for (const entry of entries) await flush(entry, reason)
   }
 
+  queue = readCaptureQueue(queuePath)
+  {
+    // One-time migration: an older host kept the queue inside state.json.
+    const legacy = ensureState().capture.queue
+    if (queue.length === 0 && Array.isArray(legacy) && legacy.length > 0) {
+      queue = legacy.filter((job) => job && typeof job === 'object' && job.payload)
+      writeCaptureQueue(queue, queuePath)
+    }
+    if (Array.isArray(legacy) && legacy.length > 0) legacy.length = 0
+    // Keep the mirror accurate even when nothing was enqueued this run.
+    state.data.capture.queue = queue.slice()
+    state.save()
+  }
+
   function dispose() {
     disposed = true
+    if (drainTicker !== null) {
+      clearInterval(drainTicker)
+      drainTicker = null
+    }
+    if (queueTimer !== null) {
+      clearTimeout(queueTimer)
+      queueTimer = null
+      writeCaptureQueue(queue, queuePath)
+    }
     if (retryTimer) {
       clearTimeout(retryTimer)
       retryTimer = null
@@ -875,8 +1020,15 @@ export function createCapture(deps) {
   }
 
   function queueDepth() {
-    return ensureState().capture.queue.length
+    return queue.length
   }
+
+  drainTicker = setInterval(() => {
+    const queue = state?.data?.capture?.queue
+    if (disposed) return
+    if (Array.isArray(queue) && queue.length > 0) void drain()
+  }, 15_000)
+  drainTicker.unref?.()
 
   return {
     handleSessionEvent,

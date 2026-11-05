@@ -510,6 +510,10 @@ const PANEL_CSS = `
 .hm-footerResult { font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
 .hm-footerResult a:hover { text-decoration:underline; }
+.hm-pending { color:var(--dsw-alias-state-warning-primary, #b7791f); }
+.hm-engine { margin-top:6px; }
+.hm-engineSummary { cursor:pointer; font-size:12px; color:var(--dsw-alias-label-secondary); }
+.hm-engineGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px 12px; margin:8px 0; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-fileHead { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }

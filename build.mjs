@@ -27,7 +27,10 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const outputPath = resolve(here, 'client.js')
-const loaderId = process.env.HY_MEMORY_CLIENT_ID ?? '@local/dsh-hy-memory'
+// The loader id must equal the installed package name; read it from the
+// manifest so the working copy and a published build cannot drift apart.
+const manifest = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+const loaderId = process.env.HY_MEMORY_CLIENT_ID ?? manifest.name
 const esbuildExternal = ['react', 'react-dom', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives']
 
 const require = createRequire(import.meta.url)

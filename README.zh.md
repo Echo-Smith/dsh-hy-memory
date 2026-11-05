@@ -219,6 +219,24 @@ DSH_HOME 跑完整的空闲停止与唤醒：冷启动 1.6 秒、空闲窗口 61
 `/api/hy-memory/duplicates` 把去掉空白、折叠大小写后文本相同的记忆归组，每组保留最新一条并列出其余；
 `/api/hy-memory/merge` 负责删除列出的那些行。它不会自动运行，面板在诊断卡里提供一个按钮触发。
 
+## 引擎设置与写入健康
+
+诊断卡新增「待写入 N 条」和一栏可折叠的**记忆引擎**：模型、最大 tokens、请求超时、召回半衰期、写入并发、
+每轮最多处理。保存走与总开关相同的设置路由，下一次 sidecar 启动生效。
+
+写入返回空文本的根因是推理模型。SDK 支持 OpenAI 兼容的 `extra_body` 透传，而标准开关对各类路由模型都有效：
+
+```json
+{"reasoning_effort": "none"}
+```
+
+在网关上实测：同一段提取提示下，`thinking`、`enable_thinking`、`chat_template_kwargs` 等开关仍产生
+149–1492 字符的 `reasoning_content`，只有 `reasoning_effort: "none"` 把推理压到 0 并正常返回正文。关掉推理
+并把输出预算放到 4k 后，单次写入从 30–130 秒降到 9–16 秒，积压不再增长。
+
+捕获队列也从 `state.json` 移到了独立的 `capture-queue.json`。宿主热重载可能留下上一个插件实例，两者写同一个
+状态文件会互相重置重试计数、让队列长度来回摆动；现在队列只属于一个文件，状态文件则用单写者租约。
+
 ## 容量
 
 `lifecycle.maxPerTier` 默认 2000，`lifecycle.archiveOnCap` 默认关闭。打开后，超出上限的最旧行会先追加到

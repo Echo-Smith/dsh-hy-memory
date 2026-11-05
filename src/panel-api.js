@@ -87,6 +87,8 @@ export function createPanelApi(deps) {
   const contextOf = deps.contextOf
   const memhub = deps.memhub ?? null
   const contextUsage = typeof deps.contextUsage === 'function' ? deps.contextUsage : () => null
+  const queueDepth = typeof deps.queueDepth === 'function' ? deps.queueDepth : () => 0
+  const listModelOptions = typeof deps.listModelOptions === 'function' ? deps.listModelOptions : async () => []
   const onSettingsChange = deps.onSettingsChange ?? (() => {})
 
   function contextOfRequest(body) {
@@ -129,6 +131,10 @@ export function createPanelApi(deps) {
         provider: model.provider ?? '',
         model: model.model ?? '',
         source: model.source ?? 'dsh',
+        maxTokens: Number((config.llm ?? {}).maxTokens) || 4096,
+        timeoutMs: Number((config.llm ?? {}).timeoutMs) || 180000,
+        disableReasoning: (config.llm ?? {}).disableReasoning !== false,
+        options: await listModelOptions(),
       },
       counts,
       scene: state?.data?.lastScene ?? 'chat',
@@ -137,6 +143,19 @@ export function createPanelApi(deps) {
       project,
       session: { id: context.sessionId ?? '', title: sessionTitle },
       memhub: detectMemHubStatus(),
+      recall: { halfLifeDays: Number((config.recall ?? {}).halfLifeDays) || 30 },
+      captureSettings: {
+        concurrency: Number((config.capture ?? {}).concurrency) || 1,
+        maxPerDrain: Number((config.capture ?? {}).maxPerDrain) || 8,
+        maxAttempts: Number((config.capture ?? {}).maxAttempts) || 20,
+      },
+      capture: (() => {
+        let pending = 0
+        try {
+          pending = Number(queueDepth()) || 0
+        } catch {}
+        return { pending }
+      })(),
       package: (() => {
         const pkg = readPackage() ?? {}
         return { name: String(pkg.name ?? ''), version: String(pkg.version ?? ''), repoUrl: String(pkg.repository?.url ?? '') }

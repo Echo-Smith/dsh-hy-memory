@@ -212,5 +212,22 @@
   "purge.failed": "Purge refused: {message}",
   "memhub.paired": "Paired with MemHub; turn sync on in the MemHub panel.",
   "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel.",
-  "row.expand": "Expand memory content"
+  "row.expand": "Expand memory content",
+  "diag.pending": "{n} pending writes",
+  "diag.pendingHint": "Capture backlog; a growing number means writes cannot keep up.",
+  "engine.title": "Memory engine",
+  "engine.model": "Model",
+  "engine.modelAuto": "Follow the DSH default model",
+  "engine.maxTokens": "Max tokens",
+  "engine.timeoutMs": "Timeout (ms)",
+  "engine.halfLife": "Recall half-life (days)",
+  "engine.concurrency": "Concurrent writes",
+  "engine.maxPerDrain": "Per-drain cap",
+  "engine.disableReasoning": "Disable the model's thinking mode",
+  "engine.save": "Save",
+  "engine.saving": "Saving…",
+  "engine.saved": "Saved; applies next round",
+  "engine.failed": "Could not save: {message}",
+  "engine.hint": "Thinking spends the output budget and the write comes back empty.",
+  "engine.maxAttempts": "Retry limit per job"
 }

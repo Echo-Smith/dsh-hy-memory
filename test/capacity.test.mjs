@@ -5,6 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCapture } from '../src/capture.js'
 
+function tempQueuePath() {
+  return join(mkdtempSync(join(tmpdir(), 'hy-queue-')), 'capture-queue.json')
+}
+
 test('capacity guard archives the oldest rows before deleting them', async () => {
   const home = mkdtempSync(join(tmpdir(), 'dsh-cap-'))
   process.env.DSH_HOME = home
@@ -29,6 +33,7 @@ test('capacity guard archives the oldest rows before deleting them', async () =>
     lifecycle: { maxPerTier: 50, archiveOnCap: true },
   }
   const capture = createCapture({
+    queuePath: tempQueuePath(),
     settings: () => settings,
     state,
     activity: { record() {} },

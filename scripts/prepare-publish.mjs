@@ -65,9 +65,10 @@ stagedPkg.scripts = {
 writeFileSync(join(staging, 'package.json'), `${JSON.stringify(stagedPkg, null, 2)}\n`)
 
 // The client loader id and the host patch both carry the package name.
+const sourceName = pkg.name
 const rewrite = (relative) => {
   const path = join(staging, relative)
-  writeFileSync(path, readFileSync(path, 'utf8').replaceAll('@local/dsh-hy-memory', name))
+  writeFileSync(path, readFileSync(path, 'utf8').replaceAll(sourceName, name))
 }
 rewrite('cordis.patch.yml')
 rewrite('src/recall.js')
@@ -80,7 +81,7 @@ try {
   // that carries the package name, so patch that string instead of failing the
   // release: the artifact itself is unchanged.
   const bundle = readFileSync(join(staging, 'client.js'), 'utf8')
-  if (!bundle.includes('@local/dsh-hy-memory')) throw error
+  if (!bundle.includes(sourceName)) throw error
   writeFileSync(join(staging, 'client.js'), bundle.replaceAll('@local/dsh-hy-memory', name))
   console.log('esbuild unavailable; patched the loader id in the committed bundle')
 }

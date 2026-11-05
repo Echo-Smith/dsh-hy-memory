@@ -2,6 +2,6 @@
 # (dsh.client) and needs no extra row.
 - insert:
     - id: hy-memory
-      name: '@local/dsh-hy-memory'
+      name: 'dsh-hy-memory'
       config:
         enabled: true

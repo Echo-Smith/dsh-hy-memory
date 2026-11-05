@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: "@local/dsh-hy-memory",
+  id: "dsh-hy-memory",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;
@@ -398,7 +398,24 @@ var zh_default = {
   "purge.failed": "清除被拒绝：{message}",
   "memhub.paired": "已与 MemHub 配对，同步在 MemHub 面板里开启。",
   "memhub.pairedBroker": "已与 MemHub 配对，本机 broker 运行中，同步在 MemHub 面板里开启。",
-  "row.expand": "展开记忆内容"
+  "row.expand": "展开记忆内容",
+  "diag.pending": "待写入 {n} 条",
+  "diag.pendingHint": "抓取队列积压；数值持续增长说明写入跟不上。",
+  "engine.title": "记忆引擎",
+  "engine.model": "模型",
+  "engine.modelAuto": "跟随 DSH 默认模型",
+  "engine.maxTokens": "最大 tokens",
+  "engine.timeoutMs": "超时（毫秒）",
+  "engine.halfLife": "召回半衰期（天）",
+  "engine.concurrency": "并发写入",
+  "engine.maxPerDrain": "每轮最多处理",
+  "engine.disableReasoning": "关闭模型思考模式",
+  "engine.save": "保存",
+  "engine.saving": "保存中…",
+  "engine.saved": "已保存，下一轮生效",
+  "engine.failed": "保存失败：{message}",
+  "engine.hint": "思考模式会吃掉输出预算，导致写入返回空文本。",
+  "engine.maxAttempts": "失败重试上限"
 };
 
 // locale/en.json
@@ -616,7 +633,24 @@ var en_default = {
   "purge.failed": "Purge refused: {message}",
   "memhub.paired": "Paired with MemHub; turn sync on in the MemHub panel.",
   "memhub.pairedBroker": "Paired with MemHub, local broker running; turn sync on in the MemHub panel.",
-  "row.expand": "Expand memory content"
+  "row.expand": "Expand memory content",
+  "diag.pending": "{n} pending writes",
+  "diag.pendingHint": "Capture backlog; a growing number means writes cannot keep up.",
+  "engine.title": "Memory engine",
+  "engine.model": "Model",
+  "engine.modelAuto": "Follow the DSH default model",
+  "engine.maxTokens": "Max tokens",
+  "engine.timeoutMs": "Timeout (ms)",
+  "engine.halfLife": "Recall half-life (days)",
+  "engine.concurrency": "Concurrent writes",
+  "engine.maxPerDrain": "Per-drain cap",
+  "engine.disableReasoning": "Disable the model's thinking mode",
+  "engine.save": "Save",
+  "engine.saving": "Saving…",
+  "engine.saved": "Saved; applies next round",
+  "engine.failed": "Could not save: {message}",
+  "engine.hint": "Thinking spends the output budget and the write comes back empty.",
+  "engine.maxAttempts": "Retry limit per job"
 };
 
 // client-src/locale.js
@@ -1098,6 +1132,10 @@ var PANEL_CSS = `
 .hm-footerResult { font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-footerResult a { color:var(--dsw-alias-link); text-decoration:none; }
 .hm-footerResult a:hover { text-decoration:underline; }
+.hm-pending { color:var(--dsw-alias-state-warning-primary, #b7791f); }
+.hm-engine { margin-top:6px; }
+.hm-engineSummary { cursor:pointer; font-size:12px; color:var(--dsw-alias-label-secondary); }
+.hm-engineGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px 12px; margin:8px 0; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-fileHead { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }
@@ -1902,6 +1940,10 @@ function SettingsSection(props) {
   const [deleting, setDeleting] = React2.useState(false);
   const [deleteError, setDeleteError] = React2.useState("");
   const [diagOpen, setDiagOpen] = React2.useState(false);
+  const [engine, setEngine] = React2.useState(null);
+  const [engineBusy, setEngineBusy] = React2.useState(false);
+  const [engineError, setEngineError] = React2.useState("");
+  const [engineSaved, setEngineSaved] = React2.useState(false);
   const [projects, setProjects] = React2.useState(emptyPicker);
   const [projectChoice, setProjectChoice] = React2.useState(null);
   const [sessions, setSessions] = React2.useState(emptyPicker);
@@ -1919,6 +1961,52 @@ function SettingsSection(props) {
   const refresh = React2.useCallback(() => {
     setRefreshTick((value) => value + 1);
   }, []);
+  React2.useEffect(() => {
+    if (engine !== null) return;
+    const model = status?.model;
+    if (!model) return;
+    setEngine({
+      provider: model.provider ?? "",
+      model: model.model ?? "",
+      maxTokens: model.maxTokens ?? 4096,
+      timeoutMs: model.timeoutMs ?? 18e4,
+      halfLifeDays: status?.recall?.halfLifeDays ?? 30,
+      concurrency: status?.captureSettings?.concurrency ?? 2,
+      maxPerDrain: status?.captureSettings?.maxPerDrain ?? 8,
+      maxAttempts: status?.captureSettings?.maxAttempts ?? 20,
+      disableReasoning: model.disableReasoning !== false
+    });
+  }, [engine, status]);
+  const saveEngine = async () => {
+    if (engine === null || engineBusy) return;
+    setEngineBusy(true);
+    setEngineError("");
+    setEngineSaved(false);
+    try {
+      await api.setSettings({
+        llm: {
+          source: "dsh",
+          provider: engine.provider,
+          model: engine.model,
+          maxTokens: Number(engine.maxTokens) || 4096,
+          timeoutMs: Number(engine.timeoutMs) || 18e4,
+          disableReasoning: engine.disableReasoning !== false
+        },
+        recall: { halfLifeDays: Number(engine.halfLifeDays) || 30 },
+        capture: {
+          concurrency: Number(engine.concurrency) || 1,
+          maxPerDrain: Number(engine.maxPerDrain) || 8,
+          maxAttempts: Number(engine.maxAttempts) || 20
+        }
+      });
+      setEngineSaved(true);
+      refresh();
+    } catch (error) {
+      setEngineError(String(error?.message ?? error));
+    } finally {
+      setEngineBusy(false);
+    }
+  };
   React2.useEffect(() => () => {
     if (dupeNoticeTimer.current !== null) clearTimeout(dupeNoticeTimer.current);
     if (savedTimer.current !== null) clearTimeout(savedTimer.current);
@@ -3181,6 +3269,7 @@ function SettingsSection(props) {
     }
     const totalCount = memoryTotal();
     const context = status?.context ?? null;
+    const pending = Number.isFinite(Number(status?.capture?.pending)) ? Number(status.capture.pending) : null;
     const memoryTokens = asNumber(context?.memoryTokens);
     const totalTokens = asNumber(context?.totalTokens);
     return h(
@@ -3212,6 +3301,143 @@ function SettingsSection(props) {
       ),
       totalCount !== null ? h("p", { className: "hm-countLine" }, t("counts.total", { n: totalCount })) : null,
       context !== null && (memoryTokens > 0 || totalTokens > 0) ? h("p", { className: "hm-contextLine" }, t("diag.memoryTokens", { round: memoryTokens, total: totalTokens })) : null,
+      pending !== null && pending > 0 ? h("p", { className: "hm-contextLine hm-pending" }, `${t("diag.pending", { n: pending })} · ${t("diag.pendingHint")}`) : null,
+      engine !== null ? h(
+        "details",
+        { className: "hm-engine" },
+        h("summary", { className: "hm-engineSummary" }, t("engine.title")),
+        h(
+          "div",
+          { className: "hm-engineGrid" },
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.model")),
+            h(
+              "select",
+              {
+                className: "hm-input",
+                value: `${engine.provider}\0${engine.model}`,
+                onChange: (event) => {
+                  const [provider, model2] = String(event.target.value).split("\0");
+                  setEngine({ ...engine, provider, model: model2 });
+                }
+              },
+              h("option", { value: "\0" }, t("engine.modelAuto")),
+              (model?.options ?? []).map((option) => h("option", {
+                key: `${option.provider}:${option.model}`,
+                value: `${option.provider}\0${option.model}`
+              }, option.label))
+            )
+          ),
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.maxTokens")),
+            h("input", {
+              className: "hm-input",
+              type: "number",
+              min: "256",
+              step: "256",
+              value: engine.maxTokens,
+              onChange: (event) => setEngine({ ...engine, maxTokens: event.target.value })
+            })
+          ),
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.timeoutMs")),
+            h("input", {
+              className: "hm-input",
+              type: "number",
+              min: "1000",
+              step: "1000",
+              value: engine.timeoutMs,
+              onChange: (event) => setEngine({ ...engine, timeoutMs: event.target.value })
+            })
+          ),
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.halfLife")),
+            h("input", {
+              className: "hm-input",
+              type: "number",
+              min: "0",
+              step: "1",
+              value: engine.halfLifeDays,
+              onChange: (event) => setEngine({ ...engine, halfLifeDays: event.target.value })
+            })
+          ),
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.concurrency")),
+            h("input", {
+              className: "hm-input",
+              type: "number",
+              min: "1",
+              max: "4",
+              step: "1",
+              value: engine.concurrency,
+              onChange: (event) => setEngine({ ...engine, concurrency: event.target.value })
+            })
+          ),
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.maxPerDrain")),
+            h("input", {
+              className: "hm-input",
+              type: "number",
+              min: "1",
+              max: "50",
+              step: "1",
+              value: engine.maxPerDrain,
+              onChange: (event) => setEngine({ ...engine, maxPerDrain: event.target.value })
+            })
+          ),
+          h(
+            "label",
+            { className: "hm-field" },
+            h("span", { className: "hm-fieldLabel" }, t("engine.maxAttempts")),
+            h("input", {
+              className: "hm-input",
+              type: "number",
+              min: "1",
+              max: "50",
+              step: "1",
+              value: engine.maxAttempts,
+              onChange: (event) => setEngine({ ...engine, maxAttempts: event.target.value })
+            })
+          ),
+          h(
+            "label",
+            { className: "hm-captureToggle" },
+            h("input", {
+              className: "hm-captureCheck",
+              type: "checkbox",
+              checked: engine.disableReasoning !== false,
+              onChange: (event) => setEngine({ ...engine, disableReasoning: event.target.checked })
+            }),
+            t("engine.disableReasoning")
+          ),
+          h("p", { className: "hm-muted" }, t("engine.hint"))
+        ),
+        h(
+          "div",
+          { className: "hm-row" },
+          h(
+            ui.Button,
+            { size: "sm", variant: "primary", disabled: engineBusy, onClick: () => {
+              void saveEngine();
+            } },
+            engineBusy ? t("engine.saving") : t("engine.save")
+          )
+        ),
+        engineError !== "" ? h("p", { className: "hm-error", role: "alert" }, t("engine.failed", { message: engineError })) : null,
+        engineSaved ? h("p", { className: "hm-muted", role: "status" }, t("engine.saved")) : null
+      ) : null,
       h(
         "div",
         { className: "hm-dupeRow" },

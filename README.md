@@ -237,6 +237,29 @@ rather than silently skipping the turn.
 keeping the newest of each group and listing the rest. `/api/hy-memory/merge` then deletes the listed
 rows. Nothing runs automatically; the panel exposes it as one button in the diagnostics card.
 
+## Engine settings and write health
+
+The diagnostics card now shows the capture backlog (`N pending writes`) and a collapsed **Memory engine**
+form: model, max tokens, request timeout, recall half-life, write concurrency and the per-drain cap. Saving
+writes `llm`, `recall` and `capture` through the same settings route the switch uses; changes apply on the
+next sidecar start.
+
+Reasoning models were the reason writes came back empty. The SDK accepts an OpenAI-compatible
+`extra_body` pass-through, and the standard switch works across routed models:
+
+```json
+{"reasoning_effort": "none"}
+```
+
+Measured on the gateway, one short extraction prompt produced `reasoning_content` 149–1492 characters with
+several knobs (`thinking`, `enable_thinking`, `chat_template_kwargs`) while `reasoning_effort: "none"` took
+reasoning to 0 and returned content. With reasoning off and a 4k output budget, a write fell from 30–130 s to
+9–16 s and the backlog stopped growing.
+
+The capture queue also moved out of `state.json` into `capture-queue.json`. A host reload can leave the
+previous plugin instance alive; two instances writing one state file reset retry counters and oscillated the
+queue, so the queue now has a single file and the state file a single-writer lease.
+
 ## Capacity
 
 `lifecycle.maxPerTier` defaults to 2000 and `lifecycle.archiveOnCap` is off. Turning it on appends the

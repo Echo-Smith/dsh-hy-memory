@@ -27,7 +27,14 @@ const manifest = JSON.parse(await readFile(new URL('../package.json', import.met
 const STATUS = Object.freeze({
   enabled: true,
   sidecar: { state: 'ready', port: 4310, pid: 42, startedAt: 1, lastError: '', venvReady: true },
-  model: { ready: true, provider: 'dsh', model: 'test-model', source: 'dsh' },
+  model: {
+    ready: true, provider: 'dsh', model: 'test-model', source: 'dsh',
+    maxTokens: 4096, timeoutMs: 180000, disableReasoning: true,
+    options: [{ provider: 'magpie', model: 'auto/glm-5.3-flash', label: 'auto/glm-5.3-flash · magpie' }],
+  },
+  recall: { halfLifeDays: 30 },
+  captureSettings: { concurrency: 2, maxPerDrain: 8 },
+  capture: { pending: 7 },
   counts: { personal: 2, project: 1, session: 3 },
   scene: 'chat',
   mode: 'pro',
@@ -37,7 +44,7 @@ const STATUS = Object.freeze({
   dataDirSize: 4096,
   // Folded into status by the host; the card must render this verbatim.
   memhub: { detected: true, path: '/Users/test/.one-memory', sizeBytes: 20480 },
-  package: { name: '@local/dsh-hy-memory', version: '0.1.0', repoUrl: 'https://github.com/example/hy-memory4dsh.git' },
+  package: { name: 'dsh-hy-memory', version: '0.1.0', repoUrl: 'https://github.com/example/hy-memory4dsh.git' },
   context: { memoryTokens: 120, memoryItems: 2, lastAt: 1, totalTokens: 3400, totalItems: 9 },
 })
 
@@ -1654,6 +1661,31 @@ async function exerciseFooterAndTokens(harness) {
     'the diagnostics card shows the memory token line')
   assert.ok(text.includes(t('counts.total', { n: 6 })),
     'the diagnostics card shows the summed total across the three tiers')
+
+  // Pending-write line from status.capture.pending.
+  assert.ok(text.includes(t('diag.pending', { n: 7 })), 'the diagnostics card shows the pending-write count')
+
+  // The engine form is a disclosure with a picker and numeric limits.
+  const engine = hostsOf(harness).find((node) => node.type === 'details' && String(node.props?.className ?? '').includes('hm-engine'))
+  assert.ok(engine !== undefined, 'the diagnostics card offers the engine settings')
+  const picker = hostsOf(harness).find((node) => node.type === 'select' && String(node.props?.className ?? '').includes('hm-input'))
+  assert.ok(picker !== undefined, 'the engine form has a model picker')
+  assert.ok(hostsOf(harness).some((node) => node.props?.value === 'auto/glm-5.3-flash' || node.props?.value === 'magpie\u0000auto/glm-5.3-flash'),
+    'the picker lists a model option from status.model.options')
+  const numbers = hostsOf(harness).filter((node) => node.type === 'input' && node.props?.type === 'number')
+  assert.ok(numbers.length >= 5, 'the engine form exposes budget, timeout, half-life, concurrency and cap')
+
+  const tokenInput = numbers[0]
+  tokenInput.props.onChange({ target: { value: '8192' } })
+  await settle()
+  const saveButton = findButton(harness, t('engine.save'))
+  assert.ok(saveButton !== undefined, 'the engine form has a save button')
+  await activate(harness, saveButton, 'the engine save button')
+  const saved = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/settings/set').pop()
+  assert.deepEqual(JSON.parse(saved.options.body).patch.llm.maxTokens, 8192,
+    'saving sends the edited budget in the settings patch')
+  assert.deepEqual(JSON.parse(saved.options.body).patch.llm.disableReasoning, true,
+    'the reasoning switch is part of the patch')
 
   // The automatic check: exactly one, without force, before any click.
   const updateCalls = () => harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/update/check')

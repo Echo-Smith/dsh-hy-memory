@@ -664,6 +664,10 @@ export function SettingsSection(props) {
   const [deleting, setDeleting] = React.useState(false)
   const [deleteError, setDeleteError] = React.useState('')
   const [diagOpen, setDiagOpen] = React.useState(false)
+  const [engine, setEngine] = React.useState(null)
+  const [engineBusy, setEngineBusy] = React.useState(false)
+  const [engineError, setEngineError] = React.useState('')
+  const [engineSaved, setEngineSaved] = React.useState(false)
   const [projects, setProjects] = React.useState(emptyPicker)
   const [projectChoice, setProjectChoice] = React.useState(null)
   const [sessions, setSessions] = React.useState(emptyPicker)
@@ -680,6 +684,56 @@ export function SettingsSection(props) {
   const now = Date.now()
 
   const refresh = React.useCallback(() => { setRefreshTick((value) => value + 1) }, [])
+
+  // Seed the engine form from the host once: later polls must not overwrite what
+  // the user is typing.
+  React.useEffect(() => {
+    if (engine !== null) return
+    const model = status?.model
+    if (!model) return
+    setEngine({
+      provider: model.provider ?? '',
+      model: model.model ?? '',
+      maxTokens: model.maxTokens ?? 4096,
+      timeoutMs: model.timeoutMs ?? 180000,
+      halfLifeDays: status?.recall?.halfLifeDays ?? 30,
+      concurrency: status?.captureSettings?.concurrency ?? 2,
+      maxPerDrain: status?.captureSettings?.maxPerDrain ?? 8,
+      maxAttempts: status?.captureSettings?.maxAttempts ?? 20,
+      disableReasoning: model.disableReasoning !== false,
+    })
+  }, [engine, status])
+
+  const saveEngine = async () => {
+    if (engine === null || engineBusy) return
+    setEngineBusy(true)
+    setEngineError('')
+    setEngineSaved(false)
+    try {
+      await api.setSettings({
+        llm: {
+          source: 'dsh',
+          provider: engine.provider,
+          model: engine.model,
+          maxTokens: Number(engine.maxTokens) || 4096,
+          timeoutMs: Number(engine.timeoutMs) || 180000,
+          disableReasoning: engine.disableReasoning !== false,
+        },
+        recall: { halfLifeDays: Number(engine.halfLifeDays) || 30 },
+        capture: {
+          concurrency: Number(engine.concurrency) || 1,
+          maxPerDrain: Number(engine.maxPerDrain) || 8,
+          maxAttempts: Number(engine.maxAttempts) || 20,
+        },
+      })
+      setEngineSaved(true)
+      refresh()
+    } catch (error) {
+      setEngineError(String(error?.message ?? error))
+    } finally {
+      setEngineBusy(false)
+    }
+  }
 
   React.useEffect(() => () => {
     if (dupeNoticeTimer.current !== null) clearTimeout(dupeNoticeTimer.current)
@@ -1827,6 +1881,7 @@ export function SettingsSection(props) {
     }
     const totalCount = memoryTotal()
     const context = status?.context ?? null
+    const pending = Number.isFinite(Number(status?.capture?.pending)) ? Number(status.capture.pending) : null
     const memoryTokens = asNumber(context?.memoryTokens)
     const totalTokens = asNumber(context?.totalTokens)
     return h('section', { className: 'hm-card' },
@@ -1847,6 +1902,84 @@ export function SettingsSection(props) {
         : null,
       context !== null && (memoryTokens > 0 || totalTokens > 0)
         ? h('p', { className: 'hm-contextLine' }, t('diag.memoryTokens', { round: memoryTokens, total: totalTokens }))
+        : null,
+      pending !== null && pending > 0
+        ? h('p', { className: 'hm-contextLine hm-pending' }, `${t('diag.pending', { n: pending })} · ${t('diag.pendingHint')}`)
+        : null,
+      engine !== null
+        ? h('details', { className: 'hm-engine' },
+          h('summary', { className: 'hm-engineSummary' }, t('engine.title')),
+          h('div', { className: 'hm-engineGrid' },
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.model')),
+              h('select', {
+                className: 'hm-input',
+                value: `${engine.provider}\u0000${engine.model}`,
+                onChange: (event) => {
+                  const [provider, model] = String(event.target.value).split('\u0000')
+                  setEngine({ ...engine, provider, model })
+                },
+              },
+              h('option', { value: '\u0000' }, t('engine.modelAuto')),
+              (model?.options ?? []).map((option) => h('option', {
+                key: `${option.provider}:${option.model}`,
+                value: `${option.provider}\u0000${option.model}`,
+              }, option.label)))),
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.maxTokens')),
+              h('input', {
+                className: 'hm-input', type: 'number', min: '256', step: '256',
+                value: engine.maxTokens,
+                onChange: (event) => setEngine({ ...engine, maxTokens: event.target.value }),
+              })),
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.timeoutMs')),
+              h('input', {
+                className: 'hm-input', type: 'number', min: '1000', step: '1000',
+                value: engine.timeoutMs,
+                onChange: (event) => setEngine({ ...engine, timeoutMs: event.target.value }),
+              })),
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.halfLife')),
+              h('input', {
+                className: 'hm-input', type: 'number', min: '0', step: '1',
+                value: engine.halfLifeDays,
+                onChange: (event) => setEngine({ ...engine, halfLifeDays: event.target.value }),
+              })),
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.concurrency')),
+              h('input', {
+                className: 'hm-input', type: 'number', min: '1', max: '4', step: '1',
+                value: engine.concurrency,
+                onChange: (event) => setEngine({ ...engine, concurrency: event.target.value }),
+              })),
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.maxPerDrain')),
+              h('input', {
+                className: 'hm-input', type: 'number', min: '1', max: '50', step: '1',
+                value: engine.maxPerDrain,
+                onChange: (event) => setEngine({ ...engine, maxPerDrain: event.target.value }),
+              })),
+            h('label', { className: 'hm-field' },
+              h('span', { className: 'hm-fieldLabel' }, t('engine.maxAttempts')),
+              h('input', {
+                className: 'hm-input', type: 'number', min: '1', max: '50', step: '1',
+                value: engine.maxAttempts,
+                onChange: (event) => setEngine({ ...engine, maxAttempts: event.target.value }),
+              })),
+            h('label', { className: 'hm-captureToggle' },
+              h('input', {
+                className: 'hm-captureCheck', type: 'checkbox',
+                checked: engine.disableReasoning !== false,
+                onChange: (event) => setEngine({ ...engine, disableReasoning: event.target.checked }),
+              }),
+              t('engine.disableReasoning')),
+            h('p', { className: 'hm-muted' }, t('engine.hint'))),
+          h('div', { className: 'hm-row' },
+            h(ui.Button, { size: 'sm', variant: 'primary', disabled: engineBusy, onClick: () => { void saveEngine() } },
+              engineBusy ? t('engine.saving') : t('engine.save'))),
+          engineError !== '' ? h('p', { className: 'hm-error', role: 'alert' }, t('engine.failed', { message: engineError })) : null,
+          engineSaved ? h('p', { className: 'hm-muted', role: 'status' }, t('engine.saved')) : null)
         : null,
       h('div', { className: 'hm-dupeRow' },
         h(ui.Button, {
