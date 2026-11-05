@@ -1666,14 +1666,17 @@ async function exerciseFooterAndTokens(harness) {
   assert.ok(text.includes(t('diag.pending', { n: 7 })), 'the diagnostics card shows the pending-write count')
 
   // The engine form is a disclosure with a picker and numeric limits.
-  const engine = hostsOf(harness).find((node) => node.type === 'details' && String(node.props?.className ?? '').includes('hm-engine'))
-  assert.ok(engine !== undefined, 'the diagnostics card offers the engine settings')
+  const engineCard = hostsOf(harness).find((node) => node.type === 'section'
+    && String(harness.mini.textOf(node)).includes(t('engine.title')))
+  assert.ok(engineCard !== undefined, 'the engine is its own card, not a diagnostics disclosure')
   const picker = hostsOf(harness).find((node) => node.type === 'select' && String(node.props?.className ?? '').includes('hm-input'))
   assert.ok(picker !== undefined, 'the engine form has a model picker')
   assert.ok(hostsOf(harness).some((node) => node.props?.value === 'auto/glm-5.3-flash' || node.props?.value === 'magpie\u0000auto/glm-5.3-flash'),
     'the picker lists a model option from status.model.options')
   const numbers = hostsOf(harness).filter((node) => node.type === 'input' && node.props?.type === 'number')
-  assert.ok(numbers.length >= 5, 'the engine form exposes budget, timeout, half-life, concurrency and cap')
+  assert.ok(numbers.length >= 6, 'the engine form exposes budget, timeout, half-life, concurrency, cap and retry limit')
+  assert.ok(hostsOf(harness).some((node) => node.type === 'option' && node.props?.value === ''),
+    'the model picker offers following the DSH default')
 
   const tokenInput = numbers[0]
   tokenInput.props.onChange({ target: { value: '8192' } })

@@ -229,5 +229,6 @@
   "engine.saved": "Saved; applies next round",
   "engine.failed": "Could not save: {message}",
   "engine.hint": "Thinking spends the output budget and the write comes back empty.",
-  "engine.maxAttempts": "Retry limit per job"
+  "engine.maxAttempts": "Retry limit per job",
+  "engine.modelHint": "Following the DSH default uses whatever route DSH currently selects; a pinned model is always used for memory writes."
 }

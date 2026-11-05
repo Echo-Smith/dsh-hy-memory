@@ -85,4 +85,6 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Done: engine form in diagnostics (model, max tokens, timeout, half-life, concurrency, per-drain cap) plus the pending-write line; both covered by panel smoke.
 - Done: capture queue moved to `capture-queue.json` with a single-writer lease on `state.json`; drain gained concurrency, a per-drain cap, a configurable retry limit and a watchdog that advances hung batches instead of latching.
 - Measured locally: writes 9–16 s, backlog 60 → 0–2, tests 104 pass, panel smoke pass.
-- Open: release the changes (0.1.6), and decide whether `maxAttempts` belongs in the engine form.
+- Done: the engine is a standalone card with an explicit follow-DSH-default versus pinned-model choice, plus the retry limit in the form.
+- Done: mechanical guard against the loader-id mistake — `npm run check:id` (also in CI) and `scripts/deploy-local.mjs`, which builds with the installed package name and verifies before copying. The constraint itself is also stored as a memory.
+- Open: release the changes (0.1.6).

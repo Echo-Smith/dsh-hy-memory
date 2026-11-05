@@ -71,6 +71,8 @@
     "bench:startup": "node scripts/bench-startup.mjs",
     "pack:publish": "node scripts/prepare-publish.mjs",
     "install:profile": "node scripts/install-into-profile.mjs",
-    "validate:market": "node scripts/validate-market-index.mjs"
+    "validate:market": "node scripts/validate-market-index.mjs",
+    "check:id": "node scripts/check-client-id.mjs",
+    "deploy:local": "node scripts/deploy-local.mjs"
   }
 }

@@ -239,10 +239,15 @@ rows. Nothing runs automatically; the panel exposes it as one button in the diag
 
 ## Engine settings and write health
 
-The diagnostics card now shows the capture backlog (`N pending writes`) and a collapsed **Memory engine**
-form: model, max tokens, request timeout, recall half-life, write concurrency and the per-drain cap. Saving
-writes `llm`, `recall` and `capture` through the same settings route the switch uses; changes apply on the
-next sidecar start.
+The diagnostics card shows the capture backlog (`N pending writes`). The **Memory engine** is its own card:
+model (either *follow the DSH default* or a pinned provider/model), max tokens, request timeout, recall
+half-life, write concurrency, per-drain cap and the retry limit per job. Saving writes `llm`, `recall` and
+`capture` through the same settings route the switch uses; changes apply on the next sidecar start.
+
+Two scripts keep a local deploy honest, after a bundle whose loader id did not match the installed package
+name broke the settings-page sync: `npm run check:id` verifies `client.js` registers exactly the package name,
+and `node scripts/deploy-local.mjs` rebuilds with the installed package's name and only then copies files into
+the profile. CI runs the check on every push.
 
 Reasoning models were the reason writes came back empty. The SDK accepts an OpenAI-compatible
 `extra_body` pass-through, and the standard switch works across routed models:

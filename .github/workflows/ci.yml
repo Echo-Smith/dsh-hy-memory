@@ -13,6 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: bundle loader id matches the package name
+        run: npm run check:id
       - name: syntax
         run: npm run check
       - name: host tests

@@ -229,5 +229,6 @@
   "engine.saved": "已保存，下一轮生效",
   "engine.failed": "保存失败：{message}",
   "engine.hint": "思考模式会吃掉输出预算，导致写入返回空文本。",
-  "engine.maxAttempts": "失败重试上限"
+  "engine.maxAttempts": "失败重试上限",
+  "engine.modelHint": "「跟随 DSH 默认模型」使用 DSH 当前路由；指定模型则固定用它处理记忆写入。"
 }
