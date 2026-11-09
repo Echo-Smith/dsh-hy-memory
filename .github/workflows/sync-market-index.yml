@@ -4,6 +4,10 @@ name: sync-market-index
 # detail page never advertises a version that was not shipped. The version commit
 # usually lands before the tag, which makes this a no-op; it exists for releases
 # made from a tag whose index bump was forgotten.
+#
+# --published makes the step refuse a version the registry does not serve. A
+# bump that has not been released yet (a local-only fix, a held release) must not
+# produce an update notice the user cannot act on.
 on:
   release:
     types: [published]
@@ -23,7 +27,7 @@ jobs:
         with:
           node-version: 22
       - name: Sync the index
-        run: node scripts/sync-market-index.mjs
+        run: node scripts/sync-market-index.mjs --published
       - name: Commit when it changed
         run: |
           if git diff --quiet -- market/index.json; then
