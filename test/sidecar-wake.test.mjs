@@ -48,3 +48,26 @@ test('a stopped sidecar can be started again before the old child exits', { skip
     rmSync(home, { recursive: true, force: true })
   }
 })
+
+test('a missing route retries instead of latching the sidecar into idle+error', { skip: !usable }, async () => {
+  const home = mkdtempSync(join(tmpdir(), 'hy-startretry-'))
+  process.env.DSH_HOME = home
+  mkdirSync(join(home, 'integrations', 'hy-memory'), { recursive: true })
+  symlinkSync(realVenv, join(home, 'integrations', 'hy-memory', 'venv'), 'dir')
+
+  const { Sidecar } = await import('../src/sidecar.js')
+  let attempts = 0
+  const sidecar = new Sidecar({
+    settings: () => ({ mode: 'pro', llm: { source: 'dsh', provider: '', model: '' }, sidecar: { idleStopMs: 0, prewarm: false } }),
+    getRoute: () => { attempts += 1; return null }, // no route at all
+    emit: () => {},
+  })
+  try {
+    await sidecar.ensureStarted().catch(() => {})
+    assert.equal(sidecar.status().state, 'starting', 'the state stays starting, not idle/failed')
+    assert.match(sidecar.status().lastError, /No OpenAI-compatible provider/, 'the reason is recorded')
+  } finally {
+    sidecar.stop()
+    rmSync(home, { recursive: true, force: true })
+  }
+})

@@ -567,7 +567,22 @@ function createRuntime(ctx, config) {
         void sidecar.ensureStarted()
           .then(() => recoverProjects())
           .then(() => log('sidecar prewarmed'))
-          .catch((error) => log('sidecar prewarm failed', error?.message ?? error))
+          .catch((error) => {
+            log('sidecar prewarm failed', error?.message ?? error)
+            // A missing model route at true app start is usually temporary (DSH
+            // is still writing its own config). Retry on the same cadence as
+            // maybeAutoStart instead of leaving the panel on a stale banner.
+            const retryable = String(error?.name ?? '') === 'StartRetry'
+            if (retryable && !stopped) {
+              const retry = setTimeout(() => {
+                void sidecar.ensureStarted()
+                  .then(() => recoverProjects())
+                  .then(() => log('sidecar started on retry'))
+                  .catch(() => {})
+              }, AUTO_START_RETRY_MS)
+              retry.unref?.()
+            }
+          })
       }
       ops = createMemoryOps({
         settings: settingsNow,

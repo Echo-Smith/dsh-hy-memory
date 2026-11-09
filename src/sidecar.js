@@ -16,6 +16,11 @@ const SDK_PACKAGE = process.env.HY_MEMORY_SDK_PACKAGE || 'hy-memory'
 const SDK_VERSION = process.env.HY_MEMORY_SDK_VERSION || '2.0.13'
 const IS_WINDOWS = process.platform === 'win32'
 
+/** Internal signal: a start attempt could not run yet and should be retried. */
+class StartRetry extends Error {
+  name = 'StartRetry'
+}
+
 export class Sidecar {
   #settings
   #getRoute
@@ -115,7 +120,14 @@ export class Sidecar {
       const route = this.#getRoute()
       const mode = settings.mode === 'lite' || settings.mode === 'ultra' ? settings.mode : 'pro'
       if (!route && mode !== 'lite') {
-        throw new Error('No OpenAI-compatible provider found in this DSH profile. Configure a model, or switch memory to lite mode.')
+        // At true app start DSH may still be writing its own settings.yaml and
+        // .env, so "no route yet" is often temporary. Failing hard here latched
+        // the sidecar into idle + a permanent-looking error banner until the
+        // next full reload. Retry instead; the caller's ticker and
+        // maybeAutoStart keep polling, and the state stays 'starting'.
+        this.#lastError = 'No OpenAI-compatible provider found in this DSH profile yet. Configure a model, or switch memory to lite mode.'
+        this.#set('starting', this.#lastError)
+        throw new StartRetry(this.#lastError)
       }
       const env = {
         ...process.env,
@@ -161,6 +173,13 @@ export class Sidecar {
       return this.client
     } catch (error) {
       this.#lastError = error?.message ?? String(error)
+      if (error instanceof StartRetry) {
+        // Leave the state as 'starting' so the banner says "starting" rather
+        // than reporting a dead sidecar; the next attempt re-runs cleanly.
+        this.#set('starting', this.#lastError)
+        this.stop({ keepState: true })
+        throw error
+      }
       this.#set('failed', this.#lastError)
       this.stop()
       throw error
@@ -203,9 +222,9 @@ export class Sidecar {
     this.#idleTimer.unref?.()
   }
 
-  stop() {
+  stop({ keepState = false } = {}) {
     if (this.#idleTimer) { clearTimeout(this.#idleTimer); this.#idleTimer = null }
-    this.#state = 'stopping'
+    if (!keepState) this.#state = 'stopping'
     const child = this.#child
     this.#child = null
     this.#port = 0
@@ -213,7 +232,10 @@ export class Sidecar {
       try { child.kill('SIGTERM') } catch {}
       setTimeout(() => { try { if (child.exitCode === null) child.kill('SIGKILL') } catch {} }, 5000).unref?.()
     }
-    this.#set('idle')
+    // keepState lets a caller stop without announcing idle — used when a start
+    // attempt could not run yet (no model route) and the next attempt should
+    // still read as 'starting'.
+    if (!keepState) this.#set('idle')
   }
 }
 
