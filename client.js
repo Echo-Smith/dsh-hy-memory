@@ -450,7 +450,15 @@ var zh_default = {
   "erase.usage": "将删除 {size}，位置：{path}",
   "erase.hint": "输入 ERASE 确认",
   "erase.confirm": "永久删除",
-  "erase.busy": "删除中…"
+  "erase.busy": "删除中…",
+  "usage.writes": "写入次数",
+  "usage.writesHint": "累计",
+  "usage.writeTokens": "写入 tokens",
+  "usage.writeTokensHint": "SDK 实测",
+  "usage.promptTokens": "输入 tokens",
+  "usage.promptHint": "提炼提示词",
+  "usage.completionTokens": "输出 tokens",
+  "usage.completionHint": "提炼结果"
 };
 
 // locale/en.json
@@ -716,7 +724,15 @@ var en_default = {
   "erase.usage": "Will delete {size} at {path}",
   "erase.hint": "Type ERASE to confirm",
   "erase.confirm": "Erase permanently",
-  "erase.busy": "Erasing…"
+  "erase.busy": "Erasing…",
+  "usage.writes": "Writes",
+  "usage.writesHint": "cumulative",
+  "usage.writeTokens": "Write tokens",
+  "usage.writeTokensHint": "measured by the SDK",
+  "usage.promptTokens": "Input tokens",
+  "usage.promptHint": "extraction prompt",
+  "usage.completionTokens": "Output tokens",
+  "usage.completionHint": "extraction result"
 };
 
 // client-src/locale.js
@@ -3572,6 +3588,7 @@ function SettingsSection(props) {
   };
   const renderUsage = () => {
     const usage = status?.context ?? null;
+    const write = status?.writeUsage ?? null;
     const health = status?.modelHealth ?? null;
     const row = (label, value, hint) => h(
       "div",
@@ -3601,6 +3618,16 @@ function SettingsSection(props) {
         row(t("usage.items"), String(usage?.totalItems ?? 0), t("usage.itemsHint")),
         row(t("usage.tokens"), String(usage?.totalTokens ?? 0), t("usage.tokensHint")),
         row(t("usage.lexical"), String(usage?.lexicalTurns ?? 0), t("usage.lexicalHint"))
+      ),
+      // Writing memory costs tokens too, and the SDK reports the real number
+      // per write. Shown separately so memory can be accounted for on its own.
+      h(
+        "div",
+        { className: "hm-usageGrid" },
+        row(t("usage.writes"), String(write?.writes ?? 0), t("usage.writesHint")),
+        row(t("usage.writeTokens"), String(write?.total ?? 0), t("usage.writeTokensHint")),
+        row(t("usage.promptTokens"), String(write?.prompt ?? 0), t("usage.promptHint")),
+        row(t("usage.completionTokens"), String(write?.completion ?? 0), t("usage.completionHint"))
       )
     );
   };

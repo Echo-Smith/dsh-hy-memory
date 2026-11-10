@@ -202,17 +202,22 @@ export function createPanelApi(deps) {
       })(),
       context: (() => {
         const usage = contextUsage()
-        if (!usage) return null
+        const persisted = state?.data?.recallUsage ?? null
+        if (!usage && !persisted) return null
+        // Persisted totals survive a reload; the in-process counters are the
+        // same numbers during one process, so either source is safe to report.
         return {
-          memoryTokens: usage.lastTokens ?? 0,
-          memoryItems: usage.lastItems ?? 0,
-          lastAt: usage.lastAt ?? 0,
-          totalTokens: usage.totalTokens ?? 0,
-          totalItems: usage.totalItems ?? 0,
-          lexicalTurns: usage.lexicalTurns ?? 0,
-          turns: usage.turns ?? 0,
+          memoryTokens: usage?.lastTokens ?? 0,
+          memoryItems: usage?.lastItems ?? 0,
+          lastAt: usage?.lastAt ?? persisted?.lastAt ?? 0,
+          totalTokens: persisted?.tokens ?? usage?.totalTokens ?? 0,
+          totalItems: persisted?.items ?? usage?.totalItems ?? 0,
+          lexicalTurns: persisted?.lexical ?? usage?.lexicalTurns ?? 0,
+          turns: persisted?.turns ?? usage?.turns ?? 0,
         }
       })(),
+      // What writing memory actually cost, measured by the SDK per write.
+      writeUsage: state?.data?.memoryUsage ?? null,
     }
   }
 

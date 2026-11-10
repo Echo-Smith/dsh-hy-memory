@@ -282,7 +282,21 @@ def install_bridge_routes() -> None:
             kwargs["workspace_id"] = str(body["workspace_id"])
         if body.get("branch"):
             kwargs["branch"] = str(body["branch"])
-        return client.add(body["data"], **kwargs)
+        result = client.add(body["data"], **kwargs)
+        # The SDK reports real token usage per write; without it the panel can
+        # only estimate. Pass it through so memory can be accounted for
+        # separately from the conversation.
+        if isinstance(result, dict) and body.get("with_usage"):
+            tokens = result.get("extract_tokens") or {}
+            result = {
+                **result,
+                "usage": {
+                    "prompt": int(tokens.get("prompt") or 0),
+                    "completion": int(tokens.get("completion") or 0),
+                    "total": int(tokens.get("total") or 0),
+                },
+            }
+        return result
 
     def _add_lite(body):
         data = body.get("data")

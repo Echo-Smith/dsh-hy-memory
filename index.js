@@ -802,6 +802,22 @@ function createRuntime(ctx, config) {
           memoryContext.lastAt = Date.now()
           memoryContext.totalTokens += tokens
           memoryContext.totalItems += info?.items ?? 0
+          // Persist the running totals: the panel showed zeros after every
+          // reload, which read as a bug rather than an empty window.
+          const usageStore = state?.data
+          if (usageStore) {
+            const previous = usageStore.recallUsage && typeof usageStore.recallUsage === 'object'
+              ? usageStore.recallUsage
+              : { turns: 0, items: 0, tokens: 0, lexical: 0 }
+            usageStore.recallUsage = {
+              turns: (previous.turns ?? 0) + 1,
+              items: (previous.items ?? 0) + (info?.items ?? 0),
+              tokens: (previous.tokens ?? 0) + tokens,
+              lexical: (previous.lexical ?? 0) + (info?.source === 'lexical' || info?.source === 'both' ? 1 : 0),
+              lastAt: Date.now(),
+            }
+            state.save()
+          }
         },
       })
       capture = createCapture({

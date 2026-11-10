@@ -515,10 +515,11 @@ export function createCapture(deps) {
     const watchdogMs = drainWatchdogMs(settings())
     const timeoutMs = Math.min(configured > 0 ? configured : ADD_TIMEOUT_MS, watchdogMs - 5_000)
     try {
+      // Always go through the bridge when it exists: it is the only path that
+      // reports back what the write actually cost in tokens, and chat writes need
+      // that accounting just as much as scene-aware ones.
       const addScene = typeof client.bridgeAddScene === 'function'
-        && job.scene !== 'chat'
-        && job.payload?.scene !== 'chat'
-        ? client.bridgeAddScene(job.payload, { timeoutMs })
+        ? client.bridgeAddScene({ ...job.payload, with_usage: true }, { timeoutMs })
         : client.add(job.payload, { timeoutMs })
       const result = await addScene
       if (result?.success === false) {
@@ -538,6 +539,7 @@ export function createCapture(deps) {
         return 'drop'
       }
       recordModelSuccess()
+      recordWriteUsage(result)
       void enforceCapacity(client, job)
       activity?.record({
         kind: 'capture',
@@ -564,6 +566,31 @@ export function createCapture(deps) {
       })
       return 'drop'
     }
+  }
+
+  /**
+   * Accumulate the real token cost of writing memory.
+   *
+   * Kept in state rather than in memory so it survives a reload: the panel used
+   * to show zeros after every restart, which read like a broken feature rather
+   * than an empty window.
+   */
+  function recordWriteUsage(result) {
+    const usage = result?.usage
+    if (!usage || typeof usage !== 'object') return
+    const store = state?.data
+    if (!store) return
+    const previous = store.memoryUsage && typeof store.memoryUsage === 'object'
+      ? store.memoryUsage
+      : { writes: 0, prompt: 0, completion: 0, total: 0 }
+    store.memoryUsage = {
+      writes: (previous.writes ?? 0) + 1,
+      prompt: (previous.prompt ?? 0) + Number(usage.prompt || 0),
+      completion: (previous.completion ?? 0) + Number(usage.completion || 0),
+      total: (previous.total ?? 0) + Number(usage.total || 0),
+      lastAt: Date.now(),
+    }
+    state.save()
   }
 
   /**

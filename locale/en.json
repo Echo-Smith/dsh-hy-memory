@@ -260,5 +260,13 @@
   "erase.usage": "Will delete {size} at {path}",
   "erase.hint": "Type ERASE to confirm",
   "erase.confirm": "Erase permanently",
-  "erase.busy": "Erasing…"
+  "erase.busy": "Erasing…",
+  "usage.writes": "Writes",
+  "usage.writesHint": "cumulative",
+  "usage.writeTokens": "Write tokens",
+  "usage.writeTokensHint": "measured by the SDK",
+  "usage.promptTokens": "Input tokens",
+  "usage.promptHint": "extraction prompt",
+  "usage.completionTokens": "Output tokens",
+  "usage.completionHint": "extraction result"
 }

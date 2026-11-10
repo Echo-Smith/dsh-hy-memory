@@ -158,3 +158,9 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - Uninstalling the plugin never deletes data: `stop()` only kills the sidecar, flushes the queue and releases the lease. A test now forbids `rm` on the integration or data directory.
 - First-run framework install failure (a PyPI download) now reports an actionable message instead of a pip traceback.
 
+## Phase 19: usage that survives a reload, and separate token accounting
+
+- The usage card read zero after every reload because the counters lived only in memory. Recall totals now persist (`state.recallUsage`) and the panel reports the persisted numbers, so a reload no longer looks like a broken feature.
+- Memory writes are now accounted separately. The SDK reports the real cost per write (`extract_tokens`), the bridge forwards it when asked (`with_usage`), and the panel shows writes / total / input / output tokens in their own row.
+- Fixing that surfaced a second defect: chat writes bypassed the bridge entirely, so they never reported usage. Every write now goes through the bridge.
+

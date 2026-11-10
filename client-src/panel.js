@@ -2077,6 +2077,7 @@ export function SettingsSection(props) {
   // status.modelHealth (is the configured model answering).
   const renderUsage = () => {
     const usage = status?.context ?? null
+    const write = status?.writeUsage ?? null
     const health = status?.modelHealth ?? null
     const row = (label, value, hint) => h('div', { className: 'hm-usageCell' },
       h('span', { className: 'hm-usageLabel' }, label),
@@ -2094,7 +2095,14 @@ export function SettingsSection(props) {
         row(t('usage.recalls'), String(usage?.turns ?? 0), t('usage.recallsHint')),
         row(t('usage.items'), String(usage?.totalItems ?? 0), t('usage.itemsHint')),
         row(t('usage.tokens'), String(usage?.totalTokens ?? 0), t('usage.tokensHint')),
-        row(t('usage.lexical'), String(usage?.lexicalTurns ?? 0), t('usage.lexicalHint'))))
+        row(t('usage.lexical'), String(usage?.lexicalTurns ?? 0), t('usage.lexicalHint'))),
+      // Writing memory costs tokens too, and the SDK reports the real number
+      // per write. Shown separately so memory can be accounted for on its own.
+      h('div', { className: 'hm-usageGrid' },
+        row(t('usage.writes'), String(write?.writes ?? 0), t('usage.writesHint')),
+        row(t('usage.writeTokens'), String(write?.total ?? 0), t('usage.writeTokensHint')),
+        row(t('usage.promptTokens'), String(write?.prompt ?? 0), t('usage.promptHint')),
+        row(t('usage.completionTokens'), String(write?.completion ?? 0), t('usage.completionHint'))))
   }
 
   const enginePickerLabel = () => {

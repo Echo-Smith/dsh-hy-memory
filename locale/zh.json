@@ -260,5 +260,13 @@
   "erase.usage": "将删除 {size}，位置：{path}",
   "erase.hint": "输入 ERASE 确认",
   "erase.confirm": "永久删除",
-  "erase.busy": "删除中…"
+  "erase.busy": "删除中…",
+  "usage.writes": "写入次数",
+  "usage.writesHint": "累计",
+  "usage.writeTokens": "写入 tokens",
+  "usage.writeTokensHint": "SDK 实测",
+  "usage.promptTokens": "输入 tokens",
+  "usage.promptHint": "提炼提示词",
+  "usage.completionTokens": "输出 tokens",
+  "usage.completionHint": "提炼结果"
 }
