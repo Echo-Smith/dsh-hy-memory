@@ -1,0 +1,7 @@
+url: https://github.com/Echo-Smith/dsh-hy-memory
+name: Echo-Smith/dsh-hy-memory
+category: memory
+description:
+  en: Three-tier memory (personal, project, session) on the Hy-Memory engine, with recall injection, seven memory tools, session summaries and a settings panel.
+  zh: 基于 Hy-Memory 引擎的三层记忆（个人、项目、会话），带召回注入、七个记忆工具、会话摘要和设置面板。
+tarball: https://github.com/Echo-Smith/dsh-hy-memory/releases/download/v0.2.0/dsh-hy-memory-0.2.0.tgz
