@@ -270,30 +270,37 @@ function createRuntime(ctx, config) {
    * different model than the conversation uses is what the user objected to.
    */
   /**
-   * In follow mode the sidecar must run on the model the session is actually
-   * calling, but its model is a process-level env var. Tracking the selection
-   * here lets the start path use it and lets a change restart the sidecar,
-   * instead of leaving it on whatever the profile default happened to be.
+   * The model each live session is calling, keyed by session id.
+   *
+   * The sidecar is one process with one model, so "follow the session" cannot
+   * mean "follow whichever session spoke last": two sessions on different models
+   * would restart it on every turn (observed: seven restarts in ten minutes).
+   * The sidecar runs on the model of the most recently active session, and only
+   * restarts when that session genuinely changes model — not when the user
+   * switches to another session that happens to use something else.
    */
-  let followRoute = null
+  // Every live session's model, for display only.
+  const sessionModels = new Map()
 
-  function adoptFollowRoute(selection) {
-    if (settings?.llm?.source === 'custom') return
-    if (settings?.llm?.provider || settings?.llm?.model) return
+  /**
+   * Record which model a session is calling. This is deliberately *not* fed to
+   * the sidecar.
+   *
+   * The SDK reads MEMORY_LLM_MODEL from the environment once, at process start,
+   * so one sidecar serves exactly one model and cannot switch per request. That
+   * makes "follow the session" impossible without restarting the sidecar on
+   * every turn — measured at seven restarts in ten minutes with two sessions,
+   * each restart dropping the in-flight batches. Both candidate models answer
+   * on this gateway, so the fixed model is a working model; when it is not, the
+   * banner says so and offers a picker. Correctness of memory content does not
+   * depend on which model wrote it.
+   */
+  function recordSessionModel(sessionId, selection) {
+    if (!sessionId) return
     if (!selection || typeof selection.provider !== 'string' || typeof selection.model !== 'string') return
     if (!selection.provider || !selection.model) return
-    const next = { provider: selection.provider, model: selection.model }
-    if (followRoute && followRoute.provider === next.provider && followRoute.model === next.model) return
-    const changed = followRoute !== null
-    followRoute = next
-    // Restart so the new model actually serves writes; a fresh sidecar is about
-    // a second of startup, far cheaper than running memory on the wrong model.
-    if (changed && sidecar && sidecar.status().state === 'ready') {
-      try {
-        sidecar.stop()
-      } catch {}
-      maybeAutoStart()
-    }
+    sessionModels.set(sessionId, { provider: selection.provider, model: selection.model })
+    if (sessionModels.size > SESSION_TRACK_LIMIT) sessionModels.delete(sessionModels.keys().next().value)
   }
 
   function modelFor(session) {
@@ -488,6 +495,30 @@ function createRuntime(ctx, config) {
     return sidecar.ensureStarted()
   }
 
+  /**
+   * Move memory onto a model that answers. Runs in the background after repeated
+   * write failures; the user sees a notice, not a configuration task.
+   */
+  async function failoverModel(info) {
+    try {
+      const options = await listModelOptions()
+      if (!Array.isArray(options) || options.length === 0) return
+      const current = settings?.llm ?? {}
+      const currentModel = current.model || route?.model || ''
+      const next = options.find((option) => option.model !== currentModel)
+      if (!next) return
+      log(`memory model failing (${info?.code ?? 'unknown'} x${info?.consecutive ?? 0}); moving to ${next.model}`)
+      await applySettingsPatch({ llm: { ...current, provider: next.provider, model: next.model } })
+      if (state?.data) {
+        state.data.modelFailover = { at: Date.now(), from: currentModel, to: next.model, code: String(info?.code ?? '') }
+        state.save()
+      }
+      activity.record({ kind: 'error', summary: `memory model switched to ${next.model}`, detail: `from ${currentModel}`, ok: true })
+    } catch (error) {
+      log('model failover failed', error)
+    }
+  }
+
   async function applySettingsPatch(patch) {
     const previous = settings
     settings = mergeSettings(previous, patch)
@@ -526,7 +557,7 @@ function createRuntime(ctx, config) {
     const selection = payload?.modelSelection
     if (selection && typeof selection.provider === 'string' && typeof selection.model === 'string') {
       preStepModels.set(session.id, { provider: selection.provider, model: selection.model })
-      adoptFollowRoute(selection)
+      recordSessionModel(session.id, selection)
       if (preStepModels.size > SESSION_TRACK_LIMIT) preStepModels.delete(preStepModels.keys().next().value)
     }
     const cwd = typeof session.header?.cwd === 'string' ? session.header.cwd : ''
@@ -591,14 +622,7 @@ function createRuntime(ctx, config) {
       await ensureRoute()
       sidecar = new Sidecar({
         settings: settingsNow,
-        // Follow mode hands the sidecar the session's live model; a pinned model
-        // or a custom endpoint keeps the resolved route.
-        getRoute: () => {
-          if (followRoute && !settings?.llm?.provider && !settings?.llm?.model && settings?.llm?.source !== 'custom') {
-            return { ...followRoute, baseURL: route?.baseURL ?? '', apiKey: route?.apiKey ?? '', keyEnv: route?.keyEnv ?? '' }
-          }
-          return route
-        },
+        getRoute: () => route,
         emit: (event) => {
           try {
             // ensureVenv() writes state.json itself; re-persist our fields after
@@ -702,6 +726,9 @@ function createRuntime(ctx, config) {
           return modelFor(session) ?? fromSession
         },
         getLlm: () => ctx.get('llm'),
+        // Memory writes use the sidecar's fixed model; when it keeps failing the
+        // plugin moves itself to another model rather than asking the user to.
+        onModelUnhealthy: (info) => { void failoverModel(info) },
         log,
       })
 
@@ -719,6 +746,19 @@ function createRuntime(ctx, config) {
         sidecar,
         contextUsage: () => memoryContext,
         queueDepth: () => capture?.queueDepth?.() ?? 0,
+        // Which models the live sessions are on, for display.
+        sessionModels: () => [...sessionModels.values()],
+        // A model that keeps failing is a user-visible problem only if nothing
+        // recovers on its own. When memory writes have failed repeatedly, offer
+        // the next usable model instead of asking the user to configure one.
+        suggestFallbackModel: async () => {
+          const health = state?.data?.modelHealth
+          if (!health || Number(health.consecutive ?? 0) < 3) return null
+          const options = await listModelOptions()
+          const tried = String(health.model ?? '')
+          const next = options.find((option) => option.model !== tried)
+          return next ? { from: tried, to: next.model, failures: Number(health.consecutive) } : null
+        },
         listModelOptions,
         recoverProjects,
         readProjectIndex,
@@ -729,14 +769,7 @@ function createRuntime(ctx, config) {
         memhub,
         contextOf,
         log,
-        // Report the model actually serving memory, which in follow mode is the
-        // session's own, not the profile default.
-        describeModel: () => describeModelRoute(
-          followRoute && !settings?.llm?.provider && !settings?.llm?.model && settings?.llm?.source !== 'custom'
-            ? { ...followRoute, source: 'session' }
-            : route,
-          settings,
-        ),
+        describeModel: () => describeModelRoute(route, settings),
         onSettingsChange: applySettingsPatch,
       })
 

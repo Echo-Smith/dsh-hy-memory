@@ -206,6 +206,8 @@ export function createCapture(deps) {
   const getLlm = deps.getLlm
   const resolveModel = deps.resolveModel ?? (() => null)
   const log = deps.log ?? (() => {})
+  // One failover attempt per problem streak, cleared by a success.
+  let failoverRequested = false
 
   const sessions = new Map()
   let draining = false
@@ -575,8 +577,9 @@ export function createCapture(deps) {
     const previous = store.modelHealth && typeof store.modelHealth === 'object' ? store.modelHealth : { consecutive: 0 }
     const message = String(error?.message ?? error)
     const code = String(error?.code ?? error?.status ?? 'unknown')
+    const consecutive = (previous.consecutive ?? 0) + 1
     store.modelHealth = {
-      consecutive: (previous.consecutive ?? 0) + 1,
+      consecutive,
       lastError: message.slice(0, 300),
       lastCode: code,
       lastAt: Date.now(),
@@ -584,6 +587,14 @@ export function createCapture(deps) {
       model: String(model.model ?? ''),
     }
     state.save()
+    // Three in a row is not noise. Ask the host to move memory onto a model that
+    // works instead of leaving the user to notice and configure it themselves.
+    if (consecutive >= 3 && typeof deps.onModelUnhealthy === 'function' && !failoverRequested) {
+      failoverRequested = true
+      try {
+        deps.onModelUnhealthy({ consecutive, code, message })
+      } catch {}
+    }
   }
 
   /** A successful call clears the streak. */
@@ -591,6 +602,7 @@ export function createCapture(deps) {
     const store = state?.data
     if (!store || !store.modelHealth) return
     if ((store.modelHealth.consecutive ?? 0) === 0) return
+    failoverRequested = false
     store.modelHealth = { ...store.modelHealth, consecutive: 0, lastOkAt: Date.now() }
     state.save()
   }
