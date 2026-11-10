@@ -153,6 +153,17 @@ Project switch: [don't remember this project](docs/screenshots/panel-capture-swi
 
 MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 
+### Personal-tier writes by judgement
+
+The personal tier is shared by every project, so automatic promotion only fills it
+slowly and conservatively. To keep it from going stale, each session receives one
+short standing policy asking the model to call `memory_add` with
+`tier: "personal"` when it recognises a durable preference, working style, or
+standing rule — without waiting to be asked. It is injected once per session,
+only together with a working recall, and lists what must *not* be stored
+(one-off details, secrets, anything obvious from the repository). Turn it off
+with `recall.personalWrites: false`.
+
 ### Updating from the panel
 
 When the check finds a newer release, the footer offers an update button. It

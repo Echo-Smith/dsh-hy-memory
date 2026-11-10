@@ -25,7 +25,10 @@ function harness(context) {
 async function run(recall, turn = 1) {
   const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'what did we decide about the package manager?' }], source: { kind: 'user' } }]
   const out = await recall.handlePreStep({ agent: { session: { id: 'child-session', header: { cwd: '/tmp' } } }, messages, turn, step: 1 }, async () => ({ kind: 'proceed', messages }))
-  return out.messages.length > messages.length ? String(out.messages.at(-1).content[0].text) : ''
+  // Pick the recall message by its tier: the standing personal-write policy is
+  // also injected on the first turn and must not be mistaken for a recall.
+  const recalled = out.messages.filter((m) => m.source?.tier && m.source.tier !== 'policy')
+  return recalled.length > 0 ? String(recalled.at(-1).content[0].text) : ''
 }
 
 test('a subagent recall includes the lead session memory', async () => {

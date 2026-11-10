@@ -158,7 +158,8 @@ test('a cold recall waits briefly for the sidecar instead of skipping the turn',
   const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'what did we decide about the package manager?' }], source: { kind: 'user' } }]
   const out = await recall.handlePreStep({ agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 }, async () => ({ kind: 'proceed', messages }))
   assert.equal(calls, 1)
-  assert.match(String(out.messages.at(-1).content[0].text), /warm memory about pnpm/)
+  const texts = out.messages.map((m) => String(m.content?.[0]?.text ?? ''))
+  assert.ok(texts.some((text) => /warm memory about pnpm/.test(text)), 'the recalled memory is injected')
 })
 
 test('a recall still gives up when the sidecar never becomes ready', async () => {
@@ -173,6 +174,10 @@ test('a recall still gives up when the sidecar never becomes ready', async () =>
   const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'anything at all' }], source: { kind: 'user' } }]
   const started = Date.now()
   const out = await recall.handlePreStep({ agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 }, async () => ({ kind: 'proceed', messages }))
+  // Nothing was recalled, so the personal-write policy is withheld too: a turn
+  // with no working memory path must not be told to write.
+  const policies = out.messages.filter((m) => m.source?.tier === 'policy')
+  assert.equal(policies.length, 0)
   assert.equal(out.messages.length, messages.length)
   assert.ok(Date.now() - started < 2000)
 })
@@ -233,4 +238,48 @@ test('one long memory cannot consume the whole injection budget', () => {
   assert.equal(out.items.length, 3, 'the short fact is still injected')
   assert.ok(out.items.some((item) => item.id === 'short'), 'a long neighbour does not crowd it out')
   assert.ok(out.text.length <= 1200 + 200, 'the budget still holds')
+})
+
+test('the personal-write policy is injected once per session, not once per turn', async () => {
+  // The policy rides with a real recall: a turn that recalls nothing is not told
+  // to write either.
+  const client = {
+    bridgeSearch: async () => ({ memories: { normal: [{ memory_id: 'm1', content: 'prefers tabs', session_id: 's1', score: 0.9 }] } }),
+    bridgeList: async () => ({ memories: [] }),
+  }
+  const recall = createRecall({
+    settings: () => ({ enabled: true, recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.5 } }),
+    activity: { record() {} },
+    getClient: () => client,
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1', projectPath: '/tmp' }),
+    log: () => {},
+  })
+  const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'anything' }], source: { kind: 'user' } }]
+  const run = (turn) => recall.handlePreStep(
+    { agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn, step: 1 },
+    async () => ({ kind: 'proceed', messages }),
+  )
+  const first = await run(1)
+  const second = await run(2)
+  const policies = (out) => out.messages.filter((m) => m.source?.tier === 'policy')
+  assert.equal(policies(first).length, 1, 'the first turn carries the policy')
+  assert.equal(policies(second).length, 0, 'later turns do not repeat it')
+  assert.match(String(policies(first)[0].content[0].text), /memory_add with tier "personal"/)
+})
+
+test('turning personal writes off also removes the policy', async () => {
+  const client = { bridgeSearch: async () => ({ memories: { normal: [] } }), bridgeList: async () => ({ memories: [] }) }
+  const recall = createRecall({
+    settings: () => ({ enabled: true, recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.5, personalWrites: false } }),
+    activity: { record() {} },
+    getClient: () => client,
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1', projectPath: '/tmp' }),
+    log: () => {},
+  })
+  const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'anything' }], source: { kind: 'user' } }]
+  const out = await recall.handlePreStep(
+    { agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 },
+    async () => ({ kind: 'proceed', messages }),
+  )
+  assert.equal(out.messages.filter((m) => m.source?.tier === 'policy').length, 0)
 })

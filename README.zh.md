@@ -139,6 +139,13 @@ https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.jso
 
 MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 
+### 由 AI 判断写入个人层
+
+个人层被所有项目共享，自动晋升因此又慢又保守。为了不让它停滞，每个会话会收到一次简短常驻的策略，要求模型
+在识别到长期偏好、工作习惯或既定规则时，主动调用 `memory_add` 并指定 `tier: "personal"`，不必等用户开口。
+它每个会话只注入一次，且只在召回正常工作的一轮才附带，并明确列出不该写入的内容（一次性细节、密钥、仓库里
+一眼可见的信息）。可通过 `recall.personalWrites: false` 关闭。
+
 ### 从面板更新
 
 检查到新版本后，页脚会出现更新按钮。它会下载该 Release 的 tarball，校验包名与版本，再用这个 profile 自己的

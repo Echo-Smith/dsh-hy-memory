@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   mode: 'pro',
   language: 'auto',
   tiers: { personal: true, project: true, session: true },
-  recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.45, waitForStartMs: 2500, halfLifeDays: 30 },
+  recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.45, personalWrites: true, waitForStartMs: 2500, halfLifeDays: 30 },
   capture: { enabled: true, windowTurns: 3, idleFlushMs: 180000, includeToolCalls: true, toolResultChars: 1200, productivity: false, concurrency: 3, maxPerDrain: 8, maxAttempts: 20 },
   promotion: { enabled: true, everyTurns: 8, onSessionEnd: true },
   llm: { source: 'dsh', provider: '', model: '', baseURL: '', maxTokens: 4096, agentMaxTokens: 4096, timeoutMs: 180000, disableReasoning: true },

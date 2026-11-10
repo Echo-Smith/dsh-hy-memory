@@ -128,4 +128,5 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - Promotion no longer uses one global lock: with several sessions open, a second session's promotion was queued behind the first one's whole model call and then dropped. The lock and the pending queue are keyed per session (project promotion keys on the project).
 - Personal-tier promotion needs `everyTurns * 3` turns *within one session*, so parallel sessions each stall short of it. That is why the personal tier looks stale; it is a policy question, not a defect.
 - New usage card: recalls, items injected, injected tokens, lexical fallbacks, the model actually used, and a warning when the model fails repeatedly.
+- Personal-tier writes now also happen by judgement: one standing policy per session asks the model to call `memory_add` with `tier: "personal"` for durable preferences and rules. It rides along only with a successful recall (a turn where memory reads are unavailable is not told to write), and `recall.personalWrites` turns it off.
 

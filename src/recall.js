@@ -286,13 +286,33 @@ export function renderRecall(items) {
   return lines.join('\n')
 }
 
-export function createMemoryMessage(text) {
+export function createMemoryMessage(text, tier = 'mixed') {
   return {
     id: randomUUID(),
     role: 'user',
     content: [{ type: 'text', text }],
-    source: { kind: SOURCE_KIND, plugin: 'dsh-hy-memory', tier: 'mixed' },
+    source: { kind: SOURCE_KIND, plugin: 'dsh-hy-memory', tier },
   }
+}
+
+/**
+ * The standing instruction that tells the model to write to the personal tier
+ * on its own judgement.
+ *
+ * Auto-promotion only reaches the personal tier after a whole project's worth of
+ * evidence, so a lasting preference heard once could wait a long time to be
+ * stored. This asks the model to notice those and call `memory_add` with
+ * `tier: 'personal'` itself. It is injected once per session, not per turn, and
+ * is deliberately narrow: the project tier already captures the work itself.
+ */
+export function personalWriteInstruction() {
+  return [
+    'Memory policy for this session (dsh-hy-memory):',
+    '- The personal tier holds durable facts about me that outlive any one project: preferences, working style, tool and environment choices, standing conventions or rules I state.',
+    '- When you recognise one, call memory_add with tier "personal" and a self-contained one-line statement, without waiting for me to ask. Do this at most once per fact.',
+    '- Do not store: one-off debugging details, transient task state, secrets or credentials, or anything already obvious from the repository. Project facts belong to the project tier, which the plugin captures by itself.',
+    '- If I correct a stored preference, update the existing memory instead of adding a second one.',
+  ].join('\n')
 }
 
 /** Resolve `task(signal)` or null once the deadline passes, whichever is first. */
@@ -328,6 +348,8 @@ export function createRecall(deps) {
   const log = deps.log ?? (() => {})
   const contextOf = deps.contextOf
   const injectedTurn = new Map()
+  // Sessions that already received the standing personal-write instruction.
+  const instructedSession = new Set()
 
   function timeoutMs() {
     const configured = settings()?.recall?.timeoutMs
@@ -428,6 +450,24 @@ export function createRecall(deps) {
       if (!sessionId) return decision
       const turn = Number.isFinite(payload.turn) ? payload.turn : null
       if (turn !== null && injectedTurn.get(sessionId) === turn) return decision
+      let withInstruction = decision
+      // The policy rides along only when the memory path is actually working for
+      // this turn: telling the model to write while reads are unavailable would
+      // present a half-broken system as healthy.
+      const attachInstruction = () => {
+        if (config?.recall?.personalWrites === false || instructedSession.has(sessionId)) return
+        instructedSession.add(sessionId)
+        if (instructedSession.size > 500) instructedSession.delete(instructedSession.values().next().value)
+        const note = createMemoryMessage(personalWriteInstruction(), 'policy')
+        const claimedNow = Array.isArray(payload.messages) ? payload.messages : []
+        const anchor = withInstruction.messages.findLastIndex((candidate) => claimedNow.includes(candidate))
+        withInstruction = {
+          ...withInstruction,
+          messages: anchor >= 0
+            ? withInstruction.messages.toSpliced(anchor + 1, 0, note)
+            : [...withInstruction.messages, note],
+        }
+      }
       const query = extractQuery(payload.messages)
       if (!query) return decision
       let client = getClient()
@@ -439,7 +479,7 @@ export function createRecall(deps) {
           client = await withDeadline(() => warmClient(), waitMs, new AbortController()).catch(() => null)
         }
       }
-      if (!client) return decision
+      if (!client) return withInstruction
       const context = contextOf(payload, session)
       const groups = await search(client, query, context)
       const queryTokens = lexicalTokens(query)
@@ -488,12 +528,15 @@ export function createRecall(deps) {
         })
       }
       if (!merged.text) return decision
+      // Attach before building the recall message: the policy anchors to the
+      // claimed user turn, and the recall then lands right after it.
+      attachInstruction()
       const message = createMemoryMessage(merged.text)
       const claimed = Array.isArray(payload.messages) ? payload.messages : []
-      const lastClaimed = decision.messages.findLastIndex((candidate) => claimed.includes(candidate))
+      const lastClaimed = withInstruction.messages.findLastIndex((candidate) => claimed.includes(candidate))
       const messages = lastClaimed >= 0
-        ? decision.messages.toSpliced(lastClaimed + 1, 0, message)
-        : [...decision.messages, message]
+        ? withInstruction.messages.toSpliced(lastClaimed + 1, 0, message)
+        : [...withInstruction.messages, message]
       if (turn !== null) {
         injectedTurn.set(sessionId, turn)
         if (injectedTurn.size > 500) injectedTurn.delete(injectedTurn.keys().next().value)
@@ -505,11 +548,11 @@ export function createRecall(deps) {
         detail: query.slice(0, 160),
         ok: true,
       })
-      return { ...decision, messages }
+      return { ...withInstruction, messages }
     } catch (error) {
       log('recall failed', error)
       activity?.record({ kind: 'error', summary: 'recall failed', detail: String(error?.message ?? error), ok: false })
-      return decision
+      return withInstruction
     }
   }
 

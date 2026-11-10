@@ -55,8 +55,11 @@ test('pre-step recall searches all tiers and injects one sourced message', async
     step: 1,
   }, async () => decision)
 
-  assert.equal(result.messages.length, 2)
-  const injected = result.messages[1]
+  // The first turn also carries the standing personal-write policy, so count
+  // the recall by tier instead of by position.
+  const injected = result.messages.find((m) => m.source?.tier && m.source.tier !== 'policy')
+  assert.ok(injected, 'a recall message is injected')
+  assert.equal(result.messages.length, 3, 'the user turn, the recall and the policy')
   assert.equal(injected.source.kind, 'hy-memory')
   assert.match(injected.content[0].text, /prefers tabs/)
   assert.equal(decision.messages.length, 1, 'the source decision is not mutated')
