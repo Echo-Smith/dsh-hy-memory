@@ -286,5 +286,13 @@
   "profile.field.age": "年龄",
   "profile.field.location": "所在地",
   "profile.field.occupation": "职业",
-  "profile.field.employer": "公司"
+  "profile.field.employer": "公司",
+  "profile.field.role": "角色",
+  "profile.field.languages": "语言",
+  "profile.field.frameworks": "框架",
+  "profile.field.tools": "工具",
+  "profile.field.platforms": "平台",
+  "profile.field.projects": "项目",
+  "profile.field.conventions": "约定",
+  "profile.field.preferences": "偏好"
 }

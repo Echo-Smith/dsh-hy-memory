@@ -66,6 +66,7 @@ def _get_lite_client():
     from hy_memory.client import HyMemoryClient
     from hy_memory.config import MemoryConfig
 
+    apply_profile_schema()
     config = MemoryConfig.from_env()
     if os.getenv("HY_MEMORY_LOCAL_EMBED", "0") == "1":
         _lite_client = HyMemoryClient(config=config, mode="lite", embedding_service=LocalOnnxEmbedding())
@@ -127,6 +128,8 @@ def install_bridge_routes() -> None:
                     result = _profile(client, body)
                 elif path == "/bridge/v1/evolve":
                     result = _evolve(client, body)
+                elif path == "/bridge/v1/schema":
+                    result = {"fields": dict(client._config.basic_profile.effective_fields())}
                 else:
                     return sdk_server._json_response(self, 404, {"error": "not_found", "path": path})
                 return sdk_server._json_response(self, 200, result)
@@ -441,12 +444,60 @@ def install_bridge_routes() -> None:
         raise last if last else RuntimeError("delete failed")
 
 
+# Fields for a developer's profile, replacing the generic name/age/city set the
+# SDK ships with. Measured limits: through the current memory model only the
+# plainest fields (name, location) actually get filled — the field descriptions
+# do reach the extractor, and it still ignores the technology ones. Kept because
+# it costs nothing and a stronger model benefits automatically, but the panel must
+# not promise more than this produces.
+DEVELOPER_PROFILE_FIELDS = {
+    "name": "The user's full name or the name they prefer to be called.",
+    "role": "The user's own job title or role.",
+    "location": "The user's city or region of residence.",
+    "languages": "Programming languages the user states they write in.",
+    "frameworks": "Frameworks the user states they use.",
+    "tools": "Editors and package managers the user states they use.",
+    "platforms": "Operating systems the user states they work on.",
+}
+
+def apply_profile_schema() -> None:
+    """Swap the profile schema for the developer set.
+
+    `MemoryConfig.from_env()` is just `cls()`, and the dataclass binds
+    `field(default_factory=BasicProfileConfig)` when the class is created, so
+    patching the factory afterwards does nothing. Replacing `from_env` is the path
+    that actually travels into the client the writer uses.
+
+    Never raises: a schema tweak must not stop the sidecar from starting.
+    """
+    mode = os.getenv("HY_MEMORY_PROFILE_SCHEMA", "developer").strip().lower()
+    if mode in ("", "default", "sdk"):
+        return
+    try:
+        from hy_memory.config import BasicProfileConfig, MemoryConfig
+
+        original_from_env = MemoryConfig.from_env
+        profile_fields = dict(DEVELOPER_PROFILE_FIELDS)
+
+        def from_env(cls):
+            config = original_from_env.__func__(cls)
+            config.basic_profile = BasicProfileConfig(fields=dict(profile_fields))
+            return config
+
+        MemoryConfig.from_env = classmethod(from_env)
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+
+
 def install_factory() -> None:
     from hy_memory import server as sdk_server
     from hy_memory.client import HyMemoryClient
     from hy_memory.config import MemoryConfig
 
     use_local = os.getenv("HY_MEMORY_LOCAL_EMBED", "0") == "1"
+    apply_profile_schema()
 
     def build():
         config = MemoryConfig.from_env()

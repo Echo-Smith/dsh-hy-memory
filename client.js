@@ -481,7 +481,15 @@ var zh_default = {
   "profile.field.age": "年龄",
   "profile.field.location": "所在地",
   "profile.field.occupation": "职业",
-  "profile.field.employer": "公司"
+  "profile.field.employer": "公司",
+  "profile.field.role": "角色",
+  "profile.field.languages": "语言",
+  "profile.field.frameworks": "框架",
+  "profile.field.tools": "工具",
+  "profile.field.platforms": "平台",
+  "profile.field.projects": "项目",
+  "profile.field.conventions": "约定",
+  "profile.field.preferences": "偏好"
 };
 
 // locale/en.json
@@ -773,7 +781,15 @@ var en_default = {
   "profile.field.age": "Age",
   "profile.field.location": "Location",
   "profile.field.occupation": "Occupation",
-  "profile.field.employer": "Employer"
+  "profile.field.employer": "Employer",
+  "profile.field.role": "Role",
+  "profile.field.languages": "Languages",
+  "profile.field.frameworks": "Frameworks",
+  "profile.field.tools": "Tools",
+  "profile.field.platforms": "Platforms",
+  "profile.field.projects": "Projects",
+  "profile.field.conventions": "Conventions",
+  "profile.field.preferences": "Preferences"
 };
 
 // client-src/locale.js

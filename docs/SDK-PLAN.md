@@ -78,3 +78,29 @@
 
 已接入：`bridge/v1/profile` → 面板「个人」标签顶部的画像卡。字段名走 locale，未知字段原样显示。
 
+## 画像时间戳 bug
+
+`memory_at` 是 epoch **秒**，面板统一按**毫秒**渲染，于是 2026-11-10 显示成「56 年前」（1970）。
+已在 `panel-api.js` 加 `toMillis()`：小于 1e11 视为秒并乘以 1000，否则原样。画像和会话叙事两处都用了。
+
+## 开发者画像 schema：实测结论（未达预期，已如实记录）
+
+目标是把画像字段从 SDK 默认的 name/age/location/occupation/employer 换成开发者关心的技术栈。
+
+**做了什么**：在桥接里替换 `MemoryConfig.from_env`，注入 7 个开发者字段（name/role/location/languages/frameworks/tools/platforms）。已验证 schema 确实进入运行中的侧车（`/bridge/v1/schema` 返回新字段及描述）。
+
+**结果**：抽取只填 `name` 和 `location`，技术栈类字段始终不填。
+
+**排查过程与结论**：
+1. 一开始以为要用 `evolve` + ultra 模式 —— 错，画像根本不走那条路。
+2. 又以为 schema 没生效 —— 错，探针证明生效了。
+3. 读源码发现两个反转：早期版本用 function-calling 工具写画像，v0.3.45 又改回 extractor 直接返回 `basic_info`（理由是「弱模型乱填」）。
+4. 最终定位：extractor 的规则文本把画像示例限定为 name/age/location/occupation/employer，当前记忆模型据此只填这几个最直白的字段。
+
+**处置**：schema 保留（成本为零，换更强的模型会自动受益），但代码注释和本文件都写明了它的实际效果，不假装它已经能用。面板不做额外承诺。
+
+**若要让画像真正包含技术栈**，可选方向（均需单独验证成本）：
+- 换更强的记忆模型；
+- 写入时并行跑一次专门的画像抽取调用（多一次模型成本）；
+- 从已有的个人层记忆里用规则/LLM 汇总，而不是依赖写入时的机会性抽取。
+

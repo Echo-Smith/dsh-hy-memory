@@ -93,6 +93,20 @@ function failureCode(error) {
   return 'memory_error'
 }
 
+/**
+ * Normalise a timestamp to milliseconds.
+ *
+ * The engine reports epoch seconds, while the panel (and every Date) works in
+ * milliseconds. Values below this threshold are seconds: 10^11 ms is 1973, so
+ * any real millisecond timestamp is far above it, and any second timestamp is
+ * far below.
+ */
+function toMillis(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return n < 1e11 ? n * 1000 : n
+}
+
 export function createPanelApi(deps) {
   const settings = deps.settings
   const sidecar = deps.sidecar
@@ -610,7 +624,10 @@ export function createPanelApi(deps) {
           profile: profile === null ? null : {
             content: String(profile.content ?? ''),
             fields: profile.basic_info && typeof profile.basic_info === 'object' ? profile.basic_info : {},
-            at: Number(profile.memory_at ?? 0) || 0,
+            // The engine reports epoch seconds; everything in the panel works in
+            // milliseconds. Passing seconds straight through rendered 1970 as
+            // "56 years ago".
+            at: toMillis(profile.memory_at),
           },
         })
       }
@@ -635,7 +652,7 @@ export function createPanelApi(deps) {
           items: rows.map((row) => ({
             id: String(row?.memory_id ?? ''),
             sessionId: String(row?.session_id ?? ''),
-            at: Number(row?.gmt_created ?? row?.created_at ?? 0) || 0,
+            at: toMillis(row?.gmt_created ?? row?.created_at),
             text: String(row?.content ?? ''),
           })),
         })

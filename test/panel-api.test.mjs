@@ -344,7 +344,7 @@ test('the profile is read from the engine and flattened for display', async () =
   const route = api.routes.find((entry) => entry.path.endsWith('/profile'))
   const body = await (await route.fetch(post('profile', {}))).json()
   assert.deepEqual(body.data.profile.fields, { name: 'A', location: '杭州' })
-  assert.equal(body.data.profile.at, 1700000000)
+  assert.equal(body.data.profile.at, 1700000000 * 1000, 'epoch seconds are converted for the panel')
 })
 
 test('an absent profile is null, not a fabricated empty one', async () => {
@@ -352,4 +352,29 @@ test('an absent profile is null, not a fabricated empty one', async () => {
   const route = api.routes.find((entry) => entry.path.endsWith('/profile'))
   const body = await (await route.fetch(post('profile', {}))).json()
   assert.equal(body.data.profile, null, 'no profile is reported as none')
+})
+
+test('engine timestamps are converted from seconds to milliseconds', async () => {
+  // The profile used to show "56 years ago" because epoch seconds were handed to
+  // a millisecond formatter.
+  const seconds = 1794310250
+  const { api } = harness({
+    sidecarClient: {
+      bridgeProfile: async () => ({ profile: { content: 'x', basic_info: { name: 'A' }, memory_at: seconds } }),
+      bridgeList: async () => ({ vdb: { memories: [{ memory_id: 'n1', content: 'y', gmt_created: seconds }] } }),
+    },
+  })
+  const profile = await (await api.routes.find((r) => r.path.endsWith('/profile')).fetch(post('profile', {}))).json()
+  assert.equal(profile.data.profile.at, seconds * 1000, 'seconds become milliseconds')
+  const narratives = await (await api.routes.find((r) => r.path.endsWith('/narratives')).fetch(post('narratives', {}))).json()
+  assert.equal(narratives.data.items[0].at, seconds * 1000, 'narrative timestamps too')
+})
+
+test('a millisecond timestamp is left alone', async () => {
+  const millis = 1794310250000
+  const { api } = harness({
+    sidecarClient: { bridgeProfile: async () => ({ profile: { content: 'x', basic_info: { name: 'A' }, memory_at: millis } }) },
+  })
+  const body = await (await api.routes.find((r) => r.path.endsWith('/profile')).fetch(post('profile', {}))).json()
+  assert.equal(body.data.profile.at, millis, 'already-ms values are not multiplied again')
 })

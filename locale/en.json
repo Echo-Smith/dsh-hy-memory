@@ -286,5 +286,13 @@
   "profile.field.age": "Age",
   "profile.field.location": "Location",
   "profile.field.occupation": "Occupation",
-  "profile.field.employer": "Employer"
+  "profile.field.employer": "Employer",
+  "profile.field.role": "Role",
+  "profile.field.languages": "Languages",
+  "profile.field.frameworks": "Frameworks",
+  "profile.field.tools": "Tools",
+  "profile.field.platforms": "Platforms",
+  "profile.field.projects": "Projects",
+  "profile.field.conventions": "Conventions",
+  "profile.field.preferences": "Preferences"
 }
