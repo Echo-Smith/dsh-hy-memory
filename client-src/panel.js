@@ -1972,6 +1972,37 @@ export function SettingsSection(props) {
   // The engine is its own card: model choice and budget knobs are configuration,
   // not diagnostics, and the model field states explicitly whether it follows
   // the DSH default or pins a model.
+  // Usage answers "what is the memory engine actually spending, and on which
+  // model" — the same question the reference screenshot's usage page answers for
+  // API calls. Values come from status.context (recall accounting) and
+  // status.modelHealth (is the configured model answering).
+  const renderUsage = () => {
+    const usage = status?.context ?? null
+    const health = status?.modelHealth ?? null
+    const modelLabel = (() => {
+      if (engine && engine.model !== '') return engine.model
+      const fallback = status?.model?.dshDefault?.model
+      return typeof fallback === 'string' && fallback !== '' ? fallback : t('diag.unknown')
+    })()
+    const row = (label, value, hint) => h('div', { className: 'hm-usageCell' },
+      h('span', { className: 'hm-usageLabel' }, label),
+      h('strong', { className: 'hm-usageValue' }, value),
+      hint ? h('span', { className: 'hm-usageHint' }, hint) : null)
+    return h('section', { className: 'hm-card' },
+      h('div', { className: 'hm-cardHead' },
+        h('h2', { className: 'hm-h2' }, t('usage.title'))),
+      h('p', { className: 'hm-muted' }, t('usage.modelLine', { model: modelLabel })),
+      health && health.healthy === false
+        ? h('p', { className: 'hm-error' },
+          t('usage.modelFailing', { count: health.consecutive, code: health.lastCode || health.lastError || '' }))
+        : null,
+      h('div', { className: 'hm-usageGrid' },
+        row(t('usage.recalls'), String(usage?.turns ?? 0), t('usage.recallsHint')),
+        row(t('usage.items'), String(usage?.totalItems ?? 0), t('usage.itemsHint')),
+        row(t('usage.tokens'), String(usage?.totalTokens ?? 0), t('usage.tokensHint')),
+        row(t('usage.lexical'), String(usage?.lexicalTurns ?? 0), t('usage.lexicalHint'))))
+  }
+
   const renderEngine = () => {
     if (engine === null) return null
     const options = (status?.model?.options ?? [])
@@ -2178,6 +2209,7 @@ export function SettingsSection(props) {
     renderTabBody()),
     renderActivity(),
     renderDiagnostics(),
+    renderUsage(),
     renderEngine(),
     renderMemhub(),
     renderFooter(),

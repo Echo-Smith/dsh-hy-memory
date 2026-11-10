@@ -500,8 +500,21 @@ function createRuntime(ctx, config) {
       const key = projectKey(cwd)
       if (key && state) {
         const known = state.data.projects[key]
-        if (!known) state.data.projects[key] = { path: cwd, title: projectTitleForPath(cwd), lastSeenAt: Date.now() }
-        else known.lastSeenAt = Date.now()
+        if (!known) {
+          state.data.projects[key] = { path: cwd, title: projectTitleForPath(cwd), lastSeenAt: Date.now() }
+          state.save()
+        } else if (!known.path || !known.title || known.title === key) {
+          // A placeholder written during recovery used to be permanent: the
+          // title stayed the hash even though the real cwd was right here, which
+          // is why the panel showed keys long after the data was known.
+          known.path = cwd
+          known.title = projectTitleForPath(cwd)
+          known.lastSeenAt = Date.now()
+          if (typeof writeProjectIndex === 'function') writeProjectIndex({ [key]: { path: cwd, title: known.title } })
+          state.save()
+        } else {
+          known.lastSeenAt = Date.now()
+        }
         state.data.lastProject = key
         state.save()
       }

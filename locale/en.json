@@ -239,5 +239,16 @@
   "update.installing": "Installing…",
   "update.installed": "v{version} installed — restart DSH to apply",
   "update.installFailed": "Install failed",
-  "project.loading": "Loading…"
+  "project.loading": "Loading…",
+  "usage.title": "Usage",
+  "usage.modelLine": "Memory engine model: {model}",
+  "usage.recalls": "Recalls",
+  "usage.recallsHint": "this process",
+  "usage.items": "Items injected",
+  "usage.itemsHint": "cumulative",
+  "usage.tokens": "Injected tokens",
+  "usage.tokensHint": "estimated",
+  "usage.lexical": "Lexical fallback",
+  "usage.lexicalHint": "when semantic recall came up short",
+  "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine"
 }

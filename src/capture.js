@@ -218,8 +218,13 @@ export function createCapture(deps) {
   // flush or a retry timer owned by the previous instance. A ticker keeps a
   // backlog moving even when no new turn arrives.
   let drainTicker = null
-  let promoting = false
-  let pendingPromotion = null
+  // Keyed by session: a single global flag made a parallel session's promotion
+  // wait behind another's whole model call, and the waiting one was simply
+  // dropped. Sessions are independent work; only their own promotion is serial.
+  const promoting = new Set()
+  // One queued promotion per session: with parallel sessions a single slot let a
+  // second session's request overwrite the first one's.
+  const pendingPromotion = new Map()
   let disposed = false
 
   function ensureState() {
@@ -519,6 +524,7 @@ export function createCapture(deps) {
         if (state?.data) {
           state.data.lastAddError = { at: Date.now(), code, keys: Object.keys(result ?? {}).slice(0, 12), scene: job.scene }
         }
+        recordModelFailure({ message: code, code })
         if (transientFailure(result) && (job.attempts ?? 0) < maxAttempts(settings())) return 'retry'
         const kept = await fallbackToLite(client, job)
         activity?.record({
@@ -529,6 +535,7 @@ export function createCapture(deps) {
         })
         return 'drop'
       }
+      recordModelSuccess()
       void enforceCapacity(client, job)
       activity?.record({
         kind: 'capture',
@@ -543,6 +550,9 @@ export function createCapture(deps) {
       const retryable = error?.retryable !== false && (error?.status === undefined || error.status === 0 || error.status === 429 || error.status >= 500)
       if (retryable && job.attempts < maxAttempts(settings())) return 'retry'
       log('capture write dropped', error)
+      // Record the model's health separately from the write: the user asked to be
+      // told when the configured model is failing, not only that a batch was lost.
+      recordModelFailure(error)
       const kept = await fallbackToLite(client, job)
       activity?.record({
         kind: 'error',
@@ -552,6 +562,37 @@ export function createCapture(deps) {
       })
       return 'drop'
     }
+  }
+
+  /**
+   * Track repeated model failures so the panel can tell the user to switch.
+   * A single timeout is noise; three consecutive failures is a signal.
+   */
+  function recordModelFailure(error) {
+    const store = state?.data
+    if (!store) return
+    const model = settings()?.llm ?? {}
+    const previous = store.modelHealth && typeof store.modelHealth === 'object' ? store.modelHealth : { consecutive: 0 }
+    const message = String(error?.message ?? error)
+    const code = String(error?.code ?? error?.status ?? 'unknown')
+    store.modelHealth = {
+      consecutive: (previous.consecutive ?? 0) + 1,
+      lastError: message.slice(0, 300),
+      lastCode: code,
+      lastAt: Date.now(),
+      provider: String(model.provider ?? ''),
+      model: String(model.model ?? ''),
+    }
+    state.save()
+  }
+
+  /** A successful call clears the streak. */
+  function recordModelSuccess() {
+    const store = state?.data
+    if (!store || !store.modelHealth) return
+    if ((store.modelHealth.consecutive ?? 0) === 0) return
+    store.modelHealth = { ...store.modelHealth, consecutive: 0, lastOkAt: Date.now() }
+    state.save()
   }
 
   async function drain() {
@@ -768,8 +809,8 @@ export function createCapture(deps) {
     if (disposed) return
     // Turns arrive faster than a promotion run: keep the latest request instead of
     // dropping it, otherwise frequent turns starve the project and personal tiers.
-    if (promoting) {
-      pendingPromotion = { entry, reason }
+    if (promoting.has(entry.id)) {
+      pendingPromotion.set(entry.id, { entry, reason })
       return
     }
     const config = settings()
@@ -825,7 +866,7 @@ export function createCapture(deps) {
       state.save()
       return
     }
-    promoting = true
+    promoting.add(entry.id)
     try {
       const config = settings()
       const key = projectKey(entry.cwd)
@@ -865,7 +906,7 @@ export function createCapture(deps) {
       log('session promotion failed', error)
       activity?.record({ kind: 'error', summary: 'session promotion failed', detail: String(error?.message ?? error), ok: false })
     } finally {
-      promoting = false
+      promoting.delete(entry.id)
       drainPendingPromotion()
     }
   }
@@ -897,10 +938,11 @@ export function createCapture(deps) {
   }
 
   function drainPendingPromotion() {
-    if (!pendingPromotion || disposed) return
-    const next = pendingPromotion
-    pendingPromotion = null
-    setTimeout(() => { void maybePromote(next.entry, next.reason) }, 0).unref?.()
+    if (disposed || pendingPromotion.size === 0) return
+    for (const [id, next] of pendingPromotion) {
+      pendingPromotion.delete(id)
+      setTimeout(() => { void maybePromote(next.entry, next.reason) }, 0).unref?.()
+    }
   }
 
   async function promoteProject(entry) {
@@ -918,7 +960,7 @@ export function createCapture(deps) {
       state.save()
       return
     }
-    promoting = true
+    promoting.add(`project:${key}`)
     try {
       const response = await client.list({
         user_id: resolveUser(config),
@@ -956,7 +998,7 @@ export function createCapture(deps) {
       log('project promotion failed', error)
       activity?.record({ kind: 'error', summary: 'project promotion failed', detail: String(error?.message ?? error), ok: false })
     } finally {
-      promoting = false
+      promoting.delete(`project:${key}`)
       drainPendingPromotion()
     }
   }

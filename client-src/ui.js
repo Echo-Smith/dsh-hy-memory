@@ -514,6 +514,12 @@ const PANEL_CSS = `
 .hm-engine { margin-top:6px; }
 .hm-engineSummary { cursor:pointer; font-size:12px; color:var(--dsw-alias-label-secondary); }
 .hm-engineGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px 12px; margin:8px 0; }
+/* Usage cells mirror the reference dashboard: label above, big number, small hint. */
+.hm-usageGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin:10px 0 2px; }
+.hm-usageCell { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; background:var(--hm-surface-2, rgba(127,127,127,0.08)); }
+.hm-usageLabel { font-size:12px; opacity:0.72; }
+.hm-usageValue { font-size:20px; font-weight:600; line-height:1.2; font-variant-numeric:tabular-nums; }
+.hm-usageHint { font-size:11px; opacity:0.55; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-fileHead { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }

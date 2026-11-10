@@ -177,6 +177,23 @@ export function createPanelApi(deps) {
         const pkg = readPackage() ?? {}
         return { name: String(pkg.name ?? ''), version: String(pkg.version ?? ''), repoUrl: String(pkg.repository?.url ?? '') }
       })(),
+      // Whether the configured model is actually answering. The user asked to be
+      // told to switch models when calls keep failing, so this is surfaced rather
+      // than left in the log.
+      modelHealth: (() => {
+        const health = state?.data?.modelHealth
+        if (!health || typeof health !== 'object') return null
+        const consecutive = Number(health.consecutive ?? 0)
+        return {
+          healthy: consecutive === 0,
+          consecutive,
+          lastError: String(health.lastError ?? ''),
+          lastCode: String(health.lastCode ?? ''),
+          lastAt: Number(health.lastAt ?? 0),
+          provider: String(health.provider ?? ''),
+          model: String(health.model ?? ''),
+        }
+      })(),
       context: (() => {
         const usage = contextUsage()
         if (!usage) return null

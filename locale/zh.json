@@ -239,5 +239,16 @@
   "update.installing": "安装中…",
   "update.installed": "v{version} 已安装，重启 DSH 后生效",
   "update.installFailed": "安装失败",
-  "project.loading": "载入中…"
+  "project.loading": "载入中…",
+  "usage.title": "用量",
+  "usage.modelLine": "记忆引擎使用模型：{model}",
+  "usage.recalls": "召回次数",
+  "usage.recallsHint": "本进程内",
+  "usage.items": "注入条目",
+  "usage.itemsHint": "累计",
+  "usage.tokens": "注入 tokens",
+  "usage.tokensHint": "估算",
+  "usage.lexical": "字面兜底",
+  "usage.lexicalHint": "语义不足时的次数",
+  "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型"
 }

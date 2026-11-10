@@ -122,3 +122,10 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - It does not restart DSH, by design. A plugin runs in the main process and cannot call `app.relaunch()`; DSH's own plugin manager also only asks the user to restart (`请重启 DSH 使更改生效`). Restarting would kill live sessions.
 - Verified end to end against the real profile: `0.1.7 -> 0.1.6` via the bundled pnpm succeeded, the drill then showed the downgrade risk, and a guard plus test were added.
 
+## Phase 14: self-healing project names, parallel promotion, usage card
+
+- Fixed the regression that put hashes back in the project picker: `recordPreStep` wrote a real path/title only when the key was new, so a placeholder created during recovery stayed permanent even though the cwd was known. Placeholders now heal on sight and are mirrored into `projects.json`.
+- Promotion no longer uses one global lock: with several sessions open, a second session's promotion was queued behind the first one's whole model call and then dropped. The lock and the pending queue are keyed per session (project promotion keys on the project).
+- Personal-tier promotion needs `everyTurns * 3` turns *within one session*, so parallel sessions each stall short of it. That is why the personal tier looks stale; it is a policy question, not a defect.
+- New usage card: recalls, items injected, injected tokens, lexical fallbacks, the model actually used, and a warning when the model fails repeatedly.
+

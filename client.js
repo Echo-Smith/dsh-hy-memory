@@ -426,7 +426,18 @@ var zh_default = {
   "update.installing": "安装中…",
   "update.installed": "v{version} 已安装，重启 DSH 后生效",
   "update.installFailed": "安装失败",
-  "project.loading": "载入中…"
+  "project.loading": "载入中…",
+  "usage.title": "用量",
+  "usage.modelLine": "记忆引擎使用模型：{model}",
+  "usage.recalls": "召回次数",
+  "usage.recallsHint": "本进程内",
+  "usage.items": "注入条目",
+  "usage.itemsHint": "累计",
+  "usage.tokens": "注入 tokens",
+  "usage.tokensHint": "估算",
+  "usage.lexical": "字面兜底",
+  "usage.lexicalHint": "语义不足时的次数",
+  "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型"
 };
 
 // locale/en.json
@@ -671,7 +682,18 @@ var en_default = {
   "update.installing": "Installing…",
   "update.installed": "v{version} installed — restart DSH to apply",
   "update.installFailed": "Install failed",
-  "project.loading": "Loading…"
+  "project.loading": "Loading…",
+  "usage.title": "Usage",
+  "usage.modelLine": "Memory engine model: {model}",
+  "usage.recalls": "Recalls",
+  "usage.recallsHint": "this process",
+  "usage.items": "Items injected",
+  "usage.itemsHint": "cumulative",
+  "usage.tokens": "Injected tokens",
+  "usage.tokensHint": "estimated",
+  "usage.lexical": "Lexical fallback",
+  "usage.lexicalHint": "when semantic recall came up short",
+  "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine"
 };
 
 // client-src/locale.js
@@ -1178,6 +1200,12 @@ var PANEL_CSS = `
 .hm-engine { margin-top:6px; }
 .hm-engineSummary { cursor:pointer; font-size:12px; color:var(--dsw-alias-label-secondary); }
 .hm-engineGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px 12px; margin:8px 0; }
+/* Usage cells mirror the reference dashboard: label above, big number, small hint. */
+.hm-usageGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin:10px 0 2px; }
+.hm-usageCell { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; background:var(--hm-surface-2, rgba(127,127,127,0.08)); }
+.hm-usageLabel { font-size:12px; opacity:0.72; }
+.hm-usageValue { font-size:20px; font-weight:600; line-height:1.2; font-variant-numeric:tabular-nums; }
+.hm-usageHint { font-size:11px; opacity:0.55; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-fileHead { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }
@@ -3400,6 +3428,45 @@ function SettingsSection(props) {
       diagOpen ? h("pre", { className: "hm-pre" }, JSON.stringify(status, null, 2)) : null
     );
   };
+  const renderUsage = () => {
+    const usage = status?.context ?? null;
+    const health = status?.modelHealth ?? null;
+    const modelLabel = (() => {
+      if (engine && engine.model !== "") return engine.model;
+      const fallback = status?.model?.dshDefault?.model;
+      return typeof fallback === "string" && fallback !== "" ? fallback : t("diag.unknown");
+    })();
+    const row = (label, value, hint) => h(
+      "div",
+      { className: "hm-usageCell" },
+      h("span", { className: "hm-usageLabel" }, label),
+      h("strong", { className: "hm-usageValue" }, value),
+      hint ? h("span", { className: "hm-usageHint" }, hint) : null
+    );
+    return h(
+      "section",
+      { className: "hm-card" },
+      h(
+        "div",
+        { className: "hm-cardHead" },
+        h("h2", { className: "hm-h2" }, t("usage.title"))
+      ),
+      h("p", { className: "hm-muted" }, t("usage.modelLine", { model: modelLabel })),
+      health && health.healthy === false ? h(
+        "p",
+        { className: "hm-error" },
+        t("usage.modelFailing", { count: health.consecutive, code: health.lastCode || health.lastError || "" })
+      ) : null,
+      h(
+        "div",
+        { className: "hm-usageGrid" },
+        row(t("usage.recalls"), String(usage?.turns ?? 0), t("usage.recallsHint")),
+        row(t("usage.items"), String(usage?.totalItems ?? 0), t("usage.itemsHint")),
+        row(t("usage.tokens"), String(usage?.totalTokens ?? 0), t("usage.tokensHint")),
+        row(t("usage.lexical"), String(usage?.lexicalTurns ?? 0), t("usage.lexicalHint"))
+      )
+    );
+  };
   const renderEngine = () => {
     if (engine === null) return null;
     const options = status?.model?.options ?? [];
@@ -3679,6 +3746,7 @@ function SettingsSection(props) {
     ),
     renderActivity(),
     renderDiagnostics(),
+    renderUsage(),
     renderEngine(),
     renderMemhub(),
     renderFooter(),
