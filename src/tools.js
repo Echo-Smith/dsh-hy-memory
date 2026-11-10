@@ -99,6 +99,9 @@ export function matchesTier(item, tier, context = {}, { strict = true } = {}) {
   if (agent !== projectAgentId(context.projectKey)) return false
   if (tier === 'project') return session ? session === PROJECT_SESSION : !strict
   if (!session) return !strict
+  // No requested session means every session of the project (list view). Rows
+  // parked on the project sentinel belong to the project tier, not here.
+  if (!context.sessionId) return session !== PROJECT_SESSION
   return session === context.sessionId
 }
 
@@ -304,7 +307,10 @@ export function createMemoryOps(deps) {
       const items = groups[tier] ?? []
       return { items: items.slice(offset, offset + limit), total: items.length, offset, limit }
     }
-    if (tier !== 'personal' && (!ctx.projectKey || (tier === 'session' && !ctx.sessionId))) {
+    // An empty sessionId means "every session of this project", which is what
+    // the panel's session list asks for. Only a missing project key makes the
+    // query impossible.
+    if (tier !== 'personal' && !ctx.projectKey) {
       return { items: [], total: 0, offset, limit }
     }
     const { items } = await scanUnified(ready(), ctx, {

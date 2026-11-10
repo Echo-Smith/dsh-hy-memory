@@ -130,3 +130,11 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - New usage card: recalls, items injected, injected tokens, lexical fallbacks, the model actually used, and a warning when the model fails repeatedly.
 - Personal-tier writes now also happen by judgement: one standing policy per session asks the model to call `memory_add` with `tier: "personal"` for durable preferences and rules. It rides along only with a successful recall (a turn where memory reads are unavailable is not told to write), and `recall.personalWrites` turns it off.
 
+## Phase 15: sessions were invisible, icon, usage, picker, naming
+
+- Session memories never reached the panel: `ops.list` refused a session-tier query without a session id, `matchesTier` compared rows against that empty id, and `normalizeItem` copied the query's session instead of the row's. The session list had been empty since the tier was added; it now shows every session of the project (project-sentinel rows excluded).
+- Plugin icon: the filled plate made a dark tile in light mode, and the market index pointed at a raw GitHub URL, so the shell's `<img>` showed its skeleton first (the flicker). The icon is now transparent with `currentColor` strokes and embedded as a data URI.
+- Usage card: the status was read once; it now polls every 15s, and the model line was removed from it since the engine model changes independently.
+- The model chooser uses the same scrolling, ellipsizing picker as the project row instead of a native select.
+- Naming: the npm package stays `dsh-hy-memory` (renaming would break the loader id for everyone who already installed it and orphan six published versions). `README.md` is Chinese; English lives in `README.en.md`. Store copy shortened to one sentence per language.
+

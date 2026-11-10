@@ -1,9 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="#101827"/>
-  <circle cx="22" cy="24" r="4.2" fill="#7aa2ff"/>
-  <circle cx="42" cy="20" r="3.4" fill="#9d7aff"/>
-  <circle cx="32" cy="38" r="4.6" fill="#4fd1c5"/>
-  <circle cx="18" cy="44" r="3" fill="#7aa2ff"/>
-  <circle cx="46" cy="42" r="3.2" fill="#9d7aff"/>
-  <path d="M22 24 42 20M22 24 32 38M42 20 32 38M32 38 18 44M32 38 46 42" stroke="#4b5b78" stroke-width="1.8" stroke-linecap="round"/>
+  <!--
+    No background plate: the shell already draws the rounded tile behind a plugin
+    icon, so a filled rect here showed as a dark square in light mode (and made
+    the icon flash while the image decoded over the shell's placeholder).
+    `currentColor` lets the shell theme the strokes.
+  -->
+  <g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="22" cy="24" r="4.2" stroke-width="2.4" />
+    <circle cx="42" cy="20" r="3.4" stroke-width="2.4" />
+    <circle cx="32" cy="38" r="4.6" stroke-width="2.4" />
+    <circle cx="18" cy="44" r="3" stroke-width="2.4" />
+    <circle cx="46" cy="42" r="3.2" stroke-width="2.4" />
+    <path d="M22 24 42 20M22 24 32 38M42 20 32 38M32 38 18 44M32 38 46 42" stroke-width="1.8" opacity="0.75" />
+  </g>
 </svg>

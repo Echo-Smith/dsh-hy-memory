@@ -1,62 +1,69 @@
-# hy-memory4dsh
+# dsh-hy-memory
 
-[中文](README.zh.md) | English
+[English](README.en.md) | 中文
 
-> Three layers of long-term memory for DSH: session, project, personal.
+> 给 DSH 装上三层长期记忆：会话、项目、个人。
 
-## The problem
+## 它解决什么
 
-DSH has no long-term memory. `AGENTS.md` is a static set of rules you maintain by hand, and session history only lives inside one session. Start a new conversation and every convention, preference and past mistake has to be explained again. hy-memory4dsh records them automatically, recalls the relevant ones before a turn, and consolidates them after it, across sessions and across projects.
+DSH 本身没有长期记忆。`AGENTS.md` 是手写的静态规则，会话历史只在当前会话里有效，一换会话，你上次讲过的约定、偏好、踩过的坑就都要重讲一遍。hy-memory4dsh 把这些东西自己攒下来，在对话开始前挑相关的注入，在回合结束后自动沉淀，跨会话、跨项目可用。
 
-## How it works
+## 怎么实现
 
-The plugin runs inside DSH; the memory engine is Hy-Memory 2.0's Python SDK, hosted in a sidecar process with its own venv, so there is no service for you to start.
+插件跑在 DSH 里，记忆内核用 Hy-Memory 2.0 的 Python SDK，通过一个自带 venv 的 sidecar 进程运行，不需要你单独起服务。
 
-- **Recall** on `agent/pre-step`: search the personal tier, the current project and the current session, then inject the hits as one sourced user message labelled as background data that may be stale and is never an instruction.
-- **Capture**: batch a window of turns with their tool calls and hand the batch to the sidecar, which routes it to the chat, working or coding store.
-- **Promotion**: session memories consolidate into project conventions, and those into personal preferences, giving a session to project to personal chain.
-- **Storage** under `$DSH_HOME/integrations/hy-memory/`; model calls reuse the route you already configured in DSH, and embeddings are local ONNX by default with an optional remote endpoint.
+- **召回**：`agent/pre-step` 钩子里按「个人层 + 当前项目 + 当前会话」三路检索，命中后以一条标注了来源的 user 消息注入，告诉模型这是背景资料、可能过时、不是指令。
+- **捕获**：监听会话事件，攒够一个窗口后把对话与工具调用一起交给 sidecar 提炼，按场景写入 chat / working / coding 三套存储。
+- **晋升**：会话记忆定期提炼成项目约定，项目约定再提炼成个人偏好，形成「会话 → 项目 → 个人」的沉淀链。
+- **存储**：全部在 `$DSH_HOME/integrations/hy-memory/` 下，模型直接沿用你在 DSH 里配好的路由，嵌入默认用本地 ONNX，也可以换成远端。
 
-## Features
+## 功能
 
-- Three tiers: personal, project, session-within-a-project. Browse, search, paginate, edit and delete them in the panel.
-- Three scenes: chat by default; working and coding use separate productivity stores keyed by workspace id.
-- Automatic recall and capture, including tool-call traces.
-- Settings > Memory panel: a personal tab and a project/session tab, project picker, independent pagination, master switch, memory-footprint estimate.
-- MemHub coexistence: detection, export, pull (refused with the holder's pid while MemHub runs) and de-duplicated import.
-- Cross-project search on demand; everyday recall never mixes other projects in.
-- Manual memories: `memory_add` infers the personal or project tier from the content and reports where it landed.
-- Update check and a GitHub link in the panel footer.
+- 三层记忆：个人长期、项目、项目内会话，面板分页浏览、搜索、编辑与删除。
+- 三场景：chat 常态写入；working / coding 走独立的 productivity 存储，用 workspace id 检索。
+- 自动召回与捕获，含工具调用轨迹（调用了什么、结果是什么）。
+- 设置 > 记忆 面板：个人页与「项目与会话」页、项目选择器、独立分页、总开关、记忆占用估算。
+- MemHub 共存：检测本地 MemHub、导出、拉取（运行时占用会明确拒绝）、从文件导入并去重。
+- 跨项目检索：需要时对每个项目分别检索再合并，日常召回不会混入别的项目。
+- 手动记忆：`memory_add` 按内容自动判断写个人还是项目，也能显式指定层级。
+- 检查更新与 GitHub 入口在面板底部。
 
-## Install
+## 依赖
+
+本仓库只包含 DSH 这一侧：宿主插件、客户端面板、bridge 脚本与文档。**Hy-Memory 2.0 框架本体不在仓库里**。首次使用时，插件会在 `$DSH_HOME/integrations/hy-memory/venv` 下创建 Python 环境，并把 PyPI 包 `hy-memory` 装进去，bridge 再从该环境导入 `hy_memory`。
+
+- 需要联网一次完成安装（可选开启的本地嵌入模型也需要下载）。
+- 按包名安装，新环境默认取当时最新版；安装时设置 `HY_MEMORY_SDK_PACKAGE=hy-memory==<版本>` 可以锁定版本。
+- 上游代码及其许可归 Hy-Memory 项目所有，本仓库只依赖、不重分发。
+- 本仓库其余部分的许可是 MIT。
+
+## 安装
 
 ```bash
 dsh plugin --profile desktop add link:$(pwd)
 ```
 
-Then open Settings > 记忆. First use bootstraps the Python environment; the model route comes from your existing DSH settings, so there is no extra key to fill in.
+然后打开 设置 > 记忆。首次使用会自动准备 Python 环境，模型沿用 DSH 已配的路由，不需要额外填 key。
 
-### From npm
+### 从 npm 安装
 
-Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory) (0.1.6). A profile needs the
-package as a dependency *and* its name in `dsh.profile.bundles`; the installer does both, then verifies the
-installed entry exports `apply()`:
+已发布为 [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory)（0.1.6）。profile 需要两件事：把包作为依赖，
+以及把包名写进 `dsh.profile.bundles`；脚本两步都做，并验证装好的入口确实导出 `apply()`：
 
 ```bash
 node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 ```
 
-Restart or reload DSH afterwards. By hand, that is `pnpm add dsh-hy-memory` inside the profile plus the
-name in `dsh.profile.bundles`.
+之后重启或重载 DSH。手工等价于在 profile 里 `pnpm add dsh-hy-memory`，再把包名加进 `dsh.profile.bundles`。
 
-Plugin market index for DSH's own detail page:
+给 DSH 插件详情页用的市场索引：
 
 ```
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.6), which is what
-shows under the repository's Packages tab. Reading it needs a token with `read:packages`:
+另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.6），也就是仓库 Packages
+页里能看到的那个。读取它需要一个带 `read:packages` 的 token：
 
 ```bash
 # ~/.npmrc
@@ -65,269 +72,228 @@ shows under the repository's Packages tab. Reading it needs a token with `read:p
 node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
 ```
 
-The workflow that publishes it is `.github/workflows/publish-github-packages.yml`, triggered manually or by
-a published release. A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
+发布它的是 `.github/workflows/publish-github-packages.yml`，可手动触发，也会在发布 Release 时自动跑。
+也可以直接从 GitHub Release 安装（依赖写成 tarball 地址）：
 
 ```bash
 node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
-For a local build or a release you are publishing yourself:
+自己出包或本地验证时：
 
 ```bash
-node scripts/prepare-publish.mjs                                  # stages under the public name, packs, verifies
+node scripts/prepare-publish.mjs                                  # 以公开包名暂存、打包、自检
 node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
-Publishing is a human step with your own credentials: `npm publish ./dist/<tarball> --access public`.
-Pushing a `v*` tag also runs `.github/workflows/publish-npm.yml`, which publishes once the repository secret
-`NPM_TOKEN` holds a token allowed to create the package and otherwise skips with a warning.
+发布是需要你自己凭据的人工步骤：`npm publish ./dist/<tarball> --access public`。推送 `v*` 标签还会触发
+`.github/workflows/publish-npm.yml`：仓库 secret `NPM_TOKEN` 里是允许创建该包的 token 时它自动发布，否则给出
+警告并跳过，不会把 tag 打红。
 
-For a release, keep the market index in step with the shipped version:
-
-```bash
-node scripts/sync-market-index.mjs      # rewrites market/index.json from package.json
-```
-
-Requirements: DSH 0.2 preview, Python 3.10+ (installed into the plugin directory on first use), optional git for workspace ids.
-
-## Dependencies
-
-This repository ships the DSH side only: the host plugin, the client panel, the bridge scripts, and docs. The Hy-Memory 2.0 framework itself is **not vendored here**. On first use the plugin creates a Python virtual environment under `$DSH_HOME/integrations/hy-memory/venv` and installs the PyPI package `hy-memory` into it; the bridge then imports `hy_memory` from that environment.
-
-- Network access is needed once, for that install (and for the optional local embedding model download).
-- The package is installed by name, so a fresh install resolves to the latest available version. Set `HY_MEMORY_SDK_PACKAGE=hy-memory==<version>` when installing to pin it.
-- Upstream code and its license belong to the Hy-Memory project; this repository only depends on it and does not redistribute it.
-- Everything else in this repository is MIT.
-
-## Configuration
-
-Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edits the same object.
-
-| Key | Default | Meaning |
-|---|---|---|
-| `enabled` | on | master switch; off pauses recall, capture and tools, and the panel becomes read-only |
-| `recall.maxItems` / `maxChars` / `minScore` | 5 / 1200 / 0.56 | recall budget and relevance floor per step |
-| `capture.windowTurns` | 3 | turns per captured batch |
-| `capture.productivity` | off | route batches to the working/coding stores instead of chat |
-| `capture.concurrency` / `maxPerDrain` / `maxAttempts` | 3 / 8 / 20 | parallel writes, per-drain cap, retries before a job is demoted to the lite layer |
-| `promotion.everyTurns` | 8 | turns between promotion passes |
-| `embedding.mode` | local | `local` ONNX (384 dims, ~80 MB downloaded once into `~/.cache/chroma`) or `remote` with `baseURL`/`model`/`apiKey`/`dims` |
-
-## Plugin market index
-
-DSH's plugin detail page compares an installed package with a market index and marks
-`update-available` on its own; that page belongs to DSH, so a plugin cannot draw on it. What a plugin can
-do is publish an index DSH understands. This repository ships one at `market/index.json` (format 1,
-validated with DSH's own parser):
+发版时让市场索引跟上实际版本：
 
 ```bash
-node scripts/validate-market-index.mjs     # needs an installed DSH app (or --module <extracted app node_modules>)
+node scripts/sync-market-index.mjs      # 按 package.json 重写 market/index.json
 ```
 
-Add this URL as an index in DSH's plugin market settings, and the detail page starts comparing
-`dsh-hy-memory` versions against it:
+要求：DSH 0.2 预览版、Python 3.10+（首次会自动装到插件目录）、可选 git（用于取 workspace id）。
+
+## 插件市场索引
+
+DSH 的插件详情页会拿已安装的包和市场索引对比版本，自己标记「有更新」；那个页面属于 DSH 本体，插件无法往
+上面画东西。插件能做的是提供 DSH 认识的索引。本仓库带了一份 `market/index.json`（format 1，已用 DSH 自带
+的解析器验证）：
+
+```bash
+node scripts/validate-market-index.mjs     # 需要本机装有 DSH（或用 --module 指定解包后的 app node_modules）
+```
+
+在 DSH 的插件市场设置里把下面这个地址加为索引，详情页就会开始对比 `dsh-hy-memory` 的版本：
 
 ```
 https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
 ```
 
-Bump `versions` there when a release goes out; the page then shows the new version as available while the
-settings panel keeps its own notify-only update check.
+每次发版把 `versions` 更新一下，详情页就会显示有可用版本；设置面板里那条「只提示不安装」的检查保持不变。
 
-## Screenshots
+## 并发与重试
 
-| Personal | Project and session | Update check |
+捕获队列的默认并发是 3（`capture.concurrency`），每轮最多处理 8 条（`maxPerDrain`），单条失败重试上限 20
+（`maxAttempts`，超过后原文降级写入 lite 层）。这三个值都能在面板的「记忆引擎」里改。
+
+## 截图
+
+| 个人记忆 | 项目与会话 | 更新检查 |
 |---|---|---|
-| ![Personal](docs/screenshots/panel-personal.png) | ![Project and session](docs/screenshots/panel-workspace.png) | ![Update](docs/screenshots/panel-update.png) |
+| ![个人](docs/screenshots/panel-personal.png) | ![项目与会话](docs/screenshots/panel-workspace.png) | ![更新](docs/screenshots/panel-update.png) |
 
-| Row actions | Forget confirmation | Why recalled |
+| 行操作 | 永久遗忘确认 | 为什么召回 |
 |---|---|---|
-| ![Row actions](docs/screenshots/panel-row-actions.png) | ![Forget](docs/screenshots/panel-forget-confirm.png) | ![Why recalled](docs/screenshots/panel-why-recalled.png) |
+| ![行操作](docs/screenshots/panel-row-actions.png) | ![永久遗忘](docs/screenshots/panel-forget-confirm.png) | ![为什么召回](docs/screenshots/panel-why-recalled.png) |
 
-| Injected text | Duplicates | Purge |
+| 注入文本 | 重复整理 | 彻底清除 |
 |---|---|---|
-| ![Injected text](docs/screenshots/panel-injected-text.png) | ![Duplicates](docs/screenshots/panel-duplicates.png) | ![Purge](docs/screenshots/panel-purge.png) |
+| ![注入文本](docs/screenshots/panel-injected-text.png) | ![重复整理](docs/screenshots/panel-duplicates.png) | ![彻底清除](docs/screenshots/panel-purge.png) |
 
-Project switch: [don't remember this project](docs/screenshots/panel-capture-switch.png)
+项目开关：[这个项目不记忆](docs/screenshots/panel-capture-switch.png)
 
-MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
+MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 
-### Personal-tier writes by judgement
+### 由 AI 判断写入个人层
 
-The personal tier is shared by every project, so automatic promotion only fills it
-slowly and conservatively. To keep it from going stale, each session receives one
-short standing policy asking the model to call `memory_add` with
-`tier: "personal"` when it recognises a durable preference, working style, or
-standing rule — without waiting to be asked. It is injected once per session,
-only together with a working recall, and lists what must *not* be stored
-(one-off details, secrets, anything obvious from the repository). Turn it off
-with `recall.personalWrites: false`.
+个人层被所有项目共享，自动晋升因此又慢又保守。为了不让它停滞，每个会话会收到一次简短常驻的策略，要求模型
+在识别到长期偏好、工作习惯或既定规则时，主动调用 `memory_add` 并指定 `tier: "personal"`，不必等用户开口。
+它每个会话只注入一次，且只在召回正常工作的一轮才附带，并明确列出不该写入的内容（一次性细节、密钥、仓库里
+一眼可见的信息）。可通过 `recall.personalWrites: false` 关闭。
 
-### Updating from the panel
+### 从面板更新
 
-When the check finds a newer release, the footer offers an update button. It
-downloads that release's tarball, verifies its package name and version, and
-installs it into this profile with the profile's own package manager (pnpm from
-the DSH app when the profile has a lockfile). It refuses to install anything but
-the version the check just reported, and refuses to downgrade.
+检查到新版本后，页脚会出现更新按钮。它会下载该 Release 的 tarball，校验包名与版本，再用这个 profile 自己的
+包管理器安装（profile 有 lockfile 时用 DSH 应用内置的 pnpm）。它只接受检查结果刚报告的那个版本，并且拒绝降级。
 
-It does **not** restart DSH. A plugin runs inside the app's main process and
-cannot relaunch it, and a restart would drop every live session — so the panel
-reports the version now on disk and asks you to restart, which is the same
-contract DSH's own plugin manager uses.
+它**不会重启 DSH**。插件运行在应用主进程里，没有重启应用的能力，而重启会中断所有正在进行的会话——所以面板
+只报告磁盘上现在是哪个版本，并提示你重启，这与 DSH 自己的插件管理器行为一致。
 
-The footer's update line reports both numbers — `Up to date · local v0.1.6 / published v0.1.6` — because an
-unreleased local build is expected while developing, and a single number hid which side it meant.
+页脚的更新行会同时给出两个版本：`已是最新 · 本地 v0.1.6 / 线上 v0.1.6`。开发期本地版本领先于已发布版本是
+正常状态，只显示一个数字会让人分不清是哪一侧。
 
-## Compatibility and limits
+## 兼容与边界
 
-- A `[search-coding] fact layer empty under scope workspace…` line in the sidecar log means the coding fact
-  layer is empty for that workspace and the query fell back to experiences (results still return). It is
-  SDK observability, not a failed write; silencing all warnings would also hide real failures, so it stays.
+- coding 检索时日志里可能出现 `[search-coding] fact layer empty under scope workspace…`：它表示该工作区的
+  coding 事实层为空，本次检索退回经验层（结果照常返回）。这是 SDK 的可观测提示，不是写入失败；把所有
+  WARNING 关掉会连带藏起真正的失败，所以保留。
 
-- Project memories belong to a project; session memories follow the project they were created in, so switching projects hides them.
-- Productivity stores are only visible to a search that carries a workspace id, so capture writes to the chat store unless `capture.productivity` is on.
-- During a model outage, reconcile fails; writes retry with backoff, and a final failure keeps the raw text in the lite layer with an activity entry.
-- The bundled embedder is English-first; Chinese recall leans on a token-overlap fallback. A remote multilingual embedder removes that fallback.
-
-## Verifying a change
+- 项目记忆绑定项目；会话记忆跟随它创建时所在的项目，换项目看不到。
+- working / coding 的存储只有带 workspace id 的检索才可见，因此捕获默认走 chat 库，只有显式打开 productivity 才分流。
+- 模型故障期间 reconcile 会失败，写入会重试；彻底失败时把原文留在原始层并在活动里记录。
+- 本地嵌入是英文模型，中文检索靠语义加词面兜底；远端模式已端到端验证：`scripts/mock-embeddings.mjs` 提供确定性的 1024 维 OpenAI 兼容端点，指向它的 sidecar 能正常写入与检索，用原文查询得分 1.0。换嵌入会改变向量维度，向量不能直接拷贝，已有 store 必须从文本重建：
 
 ```bash
-npm run check         # syntax of entry points and the built bundle
-npm test              # 102 host tests
-npm run test:smoke    # panel smoke, reads the built client.js
-npm run eval:recall   # offline fixtures: hit, noise, budget, injected size
+node scripts/migrate-embeddings.mjs --source 19527 --target 19528              # 预演，同时写备份
+node scripts/migrate-embeddings.mjs --source 19527 --target 19528 \
+  --apply --confirm YES-MIGRATE                                                # 重新写入目标库
 ```
 
-Against a running sidecar, the live harness drives the real pipeline and prints hit rate, injected size and latency:
+它不删除任何东西。先读源 sidecar、写一份带时间戳的 JSON 备份，再把同样的文本写进运行新嵌入的第二个
+sidecar，旧库原样保留，删不删由你决定。预演会先报源行数与目标库当前计数。coding 与 working 行在拷贝
+时拿不到 workspace 作用域，因为列表接口不返回它，这些行要等下一次捕获才会重新可检索。
+
+## 怎么验证改动
 
 ```bash
-npm run eval:live -- --port <sidecar port> [--grid]
+npm run check         # 入口与构建产物的语法检查
+npm test              # 102 个宿主测试
+npm run test:smoke    # 面板冒烟，读取构建后的 client.js
+npm run eval:recall   # 离线召回夹具：命中、噪声、预算、注入体积
 ```
 
-Current numbers on ten real questions from a working store: 9/10 hits, 941 injected characters, 149 ms. Before the session-id enrichment and the budget-aware keyword top-up it was 6/10 at 805 characters.
+对着运行中的 sidecar 跑真实链路，输出命中率、注入体积与延迟：
 
-CI runs the same four commands on every push and pull request. The recall harness already paid for itself: it caught a case where one oversize memory ignored `maxChars` and was injected whole.
+```bash
+npm run eval:live -- --port <sidecar 端口> [--grid]
+```
 
-What is planned next, in order, is in [docs/ROADMAP.md](docs/ROADMAP.md): real-data recall fixtures, multilingual embeddings, lifecycle and dedupe, explainable recall, privacy controls, MemHub's own sync path, scene verification, and operations.
+当前在真实 store 的十个问题上：命中 9/10，平均注入 941 字，平均 149 毫秒。补上 session id 与会话层、以及预算感知的词面补齐之前，是 6/10、805 字。
 
-## Forgetting and recency
+CI 在每次 push 和 PR 上跑同样四条命令。召回评测已经抓到一个真实问题：单条超长记忆会绕过 `maxChars` 被整条注入。
 
-Ranking is not purely similarity: an equally relevant memory that is a year old loses to a fresh one.
-The half-life defaults to 30 days (`recall.halfLifeDays`), thresholding stays on the raw score, and the
-weighting is skipped when a memory has no timestamp.
+后续计划按顺序写在 [docs/ROADMAP.md](docs/ROADMAP.md)：真实数据夹具、多语言嵌入、生命周期与去重、可解释召回、隐私开关、MemHub 自带同步、场景验证与运维。
 
-`memory_forget` (tool and `/api/hy-memory/forget`) deletes a memory and records a hash of its text in `state.json`. Promotion skips lines
-whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
-promotion pass. Ordinary delete does not do this.
+## 遗忘与时效
 
-## Agent teams
+排序不只看相似度：同样相关时，一年前的记忆会排在新记忆后面。半衰期默认 30 天（`recall.halfLifeDays`），
+阈值仍然按原始分数判断，没有时间戳的记忆不做衰减。
 
-A subagent session carries `header.parentSession`, the lead's session id. Recall treats that parent as part
-of the session tier, so a teammate starts with the lead's session memory instead of an empty context. Capture
-still writes each session's turns under its own id, so provenance stays exact and a lead does not inherit a
-sibling's memories.
+`memory_forget`（工具与 `/api/hy-memory/forget` 路由）删除一条记忆，并把它的文本哈希记进 `state.json`。晋升时会跳过哈希命中的行，所以用户明确
+要求忘掉的事实不会在下一次晋升里回来。普通的删除没有这个效果。
 
-## Privacy
+## 智能体团队
 
-Capture filters credentials before anything leaves the process: API keys, GitHub tokens, AWS keys, Slack
-tokens, bearer headers, private-key blocks and `password=` patterns cause the whole message to be
-dropped from the batch (`looksSensitive`). `permissions.disabledCaptureProjects` lists project keys whose turn capture is skipped entirely: the
-"don't remember this project" switch, for a client repo or private code where memory elsewhere keeps
-working. `POST /api/hy-memory/purge {confirm:'PURGE'}` writes every memory to a
-JSONL archive under the integration directory first, then deletes them; a wrong or missing confirmation
-is refused.
+子代理会话的 `header.parentSession` 指向 lead 的会话 id。召回把父会话也算进会话层，所以队友一上来就能用上
+lead 的会话记忆，而不是从空白开始。捕获仍然按各自会话 id 写入，来源保持精确，lead 不会继承兄弟会话的记忆。
 
-## Why was this recalled
+## 隐私
 
-Every injection appends one entry to `state.json` under `recallLog` (last 50), holding the turn's query,
-the source (semantic, lexical or both) and, per item, tier, score and rank. `POST /api/hy-memory/explain
-{id}` returns the newest entry that contains a memory id, so the panel can answer "why is this row here"
-instead of showing an opaque list. The log is capped and stores ids and scores, not memory text.
+捕获在内容离开进程前先过滤凭据：API key、GitHub token、AWS key、Slack token、Bearer 头、私钥块以及
+`password=` 形式的内容会让整条消息从批次里被丢弃（`looksSensitive`）。`permissions.disabledCaptureProjects` 列出不捕获的项目键，对应面板里的「这个项目不记忆」，适合客户代码、
+私有仓库这类「这里不记，别处照常」的场景。`POST /api/hy-memory/purge {confirm:'PURGE'}` 先把所有记忆写成集成目录下的 JSONL
+归档，再删除；确认词不对或缺失会被拒绝。
 
-## MemHub pairing
+## 这条为什么被召回
 
-`mcp-one-memory` runs MemHub's own `mcp.cjs` over stdio, so this Harness can call `MemHub_recall` and
-friends directly. Pairing is detected by counting credential files under `$DSH_HOME/memhub` and reading
-the loopback broker's discovery file; the status route reports `memhub.pairing` and the MemHub card says
-whether sync should be turned on in MemHub's own panel. The plugin does not reimplement MemHub sync.
+每次注入都会往 `state.json` 的 `recallLog`（最多 50 条）追加一条记录，内容是这一轮的查询、来源（语义、
+词面或两者），以及每个条目的层级、分数与排名。`POST /api/hy-memory/explain {id}` 返回包含该记忆 id 的
+最新一条记录，面板因此能解释「这行为什么在这里」，而不是只给一个不透明的列表。日志有上限，只存 id 与
+分数，不存记忆原文。
 
-## Cold start
+## 与 MemHub 配对
 
-`scripts/bench-startup.mjs` spawns the bridge against a scratch data directory and reports the real cost:
-about 0.9 to 2.8 seconds from spawn to `/healthz` on this machine, then 5 to 8 ms for the first bridge
-call. `scripts/bench-wake.mjs` drives a throwaway DSH_HOME through a full idle stop and measures the
-wake: 1.6 s cold, 61 s idle window, 1.6 s to wake again, so a stopped sidecar costs the same as a cold
-start. `sidecar.prewarm` defaults to true, so the process is started when the plugin loads instead of on
-the first turn, and recall waits up to `recall.waitForStartMs` (2500 ms default) for a starting sidecar
-rather than silently skipping the turn.
+`mcp-one-memory` 用 stdio 跑 MemHub 自带的 `mcp.cjs`，所以这个 Harness 可以直接调用 `MemHub_recall`
+等工具。配对状态通过统计 `$DSH_HOME/memhub` 下的凭据文件、并读取本机 broker 的发现文件来判断，状态路由
+返回 `memhub.pairing`，面板的 MemHub 卡片据此提示「同步在 MemHub 面板里开启」。插件本身不重写同步。
 
-## Duplicates
+## 冷启动
 
-`/api/hy-memory/duplicates` groups memories whose text is identical after whitespace and case folding,
-keeping the newest of each group and listing the rest. `/api/hy-memory/merge` then deletes the listed
-rows. Nothing runs automatically; the panel exposes it as one button in the diagnostics card.
+`scripts/bench-startup.mjs` 会对着临时数据目录拉起 bridge，测出真实开销：在这台机器上从进程启动到
+`/healthz` 可用大约 0.9 到 2.8 秒，随后第一次 bridge 调用 5 到 8 毫秒。`scripts/bench-wake.mjs` 用临时
+DSH_HOME 跑完整的空闲停止与唤醒：冷启动 1.6 秒、空闲窗口 61 秒、唤醒 1.6 秒，停掉之后重新拉起和冷启动
+代价相同。`sidecar.prewarm` 默认开启，
+插件加载时就拉起进程，而不是等第一轮对话；召回时若 sidecar 正在启动，最多等 `recall.waitForStartMs`
+（默认 2500 毫秒），不会静默跳过这一轮。
 
-## Engine settings and write health
+## 重复项
 
-The diagnostics card shows the capture backlog (`N pending writes`). The **Memory engine** is its own card and starts collapsed, showing one summary line such as
-`Following DSH default · auto/glm-5.3-flash`. Expanding it reveals the model choice (*follow the DSH default*,
-labelled with the model DSH currently resolves, or a pinned provider/model), max tokens, request timeout,
-recall half-life, write concurrency, per-drain cap and the retry limit per job. Saving writes `llm`, `recall` and
-`capture` through the same settings route the switch uses; changes apply on the next sidecar start.
+`/api/hy-memory/duplicates` 把去掉空白、折叠大小写后文本相同的记忆归组，每组保留最新一条并列出其余；
+`/api/hy-memory/merge` 负责删除列出的那些行。它不会自动运行，面板在诊断卡里提供一个按钮触发。
 
-Two scripts keep a local deploy honest, after a bundle whose loader id did not match the installed package
-name broke the settings-page sync: `npm run check:id` verifies `client.js` registers exactly the package name,
-and `node scripts/deploy-local.mjs` rebuilds with the installed package's name and only then copies files into
-the profile. CI runs the check on every push.
+## 引擎设置与写入健康
 
-Reasoning models were the reason writes came back empty. The SDK accepts an OpenAI-compatible
-`extra_body` pass-through, and the standard switch works across routed models:
+诊断卡显示「待写入 N 条」；**记忆引擎**是独立卡片，默认收起，只显示一行摘要，例如
+`跟随 DSH 默认 · auto/glm-5.3-flash`。展开后是模型选择（「跟随 DSH 默认」会标注 DSH 当前解析到的模型，
+或指定 provider/model）、最大 tokens、请求超时、召回半衰期、写入并发、每轮上限、每条任务重试上限。保存走与总开关相同的设置路由，下一次
+sidecar 启动生效。
+
+有两个脚本防止本地部署再犯同一个错（曾因 bundle 的 loader id 与安装包名不一致导致设置页同步失败）：
+`npm run check:id` 校验 `client.js` 注册的 id 与包名完全一致；`node scripts/deploy-local.mjs` 按已安装包的
+名字重新构建，校验通过后才复制进 profile。CI 每次推送都会跑这个校验。
+
+写入返回空文本的根因是推理模型。SDK 支持 OpenAI 兼容的 `extra_body` 透传，而标准开关对各类路由模型都有效：
 
 ```json
 {"reasoning_effort": "none"}
 ```
 
-Measured on the gateway, one short extraction prompt produced `reasoning_content` 149–1492 characters with
-several knobs (`thinking`, `enable_thinking`, `chat_template_kwargs`) while `reasoning_effort: "none"` took
-reasoning to 0 and returned content. With reasoning off and a 4k output budget, a write fell from 30–130 s to
-9–16 s and the backlog stopped growing.
+在网关上实测：同一段提取提示下，`thinking`、`enable_thinking`、`chat_template_kwargs` 等开关仍产生
+149–1492 字符的 `reasoning_content`，只有 `reasoning_effort: "none"` 把推理压到 0 并正常返回正文。关掉推理
+并把输出预算放到 4k 后，单次写入从 30–130 秒降到 9–16 秒，积压不再增长。
 
-The capture queue also moved out of `state.json` into `capture-queue.json`. A host reload can leave the
-previous plugin instance alive; two instances writing one state file reset retry counters and oscillated the
-queue, so the queue now has a single file and the state file a single-writer lease.
+捕获队列也从 `state.json` 移到了独立的 `capture-queue.json`。宿主热重载可能留下上一个插件实例，两者写同一个
+状态文件会互相重置重试计数、让队列长度来回摆动；现在队列只属于一个文件，状态文件则用单写者租约。
 
-## State that must survive a restart
+## 重启后必须还在的状态
 
-Two failures shared one cause and are now separated:
+两个故障同源，现已拆开：
 
-- The Python virtualenv marker used to be written into `state.json`, so rebuilding
-  the environment erased the plugin's project index, capture cursors and promotions.
-  The marker lives in `venv.json` now.
-- A host reload can overlap two plugin instances; the state file has a single
-  writer, and a read-only instance now takes the lease over once the holder exits
-  instead of never persisting again.
-- The project index is additionally written to `projects.json`, which the panel
-  reads directly, and it is rebuilt at boot from two local sources: the memory
-  store (which projects exist) and the session directory names (which workspace
-  each one is). Titles therefore come back as real names, not keys. A session
-  directory name is ambiguous — a literal `-` looks like a separator — so every
-  split is tried and the candidate that exists on disk wins.
+- Python 虚拟环境的安装标记原先写进 `state.json`，于是重建环境时会抹掉插件的项目索引、抓取游标与晋升记录。
+  标记现在写 `venv.json`。
+- 宿主热重载会让两个插件实例重叠；状态文件保持单写者，并且只读实例在持有者退出后可以接管租约，而不是
+  永远不再落盘。
+- 项目索引另外写入 `projects.json`，面板直接读它；缺失时会在启动阶段从两处本地来源重建：记忆库（存在哪些
+  项目）与会话目录名（每个项目对应哪个工作区），因此标题能还原成真实名称而不是哈希。会话目录名的编码是有
+  歧义的（字面 `-` 与路径分隔符同形），所以会枚举所有切分并用磁盘存在性挑出真实路径。
 
-Memory rows themselves were never affected: they live in the SDK store.
+记忆条目本身从未受影响：它们在 SDK 的存储里。
 
-## Capacity
+## 容量
 
-`lifecycle.maxPerTier` defaults to 2000 and `lifecycle.archiveOnCap` is off. Turning it on appends the
-oldest rows beyond the cap to `$DSH_HOME/integrations/hy-memory/archive/capacity-<ts>.jsonl` before
-deleting them, so the archive is the recovery path. It is off by default because deleting memories is
-irreversible.
+`lifecycle.maxPerTier` 默认 2000，`lifecycle.archiveOnCap` 默认关闭。打开后，超出上限的最旧行会先追加到
+`$DSH_HOME/integrations/hy-memory/archive/capacity-<ts>.jsonl`，再删除，归档文件就是恢复路径。默认关闭是因为
+删除记忆不可逆。
 
-## Contributing
+## 参与
 
-Issues and pull requests are welcome. A reproduction with the version, the steps and the relevant part of `$DSH_HOME/integrations/hy-memory/sidecar.log` saves time; changes should come with a test or a reproducible verification.
+欢迎提 issue 和 PR。复现步骤、版本、日志（`$DSH_HOME/integrations/hy-memory/sidecar.log`）能省很多时间；改动请附带测试或可复现的验证方式。
 
-## License
+## 许可
 
 MIT

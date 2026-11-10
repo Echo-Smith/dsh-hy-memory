@@ -1692,14 +1692,20 @@ async function exerciseFooterAndTokens(harness) {
   const detailsButtons = findButtons(harness, t('common.details'))
   assert.ok(detailsButtons.length >= 2, 'diagnostics and engine each keep a details toggle')
   await activate(harness, detailsButtons[1], 'the engine expand toggle')
-  const picker = hostsOf(harness).find((node) => node.type === 'select' && String(node.props?.className ?? '').includes('hm-input'))
-  assert.ok(picker !== undefined, 'the engine form has a model picker')
-  assert.ok(hostsOf(harness).some((node) => node.props?.value === 'magpie\u0000auto/glm-5.3-flash'),
-    'the picker lists a model option from status.model.options')
+  // The model picker is the shell-style PickerPill (a button that opens a menu),
+  // not a native select: a select cannot scroll or ellipsize long model ids.
+  const modelPickers = hostsOf(harness).filter((node) => (
+    node.type === 'button' && node.props?.['aria-haspopup'] === 'menu' && node.props?.['aria-label'] === t('engine.model')
+  ))
+  assert.ok(modelPickers.length >= 1, 'the engine form has a model picker')
+  // The menu must scroll for long lists and ellipsize long ids, the two things
+  // a native select could not do.
+  assert.match(harness.source, /\.hm-menuCard \{[^}]*max-height:280px[^}]*overflow:auto/,
+    'the dropdown scrolls instead of overflowing the panel')
+  assert.match(harness.source, /\.hm-menuItemLabel \{[^}]*text-overflow:ellipsis/,
+    'long option labels are ellipsized')
   const numbers = hostsOf(harness).filter((node) => node.type === 'input' && node.props?.type === 'number')
   assert.ok(numbers.length >= 6, 'the engine form exposes budget, timeout, half-life, concurrency, cap and retry limit')
-  assert.ok(hostsOf(harness).some((node) => node.type === 'option' && node.props?.value === ''),
-    'the model picker offers following the DSH default')
 
   const tokenInput = numbers[0]
   tokenInput.props.onChange({ target: { value: '8192' } })

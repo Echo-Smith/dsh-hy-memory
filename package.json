@@ -3,7 +3,7 @@
   "version": "0.1.7",
   "private": true,
   "type": "module",
-  "description": "Hy-Memory 2.0 as a native DeepSeek Harness memory component: three-tier memory (personal / project / session), three scenes (chat / working / coding), automatic recall and capture with tool traces, a Settings > Memory panel, and MemHub interoperability.",
+  "description": "给 DSH 装上三层长期记忆（个人、项目、会话）：自动沉淀、按需召回，并可在设置面板查看整理。 Long-term memory for DSH in three tiers with automatic capture and recall.",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

@@ -199,7 +199,14 @@ export function normalizeItem(raw, context = {}) {
   }
   if (score !== undefined) item.score = score
   if (tier !== 'personal' && context.projectKey) item.projectKey = context.projectKey
-  if (tier === 'session' && context.sessionId) item.sessionId = context.sessionId
+  // The row's own session, not the query's: listing "all sessions" passes an
+  // empty filter, and keying the result on that hid every row from the panel's
+  // session list.
+  const ownSession = String(raw?.session_id ?? '')
+  if (tier === 'session') {
+    const sessionId = ownSession || context.sessionId || ''
+    if (sessionId) item.sessionId = sessionId
+  }
   return item
 }
 

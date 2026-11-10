@@ -437,7 +437,9 @@ var zh_default = {
   "usage.tokensHint": "估算",
   "usage.lexical": "字面兜底",
   "usage.lexicalHint": "语义不足时的次数",
-  "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型"
+  "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型",
+  "usage.intro": "记忆引擎在本进程里的调用量与注入开销。模型在下方「记忆引擎」里选择。",
+  "engine.modelEmpty": "这个 profile 没有可用的模型"
 };
 
 // locale/en.json
@@ -693,7 +695,9 @@ var en_default = {
   "usage.tokensHint": "estimated",
   "usage.lexical": "Lexical fallback",
   "usage.lexicalHint": "when semantic recall came up short",
-  "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine"
+  "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine",
+  "usage.intro": "What the memory engine did in this process and what it injected. The model is chosen under Memory engine below.",
+  "engine.modelEmpty": "This profile offers no models"
 };
 
 // client-src/locale.js
@@ -1856,7 +1860,7 @@ function PickerPill(props) {
         }
       },
       h("span", { className: "hm-menuItemIcon" }, h(Icon, { name: props.icon, size: 15 })),
-      h("span", { className: "hm-menuItemLabel" }, item.title),
+      h("span", { className: "hm-menuItemLabel", title: item.title }, item.title),
       selected ? h("span", { className: "hm-menuItemCheck" }, h(Icon, { name: "check", size: 14 })) : null
     );
   });
@@ -2103,6 +2107,15 @@ function SettingsSection(props) {
       cancelled = true;
     };
   }, [refreshTick]);
+  React2.useEffect(() => {
+    const timer = setInterval(() => {
+      api.readStatus().then((data) => {
+        if (data) setStatus(data);
+      }).catch(() => {
+      });
+    }, 15e3);
+    return () => clearInterval(timer);
+  }, []);
   const statusProjectKey = typeof status?.project?.key === "string" ? status.project.key : "";
   const statusProjectTitle = typeof status?.project?.title === "string" ? status.project.title : "";
   const currentSessionId = typeof status?.session?.id === "string" ? status.session.id : "";
@@ -3431,11 +3444,6 @@ function SettingsSection(props) {
   const renderUsage = () => {
     const usage = status?.context ?? null;
     const health = status?.modelHealth ?? null;
-    const modelLabel = (() => {
-      if (engine && engine.model !== "") return engine.model;
-      const fallback = status?.model?.dshDefault?.model;
-      return typeof fallback === "string" && fallback !== "" ? fallback : t("diag.unknown");
-    })();
     const row = (label, value, hint) => h(
       "div",
       { className: "hm-usageCell" },
@@ -3451,7 +3459,7 @@ function SettingsSection(props) {
         { className: "hm-cardHead" },
         h("h2", { className: "hm-h2" }, t("usage.title"))
       ),
-      h("p", { className: "hm-muted" }, t("usage.modelLine", { model: modelLabel })),
+      h("p", { className: "hm-muted" }, t("usage.intro")),
       health && health.healthy === false ? h(
         "p",
         { className: "hm-error" },
@@ -3466,6 +3474,23 @@ function SettingsSection(props) {
         row(t("usage.lexical"), String(usage?.lexicalTurns ?? 0), t("usage.lexicalHint"))
       )
     );
+  };
+  const enginePickerLabel = () => {
+    if (engine === null) return "";
+    if (engine.provider === "" && engine.model === "") return t("engine.modelAuto", { model: status?.model?.dshDefault?.model || t("diag.unknown") });
+    return engine.model;
+  };
+  const enginePickerItems = () => {
+    if (engine === null) return [];
+    const items = [{ key: "", title: t("engine.modelAuto", { model: status?.model?.dshDefault?.model || t("diag.unknown") }) }];
+    const listed = (status?.model?.options ?? []).some((option) => option.provider === engine.provider && option.model === engine.model);
+    if (engine.provider !== "" && engine.model !== "" && !listed) {
+      items.push({ key: `${engine.provider}\0${engine.model}`, title: t("engine.currentOption", { provider: engine.provider, model: engine.model }) });
+    }
+    for (const option of status?.model?.options ?? []) {
+      items.push({ key: `${option.provider}\0${option.model}`, title: option.label });
+    }
+    return items;
   };
   const renderEngine = () => {
     if (engine === null) return null;
@@ -3502,28 +3527,27 @@ function SettingsSection(props) {
             "label",
             { className: "hm-field" },
             h("span", { className: "hm-fieldLabel" }, t("engine.model")),
-            h(
-              "select",
-              {
-                className: "hm-input",
-                value: engine.provider === "" && engine.model === "" ? "" : pinned,
-                onChange: (event) => {
-                  const value = String(event.target.value);
-                  if (value === "") {
-                    setEngine({ ...engine, provider: "", model: "" });
-                    return;
-                  }
-                  const [provider, model] = value.split("\0");
-                  setEngine({ ...engine, provider, model });
+            // A native <select> cannot scroll or ellipsize long model ids the way
+            // the shell's dropdowns do, so the same picker the project row uses is
+            // reused here.
+            h(PickerPill, {
+              t,
+              icon: "brain",
+              label: enginePickerLabel(),
+              title: t("engine.model"),
+              ariaLabel: t("engine.model"),
+              emptyText: t("engine.modelEmpty"),
+              items: enginePickerItems(),
+              selected: engine.provider === "" && engine.model === "" ? "" : pinned,
+              onSelect: (value) => {
+                if (value === "") {
+                  setEngine({ ...engine, provider: "", model: "" });
+                  return;
                 }
-              },
-              h("option", { value: "" }, t("engine.modelAuto", { model: defaultLabel })),
-              engine.provider !== "" && engine.model !== "" && !listed ? h("option", { value: pinned }, t("engine.currentOption", { provider: engine.provider, model: engine.model })) : null,
-              options.map((option) => h("option", {
-                key: `${option.provider}:${option.model}`,
-                value: `${option.provider}\0${option.model}`
-              }, option.label))
-            )
+                const [provider, model] = value.split("\0");
+                setEngine({ ...engine, provider, model });
+              }
+            })
           ),
           h(
             "label",

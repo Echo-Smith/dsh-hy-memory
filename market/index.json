@@ -28,10 +28,10 @@
         "zh": "记忆"
       },
       "description": {
-        "en": "Hy-Memory 2.0 as a native DSH memory component: personal, project and session tiers, automatic recall and capture, a Settings > Memory panel, and MemHub interoperability.",
-        "zh": "把 Hy-Memory 2.0 接成 DSH 原生记忆组件：个人、项目、会话三层，自动召回与沉淀，设置面板，以及与 MemHub 的互通。"
+        "zh": "给 DSH 装上三层长期记忆（个人、项目、会话）：自动沉淀对话、在需要时召回并注入上下文，由你在设置面板里随时查看和整理。",
+        "en": "Long-term memory for DSH in three tiers (personal, project, session): captures conversations automatically, recalls them into context when relevant, and lets you review and edit everything from a Settings panel."
       },
-      "icon": "https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/icon.svg",
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSJub25lIj4KICA8IS0tCiAgICBObyBiYWNrZ3JvdW5kIHBsYXRlOiB0aGUgc2hlbGwgYWxyZWFkeSBkcmF3cyB0aGUgcm91bmRlZCB0aWxlIGJlaGluZCBhIHBsdWdpbgogICAgaWNvbiwgc28gYSBmaWxsZWQgcmVjdCBoZXJlIHNob3dlZCBhcyBhIGRhcmsgc3F1YXJlIGluIGxpZ2h0IG1vZGUgKGFuZCBtYWRlCiAgICB0aGUgaWNvbiBmbGFzaCB3aGlsZSB0aGUgaW1hZ2UgZGVjb2RlZCBvdmVyIHRoZSBzaGVsbCdzIHBsYWNlaG9sZGVyKS4KICAgIGBjdXJyZW50Q29sb3JgIGxldHMgdGhlIHNoZWxsIHRoZW1lIHRoZSBzdHJva2VzLgogIC0tPgogIDxnIHN0cm9rZT0iY3VycmVudENvbG9yIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPGNpcmNsZSBjeD0iMjIiIGN5PSIyNCIgcj0iNC4yIiBzdHJva2Utd2lkdGg9IjIuNCIgLz4KICAgIDxjaXJjbGUgY3g9IjQyIiBjeT0iMjAiIHI9IjMuNCIgc3Ryb2tlLXdpZHRoPSIyLjQiIC8+CiAgICA8Y2lyY2xlIGN4PSIzMiIgY3k9IjM4IiByPSI0LjYiIHN0cm9rZS13aWR0aD0iMi40IiAvPgogICAgPGNpcmNsZSBjeD0iMTgiIGN5PSI0NCIgcj0iMyIgc3Ryb2tlLXdpZHRoPSIyLjQiIC8+CiAgICA8Y2lyY2xlIGN4PSI0NiIgY3k9IjQyIiByPSIzLjIiIHN0cm9rZS13aWR0aD0iMi40IiAvPgogICAgPHBhdGggZD0iTTIyIDI0IDQyIDIwTTIyIDI0IDMyIDM4TTQyIDIwIDMyIDM4TTMyIDM4IDE4IDQ0TTMyIDM4IDQ2IDQyIiBzdHJva2Utd2lkdGg9IjEuOCIgb3BhY2l0eT0iMC43NSIgLz4KICA8L2c+Cjwvc3ZnPgo=",
       "author": "Echo Smith",
       "homepage": "https://github.com/Echo-Smith/hy-memory4dsh#readme",
       "repository": {

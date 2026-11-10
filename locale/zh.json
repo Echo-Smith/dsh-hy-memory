@@ -250,5 +250,7 @@
   "usage.tokensHint": "估算",
   "usage.lexical": "字面兜底",
   "usage.lexicalHint": "语义不足时的次数",
-  "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型"
+  "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型",
+  "usage.intro": "记忆引擎在本进程里的调用量与注入开销。模型在下方「记忆引擎」里选择。",
+  "engine.modelEmpty": "这个 profile 没有可用的模型"
 }

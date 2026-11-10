@@ -250,5 +250,7 @@
   "usage.tokensHint": "estimated",
   "usage.lexical": "Lexical fallback",
   "usage.lexicalHint": "when semantic recall came up short",
-  "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine"
+  "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine",
+  "usage.intro": "What the memory engine did in this process and what it injected. The model is chosen under Memory engine below.",
+  "engine.modelEmpty": "This profile offers no models"
 }

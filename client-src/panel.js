@@ -526,7 +526,7 @@ function PickerPill(props) {
       },
     },
     h('span', { className: 'hm-menuItemIcon' }, h(Icon, { name: props.icon, size: 15 })),
-    h('span', { className: 'hm-menuItemLabel' }, item.title),
+    h('span', { className: 'hm-menuItemLabel', title: item.title }, item.title),
     selected ? h('span', { className: 'hm-menuItemCheck' }, h(Icon, { name: 'check', size: 14 })) : null)
   })
 
@@ -763,6 +763,15 @@ export function SettingsSection(props) {
     })
     return () => { cancelled = true }
   }, [refreshTick])
+
+  // Usage counters move while the panel is open, so the status is re-read on a
+  // slow tick. Only the status is polled; the lists keep their own refresh.
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      api.readStatus().then((data) => { if (data) setStatus(data) }).catch(() => {})
+    }, 15_000)
+    return () => clearInterval(timer)
+  }, [])
 
   const statusProjectKey = typeof status?.project?.key === 'string' ? status.project.key : ''
   const statusProjectTitle = typeof status?.project?.title === 'string' ? status.project.title : ''
@@ -1979,11 +1988,6 @@ export function SettingsSection(props) {
   const renderUsage = () => {
     const usage = status?.context ?? null
     const health = status?.modelHealth ?? null
-    const modelLabel = (() => {
-      if (engine && engine.model !== '') return engine.model
-      const fallback = status?.model?.dshDefault?.model
-      return typeof fallback === 'string' && fallback !== '' ? fallback : t('diag.unknown')
-    })()
     const row = (label, value, hint) => h('div', { className: 'hm-usageCell' },
       h('span', { className: 'hm-usageLabel' }, label),
       h('strong', { className: 'hm-usageValue' }, value),
@@ -1991,7 +1995,7 @@ export function SettingsSection(props) {
     return h('section', { className: 'hm-card' },
       h('div', { className: 'hm-cardHead' },
         h('h2', { className: 'hm-h2' }, t('usage.title'))),
-      h('p', { className: 'hm-muted' }, t('usage.modelLine', { model: modelLabel })),
+      h('p', { className: 'hm-muted' }, t('usage.intro')),
       health && health.healthy === false
         ? h('p', { className: 'hm-error' },
           t('usage.modelFailing', { count: health.consecutive, code: health.lastCode || health.lastError || '' }))
@@ -2001,6 +2005,25 @@ export function SettingsSection(props) {
         row(t('usage.items'), String(usage?.totalItems ?? 0), t('usage.itemsHint')),
         row(t('usage.tokens'), String(usage?.totalTokens ?? 0), t('usage.tokensHint')),
         row(t('usage.lexical'), String(usage?.lexicalTurns ?? 0), t('usage.lexicalHint'))))
+  }
+
+  const enginePickerLabel = () => {
+    if (engine === null) return ''
+    if (engine.provider === '' && engine.model === '') return t('engine.modelAuto', { model: status?.model?.dshDefault?.model || t('diag.unknown') })
+    return engine.model
+  }
+
+  const enginePickerItems = () => {
+    if (engine === null) return []
+    const items = [{ key: '', title: t('engine.modelAuto', { model: status?.model?.dshDefault?.model || t('diag.unknown') }) }]
+    const listed = (status?.model?.options ?? []).some((option) => option.provider === engine.provider && option.model === engine.model)
+    if (engine.provider !== '' && engine.model !== '' && !listed) {
+      items.push({ key: `${engine.provider}\u0000${engine.model}`, title: t('engine.currentOption', { provider: engine.provider, model: engine.model }) })
+    }
+    for (const option of status?.model?.options ?? []) {
+      items.push({ key: `${option.provider}\u0000${option.model}`, title: option.label })
+    }
+    return items
   }
 
   const renderEngine = () => {
@@ -2026,11 +2049,19 @@ export function SettingsSection(props) {
       h('div', { className: 'hm-engineGrid' },
         h('label', { className: 'hm-field' },
           h('span', { className: 'hm-fieldLabel' }, t('engine.model')),
-          h('select', {
-            className: 'hm-input',
-            value: engine.provider === '' && engine.model === '' ? '' : pinned,
-            onChange: (event) => {
-              const value = String(event.target.value)
+          // A native <select> cannot scroll or ellipsize long model ids the way
+          // the shell's dropdowns do, so the same picker the project row uses is
+          // reused here.
+          h(PickerPill, {
+            t,
+            icon: 'brain',
+            label: enginePickerLabel(),
+            title: t('engine.model'),
+            ariaLabel: t('engine.model'),
+            emptyText: t('engine.modelEmpty'),
+            items: enginePickerItems(),
+            selected: engine.provider === '' && engine.model === '' ? '' : pinned,
+            onSelect: (value) => {
               if (value === '') {
                 setEngine({ ...engine, provider: '', model: '' })
                 return
@@ -2038,15 +2069,7 @@ export function SettingsSection(props) {
               const [provider, model] = value.split('\u0000')
               setEngine({ ...engine, provider, model })
             },
-          },
-          h('option', { value: '' }, t('engine.modelAuto', { model: defaultLabel })),
-          engine.provider !== '' && engine.model !== '' && !listed
-            ? h('option', { value: pinned }, t('engine.currentOption', { provider: engine.provider, model: engine.model }))
-            : null,
-          options.map((option) => h('option', {
-            key: `${option.provider}:${option.model}`,
-            value: `${option.provider}\u0000${option.model}`,
-          }, option.label)))),
+          })),
         h('label', { className: 'hm-field' },
           h('span', { className: 'hm-fieldLabel' }, t('engine.maxTokens')),
           h('input', {
