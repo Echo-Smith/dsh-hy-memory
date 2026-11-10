@@ -18,7 +18,7 @@
     "bridge",
     "locale/*.json",
     "icon.svg",
-    "docs/screenshots"
+    "docs/screenshots/README.md"
   ],
   "dsh": {
     "bundle": {

@@ -2,61 +2,61 @@
 
 [中文](README.md) | English
 
-> Three layers of long-term memory for DSH: session, project, personal.
+> Three tiers of long-term memory for DSH. Open a new session and it still knows your preferences, this project's conventions, and the mistakes you already paid for — without you repeating any of it.
 
-## The problem
-
-DSH has no long-term memory. `AGENTS.md` is a static set of rules you maintain by hand, and session history only lives inside one session. Start a new conversation and every convention, preference and past mistake has to be explained again. dsh-hy-memory records them automatically, recalls the relevant ones before a turn, and consolidates them after it, across sessions and across projects.
-
-## How it works
-
-The plugin runs inside DSH; the memory engine is Hy-Memory 2.0's Python SDK, hosted in a sidecar process with its own venv, so there is no service for you to start.
-
-- **Recall** on `agent/pre-step`: search the personal tier, the current project and the current session, then inject the hits as one sourced user message labelled as background data that may be stale and is never an instruction.
-- **Capture**: batch a window of turns with their tool calls and hand the batch to the sidecar, which routes it to the chat, working or coding store.
-- **Promotion**: session memories consolidate into project conventions, and those into personal preferences, giving a session to project to personal chain.
-- **Storage** under `$DSH_HOME/integrations/hy-memory/`; model calls reuse the route you already configured in DSH, and embeddings are local ONNX by default with an optional remote endpoint.
-
-## Features
-
-- Three tiers: personal, project, session-within-a-project. Browse, search, paginate, edit and delete them in the panel.
-- Three scenes: chat by default; working and coding use separate productivity stores keyed by workspace id.
-- Automatic recall and capture, including tool-call traces.
-- Settings > Memory panel: a personal tab and a project/session tab, project picker, independent pagination, master switch, memory-footprint estimate.
-- MemHub coexistence: detection, export, pull (refused with the holder's pid while MemHub runs) and de-duplicated import.
-- Cross-project search on demand; everyday recall never mixes other projects in.
-- Manual memories: `memory_add` infers the personal or project tier from the content and reports where it landed.
-- Update check and a GitHub link in the panel footer.
-
-## Install
-
-```bash
-dsh plugin --profile desktop add link:$(pwd)
-```
-
-Then open Settings > 记忆. First use bootstraps the Python environment; the model route comes from your existing DSH settings, so there is no extra key to fill in.
-
-### From npm
-
-Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory) (0.1.6). A profile needs the
-package as a dependency *and* its name in `dsh.profile.bundles`; the installer does both, then verifies the
-installed entry exports `apply()`:
+![Personal memory panel](docs/screenshots/panel-personal.png)
 
 ```bash
 node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 ```
 
-Restart or reload DSH afterwards. By hand, that is `pnpm add dsh-hy-memory` inside the profile plus the
-name in `dsh.profile.bundles`.
+Restart or reload DSH, then open **Settings → Memory**.
 
-Plugin market index for DSH's own detail page:
+---
 
+## The problem it solves
+
+DSH has no long-term memory. `AGENTS.md` is a static file you write by hand; conversation history lives and dies with the session. Change sessions, or open a subagent, and you re-explain the conventions, the preferences, the traps — and you have to explain them as clearly as the first time.
+
+A hand-written `AGENTS.md` covers part of it, but only if you notice something is worth recording, and remember to go edit it. In practice you don't.
+
+dsh-hy-memory hands that to the plugin: it captures while the conversation runs, recalls when the next turn needs it, and lets you review, edit and delete anything from a panel.
+
+**What changes once it is installed**: in a brand-new session, the first turn already knows what you said before — without you mentioning it.
+
+## How the three tiers divide the work
+
+| Tier | What it holds | Who can see it |
+|---|---|---|
+| **Session** | Details of this conversation, tool calls, temporary conclusions | This session only |
+| **Project** | This repository's conventions, paths, commands, decisions | Every session in the workspace |
+| **Personal** | Preferences, working style and standing rules across projects | Every project |
+
+Distillation only flows one way: **session → project → personal**. Conventions that keep recurring in a session are distilled into project memory; preferences repeatedly confirmed at the project level are promoted to personal. Never the reverse — a one-off debugging detail cannot pollute the personal tier.
+
+![Project and sessions](docs/screenshots/panel-workspace.png)
+
+## Install
+
+### From npm (recommended)
+
+Published as [`dsh-hy-memory`](https://www.npmjs.com/package/dsh-hy-memory). The profile needs two things: the package as a dependency, and its name in `dsh.profile.bundles`. The script does both and verifies the installed entry actually exports `apply()`:
+
+```bash
+node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 ```
-https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.json
+
+By hand that is `pnpm add dsh-hy-memory` in the profile plus the name in `dsh.profile.bundles`.
+
+### From source
+
+```bash
+dsh plugin --profile desktop add link:$(pwd)
 ```
 
-A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.6), which is what
-shows under the repository's Packages tab. Reading it needs a token with `read:packages`:
+### From GitHub Packages
+
+A scoped build is published as `@echo-smith/dsh-hy-memory`. Reading it needs a token with `read:packages`:
 
 ```bash
 # ~/.npmrc
@@ -65,268 +65,200 @@ shows under the repository's Packages tab. Reading it needs a token with `read:p
 node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
 ```
 
-The workflow that publishes it is `.github/workflows/publish-github-packages.yml`, triggered manually or by
-a published release. A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
+Or install straight from a GitHub Release (the dependency becomes a tarball URL):
 
 ```bash
 node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/dsh-hy-memory/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
-For a local build or a release you are publishing yourself:
+### Dependencies
 
-```bash
-node scripts/prepare-publish.mjs                                  # stages under the public name, packs, verifies
-node scripts/install-into-profile.mjs --spec ./dist/dsh-hy-memory-0.1.6.tgz --apply
-```
+- DSH 0.2.x (verified on 0.2.2-rc.1)
+- An OpenAI-compatible model route; memory reuses whatever you already configured in DSH, no extra key
+- Python 3.11+: a private venv is prepared on first start, nothing is installed into your system Python
 
-Publishing is a human step with your own credentials: `npm publish ./dist/<tarball> --access public`.
-Pushing a `v*` tag also runs `.github/workflows/publish-npm.yml`, which publishes once the repository secret
-`NPM_TOKEN` holds a token allowed to create the package and otherwise skips with a warning.
+## What you will use
 
-For a release, keep the market index in step with the shipped version:
+### The panel
 
-```bash
-node scripts/sync-market-index.mjs      # rewrites market/index.json from package.json
-```
+Settings → Memory. Two tabs (personal, project & sessions), each with search, paging, and per-row expansion, editing and deletion. Personal memories can be edited and forgotten for good; project and session tiers are read-only, so hand edits never fight automatic capture.
 
-Requirements: DSH 0.2 preview, Python 3.10+ (installed into the plugin directory on first use), optional git for workspace ids.
+| | |
+|---|---|
+| ![Row actions](docs/screenshots/panel-row-actions.png) | ![Why recalled](docs/screenshots/panel-why-recalled.png) |
+| Every row expands to details and deletion | "Why was this recalled": which retrieval brought it in |
 
-## Dependencies
+| | |
+|---|---|
+| ![Injected text](docs/screenshots/panel-injected-text.png) | ![Forget confirm](docs/screenshots/panel-forget-confirm.png) |
+| The exact text the model received | Forgetting asks twice and records a hash so promotion cannot resurrect it |
 
-This repository ships the DSH side only: the host plugin, the client panel, the bridge scripts, and docs. The Hy-Memory 2.0 framework itself is **not vendored here**. On first use the plugin creates a Python virtual environment under `$DSH_HOME/integrations/hy-memory/venv` and installs the PyPI package `hy-memory` into it; the bridge then imports `hy_memory` from that environment.
+### Personal-tier writes by judgement
 
-- Network access is needed once, for that install (and for the optional local embedding model download).
-- The package is installed by name, so a fresh install resolves to the latest available version. Set `HY_MEMORY_SDK_PACKAGE=hy-memory==<version>` when installing to pin it.
-- Upstream code and its license belong to the Hy-Memory project; this repository only depends on it and does not redistribute it.
-- Everything else in this repository is MIT.
+The personal tier is shared by every project, so automatic promotion fills it slowly and conservatively. To keep it from going stale, each session receives one short standing policy asking the model to call `memory_add` with `tier: "personal"` when it recognises a durable preference, working style, or standing rule — without waiting to be asked. It is injected once per session, only together with a working recall, and lists what must *not* be stored (one-off details, secrets, anything obvious from the repository).
 
-## Configuration
+Turn it off with `recall.personalWrites: false`.
 
-Settings live in `$DSH_HOME/integrations/hy-memory/settings.json`; the panel edits the same object.
+### What cross-session recall looks like
 
-| Key | Default | Meaning |
-|---|---|---|
-| `enabled` | on | master switch; off pauses recall, capture and tools, and the panel becomes read-only |
-| `recall.maxItems` / `maxChars` / `minScore` | 5 / 1200 / 0.56 | recall budget and relevance floor per step |
-| `capture.windowTurns` | 3 | turns per captured batch |
-| `capture.productivity` | off | route batches to the working/coding stores instead of chat |
-| `capture.concurrency` / `maxPerDrain` / `maxAttempts` | 3 / 8 / 20 | parallel writes, per-drain cap, retries before a job is demoted to the lite layer |
-| `promotion.everyTurns` | 8 | turns between promotion passes |
-| `embedding.mode` | local | `local` ONNX (384 dims, ~80 MB downloaded once into `~/.cache/chroma`) or `remote` with `baseURL`/`model`/`apiKey`/`dims` |
+Recalled content arrives as a **source-attributed** user message that states plainly: this is background, it may be stale, it is not an instruction. It never impersonates your words and never overrides your current request.
 
-## Plugin market index
+### Updating from the panel
 
-DSH's plugin detail page compares an installed package with a market index and marks
-`update-available` on its own; that page belongs to DSH, so a plugin cannot draw on it. What a plugin can
-do is publish an index DSH understands. This repository ships one at `market/index.json` (format 1,
-validated with DSH's own parser):
+When the check finds a newer release, the footer offers an update button. It downloads that release's tarball, verifies its package name and version, and installs it into this profile with the profile's own package manager (pnpm from the DSH app when the profile has a lockfile). It refuses any version other than the one the check just reported, and refuses downgrades.
 
-```bash
-node scripts/validate-market-index.mjs     # needs an installed DSH app (or --module <extracted app node_modules>)
-```
+It does **not** restart DSH. A plugin runs inside the app's main process and cannot relaunch it, and a restart would drop every live session — so the panel reports the version now on disk and asks you to restart, which is the same contract DSH's own plugin manager uses.
 
-Add this URL as an index in DSH's plugin market settings, and the detail page starts comparing
-`dsh-hy-memory` versions against it:
+### Plugin market index
+
+DSH's plugin detail page compares the installed package with a market index and flags updates itself. This repository ships `market/index.json` (format 1, validated with DSH's own parser). Add this URL under the plugin market settings:
 
 ```
 https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.json
 ```
 
-Bump `versions` there when a release goes out; the page then shows the new version as available while the
-settings panel keeps its own notify-only update check.
+## Configuration
 
-## Screenshots
+Settings → Memory → Diagnostics / Memory engine. `settings.json` works too.
 
-| Personal | Project and session | Update check |
+| Key | Default | Meaning |
 |---|---|---|
-| ![Personal](docs/screenshots/panel-personal.png) | ![Project and session](docs/screenshots/panel-workspace.png) | ![Update](docs/screenshots/panel-update.png) |
+| `enabled` | on | Master switch |
+| `mode` | `pro` | `lite` stores raw text without calling a model |
+| `tiers.personal` / `project` / `session` | all on | A disabled tier is neither searched nor written |
+| `recall.maxItems` | 5 | Most memories injected per turn |
+| `recall.maxChars` | 1200 | Character budget for injected text; each item is also capped so one long memory cannot take it all |
+| `recall.minScore` | 0.45 | Relevance floor; lower recalls more, and more noise |
+| `recall.halfLifeDays` | 30 | Recency half-life; equal relevance favours the newer memory |
+| `recall.personalWrites` | on | Whether the "write to personal" policy is injected |
+| `capture.windowTurns` | 3 | Turns buffered before a model pass |
+| `capture.idleFlushMs` | 180000 | Force a capture after this much idle time |
+| `capture.includeToolCalls` | on | Capture tool calls as well |
+| `capture.toolResultChars` | 1200 | Truncation length per tool output |
+| `capture.productivity` | off | Route batches to the working/coding stores |
+| `capture.concurrency` | 3 | Parallel writes |
+| `capture.maxPerDrain` | 8 | Items handled per drain |
+| `capture.maxAttempts` | 20 | Retries before the raw text is demoted to the lite layer |
+| `promotion.everyTurns` | 8 | Turns between promotions |
+| `promotion.onSessionEnd` | on | Catch up promotion when a session ends |
+| `embedding.mode` | `local` | `local` ONNX or `remote` embeddings |
+| `sidecar.idleStopMs` | 1800000 | Stop the sidecar after this much idle time |
+| `lifecycle.maxPerTier` | 2000 | Per-tier capacity; the oldest are archived beyond it |
+| `llm.*` | follow DSH | Model for memory work; empty follows the current session |
 
-| Row actions | Forget confirmation | Why recalled |
-|---|---|---|
-| ![Row actions](docs/screenshots/panel-row-actions.png) | ![Forget](docs/screenshots/panel-forget-confirm.png) | ![Why recalled](docs/screenshots/panel-why-recalled.png) |
+![Memory engine](docs/screenshots/panel-engine.png)
 
-| Injected text | Duplicates | Purge |
-|---|---|---|
-| ![Injected text](docs/screenshots/panel-injected-text.png) | ![Duplicates](docs/screenshots/panel-duplicates.png) | ![Purge](docs/screenshots/panel-purge.png) |
+## Troubleshooting
 
-Project switch: [don't remember this project](docs/screenshots/panel-capture-switch.png)
+**Nothing happens after installing, or the panel will not open**
+Check the sidecar state under Settings → Memory → Diagnostics. The first start installs Python dependencies; give it a minute. If it shows an error, restart DSH once.
 
-MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
+**Memories are written but nothing relevant is recalled**
+`recall.minScore` defaults to 0.45; lower it to recall more (and noisier). Recall also needs a turn that completes normally — if a turn cannot read memory, the write policy is skipped with it.
 
-### Personal-tier writes by judgement
+**No new memories for a long time**
+Automatic promotion counts turns within a single session, so parallel sessions each fall short. Just ask the assistant to remember something, or let it write to the personal tier directly.
 
-The personal tier is shared by every project, so automatic promotion only fills it
-slowly and conservatively. To keep it from going stale, each session receives one
-short standing policy asking the model to call `memory_add` with
-`tier: "personal"` when it recognises a durable preference, working style, or
-standing rule — without waiting to be asked. It is injected once per session,
-only together with a working recall, and lists what must *not* be stored
-(one-off details, secrets, anything obvious from the repository). Turn it off
-with `recall.personalWrites: false`.
+**Make it forget something**
+Forget it row by row in the panel. Forgetting records a content hash so promotion cannot write it back.
 
-### Updating from the panel
+**Does it read things it should not?**
+Credentials are filtered before a batch reaches the capture queue and never reach memory. Recalled content is labelled as background material and is not executed as instructions.
 
-When the check finds a newer release, the footer offers an update button. It
-downloads that release's tarball, verifies its package name and version, and
-installs it into this profile with the profile's own package manager (pnpm from
-the DSH app when the profile has a lockfile). It refuses to install anything but
-the version the check just reported, and refuses to downgrade.
+## Privacy and data location
 
-It does **not** restart DSH. A plugin runs inside the app's main process and
-cannot relaunch it, and a restart would drop every live session — so the panel
-reports the version now on disk and asks you to restart, which is the same
-contract DSH's own plugin manager uses.
+Everything lives under `$DSH_HOME/integrations/hy-memory/`: SQLite, the vector store, and logs. Deleting that directory removes all of it. Apart from calls to the model endpoint you configured, the plugin sends nothing anywhere.
 
-The footer's update line reports both numbers — `Up to date · local v0.1.6 / published v0.1.6` — because an
-unreleased local build is expected while developing, and a single number hid which side it meant.
+---
+---
 
-## Compatibility and limits
+## Design notes (for maintainers)
 
-- A `[search-coding] fact layer empty under scope workspace…` line in the sidecar log means the coding fact
-  layer is empty for that workspace and the query fell back to experiences (results still return). It is
-  SDK observability, not a failed write; silencing all warnings would also hide real failures, so it stays.
+### How it works
 
-- Project memories belong to a project; session memories follow the project they were created in, so switching projects hides them.
-- Productivity stores are only visible to a search that carries a workspace id, so capture writes to the chat store unless `capture.productivity` is on.
-- During a model outage, reconcile fails; writes retry with backoff, and a final failure keeps the raw text in the lite layer with an activity entry.
-- The bundled embedder is English-first; Chinese recall leans on a token-overlap fallback. A remote multilingual embedder removes that fallback.
+The plugin runs inside DSH. The memory core is the Hy-Memory 2.0 Python SDK behind a sidecar process with its own venv, so there is no separate service to run.
 
-## Verifying a change
+- **Recall** — on `agent/pre-step`, searches three routes (personal, current project, current session) and injects one source-attributed user message.
+- **Capture** — listens to session events, buffers a window, hands conversation plus tool calls to the sidecar, and writes to the chat / working / coding stores by scene.
+- **Promotion** — session memories are distilled into project conventions, project conventions into personal preferences.
+- **Storage** — all under `$DSH_HOME/integrations/hy-memory/`, reusing your DSH model route; local ONNX embeddings by default.
 
-```bash
-npm run check         # syntax of entry points and the built bundle
-npm test              # 102 host tests
-npm run test:smoke    # panel smoke, reads the built client.js
-npm run eval:recall   # offline fixtures: hit, noise, budget, injected size
-```
+### Why was this recalled
 
-Against a running sidecar, the live harness drives the real pipeline and prints hit rate, injected size and latency:
+Every recall is traceable: expand any memory in the panel to see which query brought it in, which retrieval, and the exact text injected at the time. When debugging "why does it remember this" or "why did it forget that", this is the only reliable evidence.
 
-```bash
-npm run eval:live -- --port <sidecar port> [--grid]
-```
+### Engine settings and write health
 
-Current numbers on ten real questions from a working store: 9/10 hits, 941 injected characters, 149 ms. Before the session-id enrichment and the budget-aware keyword top-up it was 6/10 at 805 characters.
+The Memory engine card exposes the model and the budgets: `maxTokens`, `timeoutMs`, `halfLifeDays`, `concurrency`, `maxPerDrain`, `maxAttempts`. The model can follow the DSH default or be pinned.
 
-CI runs the same four commands on every push and pull request. The recall harness already paid for itself: it caught a case where one oversize memory ignored `maxChars` and was injected whole.
+Repeated sidecar failures surface the error code and streak length in Diagnostics, suggesting a model change.
 
-What is planned next, in order, is in [docs/ROADMAP.md](docs/ROADMAP.md): real-data recall fixtures, multilingual embeddings, lifecycle and dedupe, explainable recall, privacy controls, MemHub's own sync path, scene verification, and operations.
+### Concurrency and retries
 
-## Forgetting and recency
+Capture defaults to 3 parallel writes (`capture.concurrency`), 8 per drain (`maxPerDrain`), and 20 retries (`maxAttempts`) before the raw text is demoted to the lite layer.
 
-Ranking is not purely similarity: an equally relevant memory that is a year old loses to a fresh one.
-The half-life defaults to 30 days (`recall.halfLifeDays`), thresholding stays on the raw score, and the
-weighting is skipped when a memory has no timestamp.
+The queue lives in its own file, `capture-queue.json`, with a single owner; the state file has a write lease so overlapping instances during a reload cannot clobber each other.
 
-`memory_forget` (tool and `/api/hy-memory/forget`) deletes a memory and records a hash of its text in `state.json`. Promotion skips lines
-whose hash is on that list, so a fact the user explicitly forgot does not come back through the next
-promotion pass. Ordinary delete does not do this.
+### Forgetting and recency
 
-## Agent teams
+- Ranking is relevance × recency, 30-day half-life by default.
+- Forgetting records a content hash so promotion cannot write the memory back.
+- Exceeding `lifecycle.maxPerTier` archives rather than deletes.
 
-A subagent session carries `header.parentSession`, the lead's session id. Recall treats that parent as part
-of the session tier, so a teammate starts with the lead's session memory instead of an empty context. Capture
-still writes each session's turns under its own id, so provenance stays exact and a lead does not inherit a
-sibling's memories.
+### Capacity
 
-## Privacy
+2000 rows per tier by default; the oldest batch is archived beyond that.
 
-Capture filters credentials before anything leaves the process: API keys, GitHub tokens, AWS keys, Slack
-tokens, bearer headers, private-key blocks and `password=` patterns cause the whole message to be
-dropped from the batch (`looksSensitive`). `permissions.disabledCaptureProjects` lists project keys whose turn capture is skipped entirely: the
-"don't remember this project" switch, for a client repo or private code where memory elsewhere keeps
-working. `POST /api/hy-memory/purge {confirm:'PURGE'}` writes every memory to a
-JSONL archive under the integration directory first, then deletes them; a wrong or missing confirmation
-is refused.
-
-## Why was this recalled
-
-Every injection appends one entry to `state.json` under `recallLog` (last 50), holding the turn's query,
-the source (semantic, lexical or both) and, per item, tier, score and rank. `POST /api/hy-memory/explain
-{id}` returns the newest entry that contains a memory id, so the panel can answer "why is this row here"
-instead of showing an opaque list. The log is capped and stores ids and scores, not memory text.
-
-## MemHub pairing
-
-`mcp-one-memory` runs MemHub's own `mcp.cjs` over stdio, so this Harness can call `MemHub_recall` and
-friends directly. Pairing is detected by counting credential files under `$DSH_HOME/memhub` and reading
-the loopback broker's discovery file; the status route reports `memhub.pairing` and the MemHub card says
-whether sync should be turned on in MemHub's own panel. The plugin does not reimplement MemHub sync.
-
-## Cold start
-
-`scripts/bench-startup.mjs` spawns the bridge against a scratch data directory and reports the real cost:
-about 0.9 to 2.8 seconds from spawn to `/healthz` on this machine, then 5 to 8 ms for the first bridge
-call. `scripts/bench-wake.mjs` drives a throwaway DSH_HOME through a full idle stop and measures the
-wake: 1.6 s cold, 61 s idle window, 1.6 s to wake again, so a stopped sidecar costs the same as a cold
-start. `sidecar.prewarm` defaults to true, so the process is started when the plugin loads instead of on
-the first turn, and recall waits up to `recall.waitForStartMs` (2500 ms default) for a starting sidecar
-rather than silently skipping the turn.
-
-## Duplicates
-
-`/api/hy-memory/duplicates` groups memories whose text is identical after whitespace and case folding,
-keeping the newest of each group and listing the rest. `/api/hy-memory/merge` then deletes the listed
-rows. Nothing runs automatically; the panel exposes it as one button in the diagnostics card.
-
-## Engine settings and write health
-
-The diagnostics card shows the capture backlog (`N pending writes`). The **Memory engine** is its own card and starts collapsed, showing one summary line such as
-`Following DSH default · auto/glm-5.3-flash`. Expanding it reveals the model choice (*follow the DSH default*,
-labelled with the model DSH currently resolves, or a pinned provider/model), max tokens, request timeout,
-recall half-life, write concurrency, per-drain cap and the retry limit per job. Saving writes `llm`, `recall` and
-`capture` through the same settings route the switch uses; changes apply on the next sidecar start.
-
-Two scripts keep a local deploy honest, after a bundle whose loader id did not match the installed package
-name broke the settings-page sync: `npm run check:id` verifies `client.js` registers exactly the package name,
-and `node scripts/deploy-local.mjs` rebuilds with the installed package's name and only then copies files into
-the profile. CI runs the check on every push.
-
-Reasoning models were the reason writes came back empty. The SDK accepts an OpenAI-compatible
-`extra_body` pass-through, and the standard switch works across routed models:
-
-```json
-{"reasoning_effort": "none"}
-```
-
-Measured on the gateway, one short extraction prompt produced `reasoning_content` 149–1492 characters with
-several knobs (`thinking`, `enable_thinking`, `chat_template_kwargs`) while `reasoning_effort: "none"` took
-reasoning to 0 and returned content. With reasoning off and a 4k output budget, a write fell from 30–130 s to
-9–16 s and the backlog stopped growing.
-
-The capture queue also moved out of `state.json` into `capture-queue.json`. A host reload can leave the
-previous plugin instance alive; two instances writing one state file reset retry counters and oscillated the
-queue, so the queue now has a single file and the state file a single-writer lease.
-
-## State that must survive a restart
+### State that must survive a restart
 
 Two failures shared one cause and are now separated:
 
-- The Python virtualenv marker used to be written into `state.json`, so rebuilding
-  the environment erased the plugin's project index, capture cursors and promotions.
-  The marker lives in `venv.json` now.
-- A host reload can overlap two plugin instances; the state file has a single
-  writer, and a read-only instance now takes the lease over once the holder exits
-  instead of never persisting again.
-- The project index is additionally written to `projects.json`, which the panel
-  reads directly, and it is rebuilt at boot from two local sources: the memory
-  store (which projects exist) and the session directory names (which workspace
-  each one is). Titles therefore come back as real names, not keys. A session
-  directory name is ambiguous — a literal `-` looks like a separator — so every
-  split is tried and the candidate that exists on disk wins.
+- The Python venv marker used to be written into `state.json`, so rebuilding the environment erased the project index, capture cursors and promotions. The marker lives in `venv.json` now.
+- A host reload can overlap two instances; the state file keeps a single writer, and a read-only instance takes the lease over once the holder exits.
+- The project index is also written to `projects.json`, which the panel reads directly, and rebuilt at boot from the memory store and the session directory names.
 
 Memory rows themselves were never affected: they live in the SDK store.
 
-## Capacity
+### Agent teams
 
-`lifecycle.maxPerTier` defaults to 2000 and `lifecycle.archiveOnCap` is off. Turning it on appends the
-oldest rows beyond the cap to `$DSH_HOME/integrations/hy-memory/archive/capacity-<ts>.jsonl` before
-deleting them, so the archive is the recovery path. It is off by default because deleting memories is
-irreversible.
+Subagents and the lead share the project tier but keep separate session tiers. A lead recall does not absorb unrelated sibling sessions; a subagent can see the lead's memories.
+
+### Compatibility and limits
+
+- DSH 0.2.x; the plugin reports host interface changes in Diagnostics instead of degrading silently.
+- Working/coding stores are only visible to a search that carries a workspace id.
+- `[search-coding] fact layer empty` is SDK observability: the coding fact layer is empty for that workspace and the query fell back to experiences. It is not a failed write.
+- A generic preference ("the user prefers Chinese answers") scores high on every query and can still crowd out a specific fact when slots are scarce; literal-overlap weighting only mitigates part of that.
+
+### Verifying a change
+
+```bash
+node --test test/*.test.mjs        # host logic
+node test/panel-smoke.mjs          # panel rendering
+node scripts/check-client-id.mjs   # the bundle's loader id must equal the package name
+```
+
+`npm run check:id` runs in CI; `scripts/deploy-local.mjs` installs a local build into the current profile, rebuilding with the installed package name and verifying before copying.
+
+### MemHub pairing
+
+If MemHub is installed, both stores interoperate: "Export to JSON", "Pull from MemHub", "Import from file". Sync itself is controlled from the MemHub panel; this plugin only wires it up.
+
+### Cold start
+
+The sidecar warms up when the plugin starts, so the first recall does not pay for it. If it is not running, recall waits at most `waitForStartMs` before skipping the turn rather than blocking the conversation.
+
+### Duplicates
+
+The panel groups identical memories so you can keep one and delete the rest; each group shows its content and count before you decide.
 
 ## Contributing
 
-Issues and pull requests are welcome. A reproduction with the version, the steps and the relevant part of `$DSH_HOME/integrations/hy-memory/sidecar.log` saves time; changes should come with a test or a reproducible verification.
+Issues and PRs are welcome.
+
+- Behaviour changes need tests: `node --test test/*.test.mjs`
+- Panel changes need `node test/panel-smoke.mjs`
+- Run `node scripts/check-client-id.mjs` before pushing — the bundle's loader id must equal the package name, and that is the easiest trap to fall into
 
 ## License
 
