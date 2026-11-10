@@ -2,6 +2,11 @@
 
 [English](README.en.md) | 中文
 
+[![npm](https://img.shields.io/npm/v/dsh-hy-memory)](https://www.npmjs.com/package/dsh-hy-memory)
+[![license](https://img.shields.io/npm/l/dsh-hy-memory)](LICENSE)
+![node](https://img.shields.io/badge/node-%E2%89%A522-informational)
+![python](https://img.shields.io/badge/python-3.12%20%7C%20uv-informational)
+
 > 给 DSH 装上三层长期记忆。新开一个会话，它仍然记得你的偏好、这个项目的约定，以及上次踩过的坑——不用你重讲一遍。
 
 ![个人记忆面板](docs/screenshots/panel-personal.png)

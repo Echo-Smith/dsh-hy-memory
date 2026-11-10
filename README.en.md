@@ -2,6 +2,11 @@
 
 [中文](README.md) | English
 
+[![npm](https://img.shields.io/npm/v/dsh-hy-memory)](https://www.npmjs.com/package/dsh-hy-memory)
+[![license](https://img.shields.io/npm/l/dsh-hy-memory)](LICENSE)
+![node](https://img.shields.io/badge/node-%E2%89%A522-informational)
+![python](https://img.shields.io/badge/python-3.12%20%7C%20uv-informational)
+
 > Three tiers of long-term memory for DSH. Open a new session and it still knows your preferences, this project's conventions, and the mistakes you already paid for — without you repeating any of it.
 
 ![Personal memory panel](docs/screenshots/panel-personal.png)
