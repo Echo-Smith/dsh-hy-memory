@@ -131,6 +131,23 @@ const updatedBundles = Array.isArray(updated.dsh.profile.bundles) ? updated.dsh.
 if (!updatedBundles.includes(name)) updatedBundles.push(name)
 writeFileSync(pkgPath, `${JSON.stringify(updated, null, 2)}\n`)
 
+// The package manager can resolve an existing entry to something other than what
+// was asked for — an old pinned tarball URL in package.json wins over a bare name.
+// Report the version that actually landed rather than assuming the install worked.
+const installedManifestAfter = join(profileDir, 'node_modules', name, 'package.json')
+const landedVersion = existsSync(installedManifestAfter)
+  ? JSON.parse(readFileSync(installedManifestAfter, 'utf8')).version
+  : null
+if (!local && targetVersion === 'latest') {
+  const wanted = execFileSync('npm', ['view', `${name}@latest`, 'version'], { encoding: 'utf8' }).trim()
+  if (landedVersion !== wanted) {
+    console.error(`installed ${landedVersion ?? 'nothing'}, but ${name}@latest is ${wanted}.`)
+    console.error(`The profile still pins an older source (${dependencySpec}).`)
+    console.error('Point the dependency at the npm package instead, e.g. \'^<version>\', then retry.')
+    process.exit(1)
+  }
+}
+
 const installed = join(profileDir, 'node_modules', name)
 const entry = await import(`file://${join(installed, 'index.js')}`).catch((error) => {
   console.error(`installed package cannot be imported: ${error.message}`)
