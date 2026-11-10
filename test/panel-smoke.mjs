@@ -1216,6 +1216,8 @@ function assertPost(harness, url, expectedBody) {
 
 async function exerciseMemhubCard(harness) {
   const t = await mountSection(harness, 'zh')
+  // MemHub is engine configuration, so it lives on the third tab now.
+  await click(harness, t('tabs.engine'))
   const text = harness.mini.text()
   assert.ok(text.includes(t('memhub.title')), 'MemHub card title renders')
   assert.ok(text.includes(t('memhub.detected')), 'MemHub detection state renders')
@@ -1246,9 +1248,6 @@ async function exerciseMemhubCard(harness) {
   await click(harness, t('memhub.pull'))
   assertPost(harness, '/api/hy-memory/memhub/pull', {})
   assert.ok(harness.mini.text().includes('已从 MemHub 导入 2 条，跳过 1 条，失败 0 条'), 'pull result shows counts')
-  const personalCalls = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list')
-  assert.ok(personalCalls.length >= 2, 'a successful pull re-reads the tier lists')
-
   await click(harness, t('memhub.import'))
   const pathInput = findInput(harness, (props) => props['aria-label'] === t('memhub.importPath'))
   assert.ok(pathInput !== undefined, 'choosing 从文件导入 reveals the absolute-path input')
@@ -1260,11 +1259,20 @@ async function exerciseMemhubCard(harness) {
   assert.equal(findInput(harness, (props) => props['aria-label'] === t('memhub.importPath')), undefined,
     'the import form closes after a successful import')
 
+  // Pull and import write into the personal tier. The lists live on another tab,
+  // so the re-read happens when the user goes back to look at them — assert that
+  // rather than a fetch that would be wasted while this tab is open.
+  const before = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
+  await click(harness, t('tabs.personal'))
+  const after = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
+  assert.ok(after > before, 'returning to the list re-reads it after a pull')
+
   return harness
 }
 
 async function exerciseMemhubErrors(harness) {
   const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.engine'))
   await click(harness, t('memhub.export'))
   assert.ok(harness.mini.text().includes(t('memhub.error.memhub_locked')), 'memhub_locked renders its human message')
   assert.ok(!harness.mini.text().includes('store is locked by the MemHub runtime'), 'the raw host message is not shown')
@@ -1350,6 +1358,7 @@ async function exercisePollIsolation(harness) {
 
 async function exerciseEnglishCard(harness) {
   const t = await mountSection(harness, 'en')
+  await click(harness, t('tabs.engine'))
   const text = harness.mini.text()
   assert.ok(text.includes(t('memhub.title')), 'the MemHub card renders in English')
   assert.ok(text.includes(t('memhub.detected')), 'the detection state renders in English')
@@ -1644,6 +1653,7 @@ async function exercisePersonalDelete(harness) {
 
 async function exerciseMemhubMissing(harness) {
   const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.engine'))
   const text = harness.mini.text()
   assert.ok(text.includes(t('memhub.title')), 'the MemHub card still renders when MemHub is absent')
   assert.ok(text.includes(t('memhub.missing')), 'the absent card states MemHub is not installed')
@@ -1658,6 +1668,8 @@ async function exerciseMemhubMissing(harness) {
 
 async function exerciseFooterAndTokens(harness) {
   const t = await mountSection(harness, 'zh')
+  // Diagnostics moved to the engine tab; the footer stays on every tab.
+  await click(harness, t('tabs.engine'))
   const text = harness.mini.text()
 
   // Repository link: status.package.repoUrl, made web-safe, opened in a new tab.
@@ -1687,11 +1699,20 @@ async function exerciseFooterAndTokens(harness) {
     'the engine card starts collapsed')
   assert.ok(harness.mini.text().includes(t('engine.summaryFollow', { model: 'auto/glm-5.3-flash' })),
     'the collapsed card states which model it follows')
-  // Cards render in order diagnostics, engine, MemHub; the engine toggle is the
-  // second one.
+  // On the engine tab the cards render in order usage, engine, diagnostics,
+  // MemHub, so the engine toggle is the first one.
   const detailsButtons = findButtons(harness, t('common.details'))
   assert.ok(detailsButtons.length >= 2, 'diagnostics and engine each keep a details toggle')
-  await activate(harness, detailsButtons[1], 'the engine expand toggle')
+  // Engine tab order is usage, engine, diagnostics, MemHub. The usage card has no
+  // toggle, so the first 详细信息 button belongs to the engine card.
+  const engineSections = hostsOf(harness).filter((node) => node.type === 'section'
+    && String(harness.mini.textOf(node)).includes(t('engine.title')))
+  assert.ok(engineSections.length > 0, 'the engine card exists')
+  const toggleButtons = hostsOf(harness).filter((node) => (
+    node.type === 'button' && String(harness.mini.textOf(node)) === t('common.details')
+  ))
+  assert.ok(toggleButtons.length >= 2, 'the engine and diagnostics cards each keep a toggle')
+  await activate(harness, toggleButtons[0], 'the engine expand toggle')
   // The model picker is the shell-style PickerPill (a button that opens a menu),
   // not a native select: a select cannot scroll or ellipsize long model ids.
   const modelPickers = hostsOf(harness).filter((node) => (
@@ -1817,6 +1838,8 @@ async function exerciseForget(harness) {
 
 async function exerciseDuplicates(harness) {
   const t = await mountSection(harness, 'zh')
+  // Duplicate cleanup sits in the diagnostics card, which is engine configuration.
+  await click(harness, t('tabs.engine'))
   assert.ok(findButton(harness, t('dupes.action')) !== undefined, 'the diagnostics card offers 整理重复项')
   const dangerButtons = hostsOf(harness).filter((node) => String(node.props?.className ?? '').includes('hm-dangerAction'))
   assert.ok(dangerButtons.length >= 1, 'destructive actions carry the red class')
@@ -1840,12 +1863,17 @@ async function exerciseDuplicates(harness) {
     'the second merge carries the project tier')
   assert.equal(harness.mini.text().includes(t('dupes.confirm.title')), false, 'the confirmation closes')
   assert.ok(harness.mini.text().includes(t('dupes.done', { n: 3 })), 'the result reports how many rows were removed')
-  const listCalls = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
-  assert.ok(listCalls >= 2, 'a merge refreshes the lists')
+  // A merge deletes rows from a list that lives on another tab; the refresh
+  // happens when the user goes back, which is asserted here.
+  const beforeReturn = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
+  await click(harness, t('tabs.personal'))
+  const afterReturn = harness.fetchCalls.filter((call) => call.url === '/api/hy-memory/list').length
+  assert.ok(afterReturn > beforeReturn, 'returning to the list re-reads it after a merge')
 }
 
 async function exerciseDuplicatesEmpty(harness) {
   const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.engine'))
   await click(harness, t('dupes.action'))
   assertPost(harness, '/api/hy-memory/duplicates', {})
   assert.ok(harness.mini.text().includes(t('dupes.none')), 'a clean store reports 没有重复项')
@@ -1858,6 +1886,7 @@ async function exerciseDuplicatesEmpty(harness) {
 
 async function exerciseDuplicatesError(harness) {
   const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.engine'))
   await click(harness, t('dupes.action'))
   assert.ok(harness.mini.text().includes(t('dupes.failed', { message: 'scan failed' })),
     'a failed scan shows one short failure line')
@@ -1947,6 +1976,7 @@ async function exerciseInjectedMissing(harness) {
 
 async function exercisePurgeGate(harness) {
   const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.engine'))
   assert.equal(lastCall(harness, '/api/hy-memory/purge'), undefined, 'nothing is purged before the user asks')
 
   await click(harness, t('purge.action'))
@@ -1979,6 +2009,7 @@ async function exercisePurgeGate(harness) {
 
 async function exercisePurgeRefused(harness) {
   const t = await mountSection(harness, 'zh')
+  await click(harness, t('tabs.engine'))
   await click(harness, t('purge.action'))
   findInput(harness, (props) => props['aria-label'] === t('purge.hint')).props.onChange({ target: { value: 'PURGE' } })
   await settle()

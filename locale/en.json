@@ -270,5 +270,6 @@
   "usage.completionTokens": "Output tokens",
   "usage.completionHint": "extraction result",
   "usage.daysRecalls": "Recall tokens, last 7 days",
-  "usage.daysWrites": "Write tokens, last 7 days"
+  "usage.daysWrites": "Write tokens, last 7 days",
+  "tabs.engine": "Engine"
 }

@@ -1523,6 +1523,7 @@ export function SettingsSection(props) {
     items: [
       { value: 'personal', label: t('tabs.personal'), id: 'hy-memory-tab-personal', panelId: 'hy-memory-panel-personal' },
       { value: 'project', label: t('tabs.workspace'), id: 'hy-memory-tab-project', panelId: 'hy-memory-panel-project' },
+      { value: 'engine', label: t('tabs.engine'), id: 'hy-memory-tab-engine', panelId: 'hy-memory-panel-engine' },
     ],
     value: tab,
     onChange: (value) => { setTab(value) },
@@ -1715,7 +1716,22 @@ export function SettingsSection(props) {
     renderProjectBlock(),
     renderSessionBlock())
 
-  const renderTabBody = () => (tab === 'personal' ? renderPersonalBody() : renderWorkspaceBody())
+  /**
+   * One section per tab. Reading memory is the main task, so the two list views
+   * stay first; everything that configures or diagnoses the engine lives on the
+   * third tab instead of stretching the page under the lists.
+   */
+  const renderTabBody = () => {
+    if (tab === 'engine') return renderEngineBody()
+    return tab === 'personal' ? renderPersonalBody() : renderWorkspaceBody()
+  }
+
+  const renderEngineBody = () => [
+    renderUsage(),
+    renderEngine(),
+    renderDiagnostics(),
+    renderMemhub(),
+  ]
 
   const renderDeleteModal = () => h(ui.Modal, {
     open: deleteTarget !== null,
@@ -2366,11 +2382,8 @@ export function SettingsSection(props) {
       className: 'hm-panelBody',
     },
     renderTabBody()),
-    renderActivity(),
-    renderDiagnostics(),
-    renderUsage(),
-    renderEngine(),
-    renderMemhub(),
+    // Activity belongs to the memory views: it explains what the rows above did.
+    tab === 'engine' ? null : renderActivity(),
     renderFooter(),
     renderDeleteModal(),
     renderForgetModal(),

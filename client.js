@@ -460,7 +460,8 @@ var zh_default = {
   "usage.completionTokens": "输出 tokens",
   "usage.completionHint": "提炼结果",
   "usage.daysRecalls": "近 7 天召回 tokens",
-  "usage.daysWrites": "近 7 天写入 tokens"
+  "usage.daysWrites": "近 7 天写入 tokens",
+  "tabs.engine": "引擎与用量"
 };
 
 // locale/en.json
@@ -736,7 +737,8 @@ var en_default = {
   "usage.completionTokens": "Output tokens",
   "usage.completionHint": "extraction result",
   "usage.daysRecalls": "Recall tokens, last 7 days",
-  "usage.daysWrites": "Write tokens, last 7 days"
+  "usage.daysWrites": "Write tokens, last 7 days",
+  "tabs.engine": "Engine"
 };
 
 // client-src/locale.js
@@ -2896,7 +2898,8 @@ function SettingsSection(props) {
   const renderTabs = () => h(ui.SegmentedTabs, {
     items: [
       { value: "personal", label: t("tabs.personal"), id: "hy-memory-tab-personal", panelId: "hy-memory-panel-personal" },
-      { value: "project", label: t("tabs.workspace"), id: "hy-memory-tab-project", panelId: "hy-memory-panel-project" }
+      { value: "project", label: t("tabs.workspace"), id: "hy-memory-tab-project", panelId: "hy-memory-panel-project" },
+      { value: "engine", label: t("tabs.engine"), id: "hy-memory-tab-engine", panelId: "hy-memory-panel-engine" }
     ],
     value: tab,
     onChange: (value) => {
@@ -3126,7 +3129,16 @@ function SettingsSection(props) {
     renderProjectBlock(),
     renderSessionBlock()
   );
-  const renderTabBody = () => tab === "personal" ? renderPersonalBody() : renderWorkspaceBody();
+  const renderTabBody = () => {
+    if (tab === "engine") return renderEngineBody();
+    return tab === "personal" ? renderPersonalBody() : renderWorkspaceBody();
+  };
+  const renderEngineBody = () => [
+    renderUsage(),
+    renderEngine(),
+    renderDiagnostics(),
+    renderMemhub()
+  ];
   const renderDeleteModal = () => h(
     ui.Modal,
     {
@@ -3996,11 +4008,8 @@ function SettingsSection(props) {
       },
       renderTabBody()
     ),
-    renderActivity(),
-    renderDiagnostics(),
-    renderUsage(),
-    renderEngine(),
-    renderMemhub(),
+    // Activity belongs to the memory views: it explains what the rows above did.
+    tab === "engine" ? null : renderActivity(),
     renderFooter(),
     renderDeleteModal(),
     renderForgetModal(),
