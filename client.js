@@ -425,7 +425,8 @@ var zh_default = {
   "update.install": "更新到 v{version}",
   "update.installing": "安装中…",
   "update.installed": "v{version} 已安装，重启 DSH 后生效",
-  "update.installFailed": "安装失败"
+  "update.installFailed": "安装失败",
+  "project.loading": "载入中…"
 };
 
 // locale/en.json
@@ -669,7 +670,8 @@ var en_default = {
   "update.install": "Update to v{version}",
   "update.installing": "Installing…",
   "update.installed": "v{version} installed — restart DSH to apply",
-  "update.installFailed": "Install failed"
+  "update.installFailed": "Install failed",
+  "project.loading": "Loading…"
 };
 
 // client-src/locale.js
@@ -2646,7 +2648,11 @@ function SettingsSection(props) {
   };
   const workspaceLabel = () => {
     const active = projects.items.find((item) => item.key === projectKey) ?? null;
-    return active?.title || statusProjectTitle || (projectKey !== "" ? shortId(projectKey) : t("project.none"));
+    if (active?.title && active.title !== projectKey) return active.title;
+    const settled = statusProjectTitle !== "" && statusProjectTitle !== projectKey;
+    if (settled) return statusProjectTitle;
+    if (projects.loading) return statusProjectTitle || t("project.loading");
+    return projectKey !== "" ? shortId(projectKey) : t("project.none");
   };
   const renderWorkspaceBar = () => h(
     "div",

@@ -1385,7 +1385,14 @@ export function SettingsSection(props) {
 
   const workspaceLabel = () => {
     const active = projects.items.find((item) => item.key === projectKey) ?? null
-    return active?.title || statusProjectTitle || (projectKey !== '' ? shortId(projectKey) : t('project.none'))
+    // While the project list is still loading its fallback is the key, so
+    // rendering it made the title visibly jump from hash to name. Show the
+    // status title (already resolved) or the key until the list arrives.
+    if (active?.title && active.title !== projectKey) return active.title
+    const settled = statusProjectTitle !== '' && statusProjectTitle !== projectKey
+    if (settled) return statusProjectTitle
+    if (projects.loading) return statusProjectTitle || t('project.loading')
+    return projectKey !== '' ? shortId(projectKey) : t('project.none')
   }
 
   // The workspace row selects the project and nothing else; the two memory

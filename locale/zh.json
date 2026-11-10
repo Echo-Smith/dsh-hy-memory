@@ -238,5 +238,6 @@
   "update.install": "更新到 v{version}",
   "update.installing": "安装中…",
   "update.installed": "v{version} 已安装，重启 DSH 后生效",
-  "update.installFailed": "安装失败"
+  "update.installFailed": "安装失败",
+  "project.loading": "载入中…"
 }

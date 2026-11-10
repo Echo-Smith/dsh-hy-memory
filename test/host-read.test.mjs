@@ -221,3 +221,20 @@ test('a client without bridge routes reports bridge_unavailable instead of silen
   const { ops } = harness(legacy)
   await assert.rejects(() => ops.list({ tier: 'personal' }), (error) => error.code === 'bridge_unavailable')
 })
+
+
+test('the status card prefers the recovered project name over the stored key', () => {
+  // state.json can still hold a key-only placeholder after a recovery; the
+  // panel's status block read it and the title jumped from hash to name on open.
+  const ops = createMemoryOps({
+    settings: () => ({ user: 'dsh' }),
+    activity: new ActivityLog(),
+    getClient: () => null,
+    contextOf: () => ({ projectKey: KEY, sessionId: 's1' }),
+    state: { data: { projects: { [KEY]: { title: KEY, path: '' } } } },
+    readProjectIndex: () => ({ [KEY]: { title: 'Mirror Memorry', path: '/Users/me/DeepSeek Harness/Mirror Memorry' } }),
+  })
+  const info = ops.projectInfo({ projectKey: KEY })
+  assert.equal(info.title, 'Mirror Memorry')
+  assert.equal(info.path, '/Users/me/DeepSeek Harness/Mirror Memorry')
+})

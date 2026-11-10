@@ -592,6 +592,7 @@ function createRuntime(ctx, config) {
         ensureClient,
         contextOf,
         projectKeys: () => Object.keys(state?.data?.projects ?? {}),
+        readProjectIndex,
         log,
       })
       const memoryContext = { lastTokens: 0, lastItems: 0, lastTiers: [], lastAt: 0, totalTokens: 0, totalItems: 0 }

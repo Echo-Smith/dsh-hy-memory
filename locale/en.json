@@ -238,5 +238,6 @@
   "update.install": "Update to v{version}",
   "update.installing": "Installing…",
   "update.installed": "v{version} installed — restart DSH to apply",
-  "update.installFailed": "Install failed"
+  "update.installFailed": "Install failed",
+  "project.loading": "Loading…"
 }

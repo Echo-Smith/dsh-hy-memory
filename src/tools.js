@@ -563,11 +563,14 @@ export function createMemoryOps(deps) {
     const ctx = context(scope)
     const projects = deps.state?.data?.projects ?? {}
     const record = projects[ctx.projectKey]
-    return {
-      key: ctx.projectKey,
-      path: record?.path ?? '',
-      title: record?.title ?? '',
-    }
+    // The state file can hold key-only placeholders from a recovery; the
+    // standalone index carries the real path and name, and the status card
+    // reads this. Without the merge the title flickered from hash to name as
+    // the panel's project list finished loading.
+    const indexed = typeof deps.readProjectIndex === 'function' ? deps.readProjectIndex()?.[ctx.projectKey] : null
+    const path = record?.path || indexed?.path || ''
+    const title = (record?.path && record?.title) || indexed?.title || record?.title || ''
+    return { key: ctx.projectKey, path, title }
   }
 
   return { search, forget, merge, duplicates, purge, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
