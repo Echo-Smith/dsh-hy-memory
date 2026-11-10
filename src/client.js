@@ -128,6 +128,31 @@ export class MemoryClient {
     return this.#request('POST', '/bridge/v1/add_scene', payload, options)
   }
 
+  /** Edit a memory in place (keeps its id and history). */
+  bridgeUpdate(payload, options) {
+    return this.#request('POST', '/bridge/v1/update', payload, options)
+  }
+
+  /** The change history of one memory. */
+  bridgeHistory(payload, options) {
+    return this.#request('POST', '/bridge/v1/history', payload, options)
+  }
+
+  /** Per-tier counts aggregated by the SDK. */
+  bridgeStatsOverview(payload, options) {
+    return this.#request('POST', '/bridge/v1/stats_overview', payload, options)
+  }
+
+  /** Engine load metrics. */
+  bridgeMetrics(payload, options) {
+    return this.#request('POST', '/bridge/v1/metrics', payload, options)
+  }
+
+  /** What the engine did recently, newest first. */
+  bridgeRecentHistory(payload, options) {
+    return this.#request('POST', '/bridge/v1/recent_history', payload, options)
+  }
+
   /** Plain completion through the sidecar's configured endpoint. */
   bridgeComplete(payload, options) {
     return this.#request('POST', '/bridge/v1/complete', payload, options)

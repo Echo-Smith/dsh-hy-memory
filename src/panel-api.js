@@ -16,6 +16,10 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'status', request: '{}' },
   { name: 'list', request: '{ tier, projectKey?, sessionId?, query?, limit?, offset? }' },
   { name: 'update', request: '{ tier, id, content }' },
+  { name: 'history', request: '{ id }' },
+  { name: 'stats', request: '{}' },
+  { name: 'metrics', request: '{ minutes? }' },
+  { name: 'activity/recent', request: '{ limit? }' },
   { name: 'delete', request: '{ tier, id }' },
   { name: 'search', request: '{ query, tiers?, limit? }' },
   { name: 'settings/get', request: '{}' },
@@ -563,6 +567,24 @@ export function createPanelApi(deps) {
         const removed = await eraseStoredData()
         activity?.record({ kind: 'delete', summary: 'erased all memory data', detail: `${removed} bytes freed`, ok: true })
         return jsonResponse({ erased: true, bytes: removed })
+      }
+      case 'history':
+        return jsonResponse(await ops.history({ id: body.id, ...runOptions }))
+      case 'stats': {
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeStatsOverview !== 'function') throw new MemoryUnavailableError('stats need a running sidecar')
+        const user = typeof body.user === 'string' && body.user ? body.user : undefined
+        return jsonResponse(await client.bridgeStatsOverview(user ? { user_id: user } : {}))
+      }
+      case 'metrics': {
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeMetrics !== 'function') throw new MemoryUnavailableError('metrics need a running sidecar')
+        return jsonResponse(await client.bridgeMetrics({ minutes: Number(body.minutes) || 60 }))
+      }
+      case 'activity/recent': {
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeRecentHistory !== 'function') throw new MemoryUnavailableError('history needs a running sidecar')
+        return jsonResponse(await client.bridgeRecentHistory({ limit: Number(body.limit) || 20 }))
       }
       case 'projects':
         return jsonResponse(await listProjects())

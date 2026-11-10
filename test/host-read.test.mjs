@@ -19,7 +19,7 @@ const ITEMS = [
 ]
 
 function fakeClient({ items = ITEMS, searchResponse, getResult } = {}) {
-  const calls = { list: [], search: [], delete: [] }
+  const calls = { list: [], search: [], delete: [], update: [] }
   return {
     calls,
     async bridgeList(payload) {
@@ -36,6 +36,10 @@ function fakeClient({ items = ITEMS, searchResponse, getResult } = {}) {
     },
     async bridgeDelete(payload) {
       calls.delete.push(payload)
+      return { success: true }
+    },
+    async bridgeUpdate(payload) {
+      calls.update.push(payload)
       return { success: true }
     },
     async get(id) {
@@ -172,6 +176,9 @@ test('update refuses productivity memories and allows chat ones', async () => {
   const result = await chatHarness.ops.update({ id: 'p1', content: 'prefers spaces' })
   assert.equal(result.updated, true)
   assert.equal(chatClient.calls.delete.length, 0)
+  // The edit goes through the bridge: the SDK's own PUT route is not registered
+  // on the sidecar, so the previous path returned 404 in a real profile.
+  assert.deepEqual(chatClient.calls.update[0], { memory_id: 'p1', content: 'prefers spaces' })
 })
 
 test('delete routes productivity items through the bridge with kind and variant', async () => {

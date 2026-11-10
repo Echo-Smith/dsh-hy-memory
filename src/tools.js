@@ -357,7 +357,16 @@ export function createMemoryOps(deps) {
     if (!matchesTier(raw, 'personal', ctx)) {
       throw new MemoryRequestError('only personal memories are editable', 'tier_not_editable')
     }
-    const result = await client.update(id, { content }, optionsOf(scope))
+    // The SDK's own PUT route is not registered on the sidecar (404), so the edit
+    // goes through the bridge, which calls `client.update()` on the live client.
+    const kind = kindOf(raw)
+    const payload = { memory_id: id, content }
+    if (kind && kind !== 'chat') payload.kind = kind
+    if (isProductivityScene(scene)) payload.variant = scene
+    const bridgeUpdate = bridgeMethod(client, 'bridgeUpdate')
+    const result = bridgeUpdate
+      ? await bridgeUpdate(payload, optionsOf(scope))
+      : await client.update(id, { content }, optionsOf(scope))
     countCache.clear()
     activity?.record({ kind: 'update', tier: 'personal', summary: 'updated a personal memory', detail: content.slice(0, 120), ok: true })
     return { id, updated: true, result }
@@ -387,6 +396,27 @@ export function createMemoryOps(deps) {
     countCache.clear()
     activity?.record({ kind: 'delete', tier, summary: 'deleted a memory', detail: String(raw?.content ?? '').slice(0, 120), ok: true })
     return { deleted: true }
+  }
+
+  /** The change history of one memory, newest first. */
+  async function history(scope = {}) {
+    assertEnabled()
+    const id = typeof scope.id === 'string' ? scope.id.trim() : ''
+    if (!id) throw new MemoryRequestError('id is required', 'id_required')
+    const client = ready()
+    const bridgeHistory = bridgeMethod(client, 'bridgeHistory')
+    if (!bridgeHistory) return { id, events: [] }
+    const response = await bridgeHistory({ memory_id: id }, optionsOf(scope))
+    const events = Array.isArray(response?.events) ? response.events : []
+    return {
+      id,
+      events: events.map((event) => ({
+        at: Number(event?.timestamp ?? event?.at ?? 0) || 0,
+        kind: String(event?.event ?? event?.kind ?? ''),
+        before: String(event?.old_memory ?? '').slice(0, 400),
+        after: String(event?.new_memory ?? '').slice(0, 400),
+      })),
+    }
   }
 
   /** Delete one memory and remember its text so capture cannot reintroduce it. */
@@ -579,7 +609,7 @@ export function createMemoryOps(deps) {
     return { key: ctx.projectKey, path, title }
   }
 
-  return { search, forget, merge, duplicates, purge, list, get, update, remove, add, counts, projectInfo, start, context, projectKey }
+  return { search, forget, merge, duplicates, purge, list, get, update, history, remove, add, counts, projectInfo, start, context, projectKey }
 }
 
 const TEXT_OUTPUT = {

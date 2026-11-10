@@ -111,6 +111,16 @@ def install_bridge_routes() -> None:
                     result = _add_scene(client, body)
                 elif path == "/bridge/v1/complete":
                     result = _complete(body)
+                elif path == "/bridge/v1/update":
+                    result = _update(client, body)
+                elif path == "/bridge/v1/history":
+                    result = _history(client, body)
+                elif path == "/bridge/v1/stats_overview":
+                    result = _stats_overview(client, body)
+                elif path == "/bridge/v1/metrics":
+                    result = _metrics(client, body)
+                elif path == "/bridge/v1/recent_history":
+                    result = _recent_history(client, body)
                 else:
                     return sdk_server._json_response(self, 404, {"error": "not_found", "path": path})
                 return sdk_server._json_response(self, 200, result)
@@ -261,6 +271,52 @@ def install_bridge_routes() -> None:
         response = client.chat.completions.create(**kwargs)
         text = (response.choices[0].message.content or "").strip()
         return {"text": text, "model": model}
+
+    def _update(client, body):
+        """Edit a memory in place.
+
+        `update` is the SDK's own edit path; the panel used to delete and re-add,
+        which lost the memory's history and its id.
+        """
+        memory_id = str(body.get("memory_id") or body.get("id") or "").strip()
+        content = body.get("content")
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("content is required")
+        kwargs = {}
+        for key in ("kind", "variant", "task"):
+            if body.get(key):
+                kwargs[key] = str(body[key])
+        return client.update(memory_id, content.strip(), **kwargs)
+
+    def _history(client, body):
+        """The change history of one memory."""
+        memory_id = str(body.get("memory_id") or body.get("id") or "").strip()
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        return {"events": client.history(memory_id)}
+
+    def _stats_overview(client, body):
+        """Cheap per-tier counts, straight from the SDK's own aggregation."""
+        user_ids = _names(body, "user_ids", "user_id") or ["dsh"]
+        kwargs = {"user_id": user_ids[0]}
+        statuses = body.get("statuses")
+        if isinstance(statuses, list) and statuses:
+            kwargs["statuses"] = [str(s) for s in statuses]
+        return client.memory_stats(**kwargs)
+
+    def _metrics(client, body):
+        """System load as the SDK sees it."""
+        minutes = int(body.get("minutes") or 60)
+        return client.get_metrics(minutes)
+
+    def _recent_history(client, body):
+        """What the engine did recently, newest first."""
+        user_ids = _names(body, "user_ids", "user_id") or ["dsh"]
+        agent_ids = _names(body, "agent_ids", "agent_id") or None
+        limit = int(body.get("limit") or 20)
+        return {"events": client.get_recent_history(user_ids[0], agent_ids, limit)}
 
     def _add_scene(client, body):
         """SDK add that honours an explicit scene.

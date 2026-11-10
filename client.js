@@ -152,6 +152,10 @@ var api = {
   // Purge: archive every memory to JSONL then delete it. The host refuses
   // anything but the literal confirmation string.
   purge: (confirm) => request("purge", { confirm }),
+  history: (id) => request("history", { id }),
+  stats: () => request("stats", {}),
+  metrics: (minutes) => request("metrics", typeof minutes === "number" ? { minutes } : {}),
+  recentActivity: (limit) => request("activity/recent", typeof limit === "number" ? { limit } : {}),
   // Removes everything the plugin stored, including the venv.
   erase: (bytes) => request("erase", { confirm: "ERASE", acknowledgeBytes: bytes }),
   dataUsage: () => request("dataUsage", {}),
