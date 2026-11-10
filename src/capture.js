@@ -59,6 +59,19 @@ const PROMOTE_TIMEOUT_MS = 90_000
 const PROMPT_INPUT_CHARS = 6000
 // Finalizing reads every raw turn of a session and calls the model once.
 const NARRATIVE_TIMEOUT_MS = 180_000
+// Cost control: the prompt grows with the corpus, so only the newest slice is
+// read. 50 memories is roughly 3k tokens of input measured against real data.
+const PROFILE_MEMORY_LIMIT = 50
+const PROFILE_FIELDS = {
+  name: 'The name the user goes by.',
+  role: 'What the user does, e.g. independent developer.',
+  location: 'Where the user is based.',
+  languages: 'Programming languages the user writes.',
+  frameworks: 'Frameworks and libraries the user uses.',
+  tools: 'Editors, terminals, package managers the user prefers.',
+  platforms: 'Operating systems the user works on.',
+  conventions: 'Working rules the user insists on.',
+}
 const SESSION_TRACK_LIMIT = 200
 const MISSING_CLIENT_RETRY_MS = 15_000
 
@@ -1077,6 +1090,95 @@ export function createCapture(deps) {
    * from `narrative.enabled`. A hand-written summary was tried first and thrown
    * away: the SDK's own narrative is grounded in the raw turns.
    */
+  /**
+   * Summarise the user's recent memories into profile fields and write them to L0.
+   *
+   * Measured: one call, about 1.9s and ~810 tokens for 13 memories — roughly 30%
+   * of a single write. The engine's own extraction fills only name/location, so
+   * this pass is what makes the profile describe how someone actually works.
+   */
+  async function refreshProfile(entry) {
+    const client = getClient()
+    if (!client || typeof client.bridgeProfileUpsert !== 'function') return null
+    const store = state?.data
+    if (!store) return null
+    if (store.profileRefresh?.sessionId === entry?.id) return null
+    let rows = []
+    try {
+      const page = await client.bridgeList({
+        user_ids: [resolveUser(settings())],
+        agent_ids: ['personal'],
+        scene: 'chat',
+        limit: PROFILE_MEMORY_LIMIT,
+      }, { timeoutMs: SEARCH_TIMEOUT_MS })
+      rows = (page?.vdb?.memories ?? page?.memories ?? [])
+    } catch (error) {
+      log('profile refresh could not read memories', error)
+      return null
+    }
+    const facts = rows
+      .map((row) => String(row?.content ?? '').trim())
+      .filter((text) => text !== '')
+      .slice(0, PROFILE_MEMORY_LIMIT)
+    if (facts.length < 3) return null
+
+    const fields = Object.keys(PROFILE_FIELDS)
+    const prompt = [
+      'Summarise the user from the memories below into a profile.',
+      `Reply with one JSON object whose keys are exactly: ${fields.join(', ')}.`,
+      'Use an empty string for anything the memories do not state. Do not invent.',
+      'Write values in the same language the memories use.',
+      '',
+      facts.map((text) => `- ${text}`).join('\n'),
+    ].join('\n')
+
+    const model = await modelForEntry(entry).catch(() => null)
+    let raw = ''
+    try {
+      raw = String(await ask(model, prompt) ?? '').trim()
+    } catch (error) {
+      log('profile refresh completion failed', error)
+      return null
+    }
+    const parsed = parseProfileJson(raw, fields)
+    if (!parsed || Object.keys(parsed).length === 0) return null
+    try {
+      await client.bridgeProfileUpsert({ user_id: resolveUser(settings()), kv: parsed }, { timeoutMs: PROMOTE_TIMEOUT_MS })
+    } catch (error) {
+      log('profile refresh write failed', error)
+      return null
+    }
+    store.profileRefresh = { at: Date.now(), sessionId: entry?.id ?? '', fields: Object.keys(parsed) }
+    state.save()
+    activity?.record({
+      kind: 'promote', tier: 'personal',
+      summary: 'refreshed the user profile',
+      detail: Object.keys(parsed).join(', ').slice(0, 120), ok: true,
+    })
+    return parsed
+  }
+
+  /** Pull the first JSON object out of a model reply, keeping only known keys. */
+  function parseProfileJson(raw, fields) {
+    const text = String(raw ?? '')
+    const start = text.indexOf('{')
+    const end = text.lastIndexOf('}')
+    if (start === -1 || end <= start) return null
+    let parsed
+    try {
+      parsed = JSON.parse(text.slice(start, end + 1))
+    } catch {
+      return null
+    }
+    if (!parsed || typeof parsed !== 'object') return null
+    const out = {}
+    for (const key of fields) {
+      const value = parsed[key]
+      if (typeof value === 'string' && value.trim()) out[key] = value.trim().slice(0, 200)
+    }
+    return out
+  }
+
   async function finalizeSessionNarrative(entry) {
     const client = getClient()
     if (!client || typeof client.bridgeFinalize !== 'function') return
@@ -1122,6 +1224,12 @@ export function createCapture(deps) {
       // from `narrative.enabled`.
       if (settings()?.narrative?.enabled !== false) {
         void finished.then(() => finalizeSessionNarrative(entry)).catch(() => {})
+      }
+      // Profile refresh is its own feature: turning narratives off must not turn
+      // the profile off with it. Runs once per session, after the write settles,
+      // so it never competes with capture for the model.
+      if (settings()?.narrative?.profile !== false) {
+        void finished.then(() => refreshProfile(entry)).catch(() => {})
       }
     } catch (error) {
       log('session dispose handling failed', error)

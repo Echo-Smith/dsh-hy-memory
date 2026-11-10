@@ -104,3 +104,25 @@
 - 写入时并行跑一次专门的画像抽取调用（多一次模型成本）；
 - 从已有的个人层记忆里用规则/LLM 汇总，而不是依赖写入时的机会性抽取。
 
+## 专门画像抽取 —— 已完成并实测
+
+按「会话结束触发 + 最近 50 条 + 写入引擎 L0」实现。
+
+**实测成本**：13 条记忆 → 约 810 tokens（410 输入 + 400 输出），1.9 秒。约等于一次普通写入的 30%。
+输入随语料增长，因此读取上限固定在最近 50 条。
+
+**效果对比**（同一批记忆）：
+
+| 路径 | 产出字段 |
+|---|---|
+| 引擎机会性抽取 | name、location（有时加 occupation） |
+| 专门抽取一次 | name、role、location、languages、frameworks、tools、platforms、conventions |
+
+已写入 L0，与原有字段增量合并（diff 更新，不覆盖）。
+
+**实现要点**
+- `bridge/v1/profile_upsert` 复用 `upsert_basic_profile`，因此版本链、diff、supersedes 与引擎自动路径一致。
+- 每会话只跑一次（`state.profileRefresh.sessionId` 去重）。
+- 与叙事是两个独立开关：关掉 `narrative.enabled` 不影响画像刷新。
+- 模型回复用最宽松的方式解析（找第一个 `{` 到最后一个 `}`），只保留已知键，未知键丢弃。
+

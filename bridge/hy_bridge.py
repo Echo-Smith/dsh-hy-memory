@@ -128,6 +128,8 @@ def install_bridge_routes() -> None:
                     result = _profile(client, body)
                 elif path == "/bridge/v1/evolve":
                     result = _evolve(client, body)
+                elif path == "/bridge/v1/profile_upsert":
+                    result = _profile_upsert(client, body)
                 elif path == "/bridge/v1/schema":
                     result = {"fields": dict(client._config.basic_profile.effective_fields())}
                 else:
@@ -326,6 +328,35 @@ def install_bridge_routes() -> None:
         agent_ids = _names(body, "agent_ids", "agent_id") or None
         limit = int(body.get("limit") or 20)
         return {"events": client.get_recent_history(user_ids[0], agent_ids, limit)}
+
+    def _profile_upsert(client, body):
+        """Write profile fields into the engine's L0 chain.
+
+        Uses the SDK's own upsert so versioning, diffing and the supersedes chain
+        are handled the same way as an automatic extraction. Runs the coroutine on
+        the client's loop thread, where the vector store lives.
+        """
+        import asyncio
+
+        from hy_memory.agent.tools.basic_profile import upsert_basic_profile
+
+        kv = body.get("kv")
+        if not isinstance(kv, dict) or not kv:
+            raise ValueError("kv must be a non-empty object")
+        allowed = list(client._config.basic_profile.effective_fields())
+        user_id = str(body.get("user_id") or "dsh")
+
+        async def run():
+            return await upsert_basic_profile(
+                user_id=user_id,
+                kv={str(k): str(v) for k, v in kv.items() if str(v).strip()},
+                vector_store=client._vector_store,
+                embed_service=client._embed_service,
+                allowed_fields=allowed,
+            )
+
+        result = client._loop_thread.run(run())
+        return result.to_dict() if hasattr(result, "to_dict") else {"success": bool(getattr(result, "success", False))}
 
     def _evolve(client, body):
         """Manual System 2 pass: folds memories into higher layers, L0 included."""

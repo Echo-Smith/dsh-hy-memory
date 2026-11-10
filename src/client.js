@@ -158,6 +158,11 @@ export class MemoryClient {
     return this.#request('POST', '/bridge/v1/profile', payload, options)
   }
 
+  /** Write profile fields into the engine's L0 chain. */
+  bridgeProfileUpsert(payload, options) {
+    return this.#request('POST', '/bridge/v1/profile_upsert', payload, options)
+  }
+
   /** Turn one session into an episode narrative (SDK-side, idempotent). */
   bridgeFinalize(payload, options) {
     return this.#request('POST', '/bridge/v1/finalize', payload, options)

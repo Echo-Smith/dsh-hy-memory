@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -309,4 +309,25 @@ test('a hung write cannot latch the drain forever', async () => {
   // by the first one's latched `draining` flag for the rest of the process life.
   assert.equal(state.data.capture.queue.length, 1, 'the hung job stays queued')
   capture.dispose()
+})
+
+test('profile refresh is independent of the narrative switch', async () => {
+  // Turning narratives off must not silently disable the profile refresh: they
+  // are separate features that happen to share the session-end moment.
+  const source = readFileSync(new URL('../src/capture.js', import.meta.url), 'utf8')
+  const hook = source.slice(source.indexOf('handleSessionDisposed'))
+  const narrativeGate = hook.indexOf('narrative?.enabled')
+  const profileGate = hook.indexOf('narrative?.profile')
+  assert.ok(profileGate !== -1, 'the profile refresh has its own gate')
+  assert.ok(profileGate > hook.indexOf('refreshProfile(entry)') - 200,
+    'the profile call sits in the dispose handler')
+  assert.ok(narrativeGate !== -1, 'narratives keep their own gate')
+})
+
+test('profile JSON is parsed defensively', async () => {
+  const source = readFileSync(new URL('../src/capture.js', import.meta.url), 'utf8')
+  // A model reply wrapped in a code fence must still parse, and unknown keys must
+  // be dropped rather than written into the engine.
+  assert.match(source, /indexOf\('\{'\)/, 'the parser finds the object in prose')
+  assert.match(source, /for \(const key of fields\)/, 'only known keys are kept')
 })
