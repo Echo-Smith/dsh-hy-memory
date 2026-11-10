@@ -217,3 +217,20 @@ test('overlap never promotes an irrelevant memory', () => {
   )
   assert.equal(out.items[0]?.id, 'relevant', 'a large relevance gap still wins over literal overlap')
 })
+
+test('one long memory cannot consume the whole injection budget', () => {
+  // Real regression: two 493-character session memories filled 986 of a 1200
+  // character budget, so a short, better-ranked fact never got in.
+  const long = 'A'.repeat(480)
+  const items = [
+    { id: 'long-1', content: long, score: 0.9, tier: 'session', updatedAt: Date.now() },
+    { id: 'long-2', content: `${long}B`, score: 0.89, tier: 'session', updatedAt: Date.now() },
+    { id: 'short', content: '发版验证码是 K3M9。', score: 0.7, tier: 'project', updatedAt: Date.now() },
+  ]
+  const out = selectRecall([{ tier: 'session', items: items.slice(0, 2) }, { tier: 'project', items: items.slice(2) }], {
+    maxItems: 5, maxChars: 1200, minScore: 0.4, halfLifeDays: 30,
+  })
+  assert.equal(out.items.length, 3, 'the short fact is still injected')
+  assert.ok(out.items.some((item) => item.id === 'short'), 'a long neighbour does not crowd it out')
+  assert.ok(out.text.length <= 1200 + 200, 'the budget still holds')
+})

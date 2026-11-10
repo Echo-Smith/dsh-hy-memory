@@ -249,17 +249,23 @@ export function selectRecall(groups, options = {}) {
   for (const entry of ranked) unique.push(entry.item)
   const items = []
   let used = 0
+  // A long transcript-derived memory used to swallow the whole budget: two 493
+  // character entries filled 986 of 1200, so a short but better-ranked fact
+  // could never be injected. Each item is capped at a share of the budget,
+  // which keeps room for several distinct memories.
+  const perItemCap = Math.max(160, Math.floor(maxChars / Math.min(maxItems, 4)))
   for (const item of unique) {
     if (items.length >= maxItems) break
     const overhead = 16
     const available = maxChars - used - overhead
     if (available <= 0) break
-    // A single memory larger than the whole budget is truncated instead of
-    // being injected whole, otherwise maxChars is not actually enforced.
-    if (item.content.length > available) {
-      if (available < 24) break
-      items.push({ ...item, content: `${item.content.slice(0, available - 1)}…` })
-      used = maxChars
+    const limit = Math.min(available, perItemCap)
+    if (limit < 24) break
+    if (item.content.length > limit) {
+      // Truncate instead of skipping: the head of a memory usually still
+      // answers the question, and stopping here would hide every later item.
+      items.push({ ...item, content: `${item.content.slice(0, limit - 1)}…` })
+      used += limit + overhead
       continue
     }
     items.push(item)

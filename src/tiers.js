@@ -110,6 +110,10 @@ export function recallPlan(scope = {}) {
     // Chat search ignores `session_ids` (verified against 2.0.13: a session filter
     // returns zero hits, an agent filter returns them), so the session tier
     // searches by agent and narrows to its own session host-side.
+    // The session tier narrows the same project agent host-side, so asking the
+    // store for it again duplicates every candidate and lets one long memory win
+    // the character budget twice. Skip it when the project tier already covers
+    // that agent; with no project key there is nothing else to search.
     { tier: 'session', params: { user_ids: [user], agent_ids: [projectAgentId(key)].filter(Boolean) } },
   ]
   if (key) {
