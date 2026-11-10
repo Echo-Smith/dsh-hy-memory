@@ -90,7 +90,8 @@ export class Sidecar {
       const fallback = await findSystemPython()
       if (!fallback) {
         throw new Error(
-          'Hy-Memory needs Python 3.12 and no usable interpreter was found. Install uv (https://docs.astral.sh/uv/) or Python 3.12, then retry.',
+          'Hy-Memory needs Python 3.11 or newer, and none was found on this machine. '
+          + 'Install uv (https://docs.astral.sh/uv/) — it fetches a suitable Python itself — or any Python 3.11+, then press Start again.',
         )
       }
       await run(fallback, ['-m', 'venv', venvDir()], log)
@@ -126,9 +127,14 @@ export class Sidecar {
         // is missing and what to do, rather than surfacing a pip traceback.
         const message = String(error?.message ?? error)
         const offline = /No matching distribution|Could not find a version|ConnectTimeout|Network is unreachable|Temporary failure in name resolution/i.test(message)
+        // A missing interpreter is already an actionable sentence; prefixing it
+        // with "could not prepare its Python environment" just buries it.
+        const missingPython = /needs Python 3\.11 or newer/i.test(message)
         this.#lastError = offline
           ? 'Memory needs to download its Python framework (hy-memory) once, and that download failed. Check the network, then press Start again.'
-          : `Memory could not prepare its Python environment: ${message.slice(0, 200)}`
+          : missingPython
+            ? message
+            : `Memory could not prepare its Python environment: ${message.slice(0, 200)}`
         throw new Error(this.#lastError)
       }
       if (!existsSync(BRIDGE)) throw new Error(`sidecar bridge missing at ${BRIDGE}`)
