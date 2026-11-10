@@ -54,11 +54,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Echo-Smith/hy-memory4dsh.git"
+    "url": "https://github.com/Echo-Smith/dsh-hy-memory.git"
   },
-  "homepage": "https://github.com/Echo-Smith/hy-memory4dsh#readme",
+  "homepage": "https://github.com/Echo-Smith/dsh-hy-memory#readme",
   "bugs": {
-    "url": "https://github.com/Echo-Smith/hy-memory4dsh/issues"
+    "url": "https://github.com/Echo-Smith/dsh-hy-memory/issues"
   },
   "license": "MIT",
   "scripts": {

@@ -262,16 +262,23 @@ function createRuntime(ctx, config) {
     }
   }
 
+  /**
+   * The model this session is actually calling, in order of authority:
+   * the selection the host reported for this turn, the session's own request
+   * header, and only then the profile default. The last one is a fallback for
+   * sessions that have not reported yet, not a policy — writing through a
+   * different model than the conversation uses is what the user objected to.
+   */
   function modelFor(session) {
     const known = session?.id ? preStepModels.get(session.id) : null
-    if (known) return known
+    if (known) return { ...known, source: 'session-turn' }
     try {
       const header = session?.requestHeader?.()?.config
       if (header && typeof header.provider === 'string' && typeof header.model === 'string') {
-        return { provider: header.provider, model: header.model }
+        return { provider: header.provider, model: header.model, source: 'session-header' }
       }
     } catch {}
-    if (route) return { provider: route.provider, model: route.model }
+    if (route) return { provider: route.provider, model: route.model, source: 'profile-default' }
     return null
   }
 
@@ -652,8 +659,12 @@ function createRuntime(ctx, config) {
         getClient,
         modelFor,
         resolveModel: async (session) => {
+          // Ask the session first. Refreshing the profile route before answering
+          // could only ever replace a live selection with the profile default.
+          const fromSession = modelFor(session)
+          if (fromSession && fromSession.source !== 'profile-default') return fromSession
           await ensureRoute()
-          return modelFor(session)
+          return modelFor(session) ?? fromSession
         },
         getLlm: () => ctx.get('llm'),
         log,

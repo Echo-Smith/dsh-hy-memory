@@ -45,7 +45,7 @@ const STATUS = Object.freeze({
   dataDirSize: 4096,
   // Folded into status by the host; the card must render this verbatim.
   memhub: { detected: true, path: '/Users/test/.one-memory', sizeBytes: 20480 },
-  package: { name: 'dsh-hy-memory', version: '0.1.0', repoUrl: 'https://github.com/example/hy-memory4dsh.git' },
+  package: { name: 'dsh-hy-memory', version: '0.1.0', repoUrl: 'https://github.com/example/dsh-hy-memory.git' },
   context: { memoryTokens: 120, memoryItems: 2, lastAt: 1, totalTokens: 3400, totalItems: 9 },
 })
 
@@ -652,7 +652,7 @@ function createFetch(fetchCalls, options = {}) {
             current: '0.1.0',
             latest: '0.2.0',
             behind: true,
-            url: 'https://github.com/example/hy-memory4dsh/releases/tag/v0.2.0',
+            url: 'https://github.com/example/dsh-hy-memory/releases/tag/v0.2.0',
             checkedAt: 1,
           },
         })
@@ -1662,7 +1662,7 @@ async function exerciseFooterAndTokens(harness) {
 
   // Repository link: status.package.repoUrl, made web-safe, opened in a new tab.
   const link = hostsOf(harness).find((node) => (
-    node.type === 'a' && (node.props ?? {}).href === 'https://github.com/example/hy-memory4dsh'
+    node.type === 'a' && (node.props ?? {}).href === 'https://github.com/example/dsh-hy-memory'
   ))
   assert.ok(link !== undefined, 'the footer links the repository from status.package.repoUrl')
   assert.equal(link.props.target, '_blank', 'the repository link opens in a new tab')
@@ -1781,7 +1781,7 @@ async function exerciseAutoUpdateNotice(harness) {
   assert.equal(harness.mini.textOf(pill), t('update.newVersion', { version: '0.2.0' }),
     'the pill names the new version')
   assert.equal(pill.type, 'a', 'the pill links to the release')
-  assert.equal(pill.props.href, 'https://github.com/example/hy-memory4dsh/releases/tag/v0.2.0')
+  assert.equal(pill.props.href, 'https://github.com/example/dsh-hy-memory/releases/tag/v0.2.0')
   assert.equal(pill.props.target, '_blank', 'the release pill opens in a new tab')
   assert.ok(String(pill.props.rel).includes('noopener'), 'the release pill uses rel=noopener')
   assert.ok(harness.mini.text().includes(t('update.manualHint')),

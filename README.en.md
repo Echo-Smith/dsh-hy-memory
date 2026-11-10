@@ -6,7 +6,7 @@
 
 ## The problem
 
-DSH has no long-term memory. `AGENTS.md` is a static set of rules you maintain by hand, and session history only lives inside one session. Start a new conversation and every convention, preference and past mistake has to be explained again. hy-memory4dsh records them automatically, recalls the relevant ones before a turn, and consolidates them after it, across sessions and across projects.
+DSH has no long-term memory. `AGENTS.md` is a static set of rules you maintain by hand, and session history only lives inside one session. Start a new conversation and every convention, preference and past mistake has to be explained again. dsh-hy-memory records them automatically, recalls the relevant ones before a turn, and consolidates them after it, across sessions and across projects.
 
 ## How it works
 
@@ -52,7 +52,7 @@ name in `dsh.profile.bundles`.
 Plugin market index for DSH's own detail page:
 
 ```
-https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.json
 ```
 
 A scoped build is also published to GitHub Packages as `@echo-smith/dsh-hy-memory` (0.1.6), which is what
@@ -69,7 +69,7 @@ The workflow that publishes it is `.github/workflows/publish-github-packages.yml
 a published release. A GitHub release tarball works the same way (the dependency is recorded as the tarball URL):
 
 ```bash
-node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/dsh-hy-memory/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
 For a local build or a release you are publishing yourself:
@@ -129,7 +129,7 @@ Add this URL as an index in DSH's plugin market settings, and the detail page st
 `dsh-hy-memory` versions against it:
 
 ```
-https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.json
 ```
 
 Bump `versions` there when a release goes out; the page then shows the new version as available while the

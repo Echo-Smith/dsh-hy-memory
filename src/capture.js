@@ -759,19 +759,29 @@ export function createCapture(deps) {
   }
 
   async function ask(model, prompt) {
-    // Prefer the sidecar's endpoint: it runs with the thinking channel disabled,
-    // while a gateway model reached through the host can answer with reasoning
-    // only and therefore an empty text body.
+    // The session's own model first: memory work should run through the same
+    // route the conversation is using, so a model the user selected is the one
+    // that reads and writes their memories. The sidecar's fixed endpoint is the
+    // fallback for when that route cannot answer (a gateway model that spends
+    // its budget on reasoning returns an empty body).
+    const first = await askSessionModel(model, prompt)
+    if (first.trim()) return first
+    return askSidecar(prompt)
+  }
+
+  async function askSidecar(prompt) {
     const client = getClient()
-    if (client && typeof client.bridgeComplete === 'function') {
-      try {
-        const result = await client.bridgeComplete({ prompt }, { timeoutMs: PROMOTE_TIMEOUT_MS })
-        const text = typeof result?.text === 'string' ? result.text : ''
-        if (text.trim()) return text
-      } catch (error) {
-        log('promotion completion through the sidecar failed', error)
-      }
+    if (!client || typeof client.bridgeComplete !== 'function') return ''
+    try {
+      const result = await client.bridgeComplete({ prompt }, { timeoutMs: PROMOTE_TIMEOUT_MS })
+      return typeof result?.text === 'string' ? result.text : ''
+    } catch (error) {
+      log('promotion completion through the sidecar failed', error)
+      return ''
     }
+  }
+
+  async function askSessionModel(model, prompt) {
     const llm = getLlm()
     if (!llm || typeof llm.stream !== 'function') return ''
     const controller = new AbortController()
@@ -791,13 +801,14 @@ export function createCapture(deps) {
         if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') text += chunk.text
         else if (chunk?.type === 'finish') finish = chunk.reason
       }
+    } catch (error) {
+      log('promotion completion through the session model failed', error)
+      return ''
     } finally {
       clearTimeout(timer)
     }
     const okKinds = new Set(['stop', 'completed', 'max-tokens'])
-    if (finish && !okKinds.has(finish.kind)) {
-      throw new Error(`promotion model call ended with ${finish.kind}`)
-    }
+    if (finish && !okKinds.has(finish.kind)) return ''
     return text
   }
 
@@ -899,9 +910,15 @@ export function createCapture(deps) {
         kind: 'promote',
         tier: 'project',
         summary: `promoted ${lines.length} session memories to project`,
-        detail: entry.title || key,
+        detail: `${entry.title || key} · ${model.model}`,
         ok: true,
       })
+      if (state?.data) {
+        // Which model actually did the writing, so "follows the session model"
+        // is checkable rather than a claim.
+        state.data.lastPromotionModel = { provider: model.provider, model: model.model, at: Date.now() }
+        state.save()
+      }
     } catch (error) {
       log('session promotion failed', error)
       activity?.record({ kind: 'error', summary: 'session promotion failed', detail: String(error?.message ?? error), ok: false })

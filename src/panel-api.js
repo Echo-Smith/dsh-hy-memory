@@ -177,6 +177,8 @@ export function createPanelApi(deps) {
         const pkg = readPackage() ?? {}
         return { name: String(pkg.name ?? ''), version: String(pkg.version ?? ''), repoUrl: String(pkg.repository?.url ?? '') }
       })(),
+      // Which model last did memory work through the session's own route.
+      lastPromotionModel: state?.data?.lastPromotionModel ?? null,
       // Whether the configured model is actually answering. The user asked to be
       // told to switch models when calls keep failing, so this is surfaced rather
       // than left in the log.
@@ -307,7 +309,7 @@ export function createPanelApi(deps) {
   }
 
   async function defaultFetchJson(url) {
-    const response = await fetch(url, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'hy-memory4dsh' } })
+    const response = await fetch(url, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-hy-memory' } })
     if (!response.ok) throw new Error(`github ${response.status}`)
     return response.json()
   }

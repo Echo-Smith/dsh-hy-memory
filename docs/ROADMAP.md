@@ -138,3 +138,10 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - The model chooser uses the same scrolling, ellipsizing picker as the project row instead of a native select.
 - Naming: the npm package stays `dsh-hy-memory` (renaming would break the loader id for everyone who already installed it and orphan six published versions). `README.md` is Chinese; English lives in `README.en.md`. Store copy shortened to one sentence per language.
 
+## Phase 16: memory work follows the session model
+
+- Promotion used the sidecar's fixed endpoint first, so memory writing ran on a different model than the conversation. It now asks the session's live selection first (`payload.modelSelection` from each turn), then the session header, and only then the profile default; the sidecar stays as a fallback for routes that answer with reasoning only.
+- `resolveModel` no longer refreshes the profile route before answering, which could replace a live selection with the default.
+- The model that actually did the writing is recorded (`state.lastPromotionModel`) and exposed in the status payload, so the claim is checkable.
+- Repository renamed to `dsh-hy-memory` in every reference via `scripts/rename-repo.mjs`. The npm package name is unchanged on purpose: it is the loader id.
+

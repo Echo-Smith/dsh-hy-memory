@@ -6,7 +6,7 @@
 
 ## 它解决什么
 
-DSH 本身没有长期记忆。`AGENTS.md` 是手写的静态规则，会话历史只在当前会话里有效，一换会话，你上次讲过的约定、偏好、踩过的坑就都要重讲一遍。hy-memory4dsh 把这些东西自己攒下来，在对话开始前挑相关的注入，在回合结束后自动沉淀，跨会话、跨项目可用。
+DSH 本身没有长期记忆。`AGENTS.md` 是手写的静态规则，会话历史只在当前会话里有效，一换会话，你上次讲过的约定、偏好、踩过的坑就都要重讲一遍。dsh-hy-memory 把这些东西自己攒下来，在对话开始前挑相关的注入，在回合结束后自动沉淀，跨会话、跨项目可用。
 
 ## 怎么实现
 
@@ -59,7 +59,7 @@ node scripts/install-into-profile.mjs --spec dsh-hy-memory --apply
 给 DSH 插件详情页用的市场索引：
 
 ```
-https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.json
 ```
 
 另有一份 scoped 构建发布在 GitHub Packages：`@echo-smith/dsh-hy-memory`（0.1.6），也就是仓库 Packages
@@ -76,7 +76,7 @@ node scripts/install-into-profile.mjs --spec @echo-smith/dsh-hy-memory --apply
 也可以直接从 GitHub Release 安装（依赖写成 tarball 地址）：
 
 ```bash
-node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/hy-memory4dsh/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
+node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/dsh-hy-memory/releases/download/v0.1.6/dsh-hy-memory-0.1.6.tgz --apply
 ```
 
 自己出包或本地验证时：
@@ -111,7 +111,7 @@ node scripts/validate-market-index.mjs     # 需要本机装有 DSH（或用 --m
 在 DSH 的插件市场设置里把下面这个地址加为索引，详情页就会开始对比 `dsh-hy-memory` 的版本：
 
 ```
-https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.json
+https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.json
 ```
 
 每次发版把 `versions` 更新一下，详情页就会显示有可用版本；设置面板里那条「只提示不安装」的检查保持不变。
