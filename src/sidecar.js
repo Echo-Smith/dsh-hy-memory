@@ -119,6 +119,11 @@ export class Sidecar {
       const settings = this.#settings()
       const route = this.#getRoute()
       const mode = settings.mode === 'lite' || settings.mode === 'ultra' ? settings.mode : 'pro'
+      if (route && route.missingModel) {
+        // A pin that the profile no longer offers used to resolve silently to
+        // some other model. Say which one is gone instead.
+        this.#lastError = `The memory model "${route.missingModel}" is no longer offered by this profile. Pick another under Memory engine, or clear it to follow the session model.`
+      }
       if (!route && mode !== 'lite') {
         // At true app start DSH may still be writing its own settings.yaml and
         // .env, so "no route yet" is often temporary. Failing hard here latched

@@ -269,6 +269,33 @@ function createRuntime(ctx, config) {
    * sessions that have not reported yet, not a policy — writing through a
    * different model than the conversation uses is what the user objected to.
    */
+  /**
+   * In follow mode the sidecar must run on the model the session is actually
+   * calling, but its model is a process-level env var. Tracking the selection
+   * here lets the start path use it and lets a change restart the sidecar,
+   * instead of leaving it on whatever the profile default happened to be.
+   */
+  let followRoute = null
+
+  function adoptFollowRoute(selection) {
+    if (settings?.llm?.source === 'custom') return
+    if (settings?.llm?.provider || settings?.llm?.model) return
+    if (!selection || typeof selection.provider !== 'string' || typeof selection.model !== 'string') return
+    if (!selection.provider || !selection.model) return
+    const next = { provider: selection.provider, model: selection.model }
+    if (followRoute && followRoute.provider === next.provider && followRoute.model === next.model) return
+    const changed = followRoute !== null
+    followRoute = next
+    // Restart so the new model actually serves writes; a fresh sidecar is about
+    // a second of startup, far cheaper than running memory on the wrong model.
+    if (changed && sidecar && sidecar.status().state === 'ready') {
+      try {
+        sidecar.stop()
+      } catch {}
+      maybeAutoStart()
+    }
+  }
+
   function modelFor(session) {
     const known = session?.id ? preStepModels.get(session.id) : null
     if (known) return { ...known, source: 'session-turn' }
@@ -499,6 +526,7 @@ function createRuntime(ctx, config) {
     const selection = payload?.modelSelection
     if (selection && typeof selection.provider === 'string' && typeof selection.model === 'string') {
       preStepModels.set(session.id, { provider: selection.provider, model: selection.model })
+      adoptFollowRoute(selection)
       if (preStepModels.size > SESSION_TRACK_LIMIT) preStepModels.delete(preStepModels.keys().next().value)
     }
     const cwd = typeof session.header?.cwd === 'string' ? session.header.cwd : ''
@@ -563,7 +591,14 @@ function createRuntime(ctx, config) {
       await ensureRoute()
       sidecar = new Sidecar({
         settings: settingsNow,
-        getRoute: () => route,
+        // Follow mode hands the sidecar the session's live model; a pinned model
+        // or a custom endpoint keeps the resolved route.
+        getRoute: () => {
+          if (followRoute && !settings?.llm?.provider && !settings?.llm?.model && settings?.llm?.source !== 'custom') {
+            return { ...followRoute, baseURL: route?.baseURL ?? '', apiKey: route?.apiKey ?? '', keyEnv: route?.keyEnv ?? '' }
+          }
+          return route
+        },
         emit: (event) => {
           try {
             // ensureVenv() writes state.json itself; re-persist our fields after
@@ -694,7 +729,14 @@ function createRuntime(ctx, config) {
         memhub,
         contextOf,
         log,
-        describeModel: () => describeModelRoute(route, settings),
+        // Report the model actually serving memory, which in follow mode is the
+        // session's own, not the profile default.
+        describeModel: () => describeModelRoute(
+          followRoute && !settings?.llm?.provider && !settings?.llm?.model && settings?.llm?.source !== 'custom'
+            ? { ...followRoute, source: 'session' }
+            : route,
+          settings,
+        ),
         onSettingsChange: applySettingsPatch,
       })
 

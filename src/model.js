@@ -62,8 +62,14 @@ export function resolveDshRoute(providers, state = {}, settings = {}, dotEnv = {
     const apiKey = lookupKey(keyEnv, dotEnv)
     if (keyEnv && !apiKey) continue
     const ids = modelIds(provider)
+    // Asking for a model the profile no longer offers must not silently land on
+    // an arbitrary one: say so, so the caller can report "the pinned model is
+    // gone" instead of writing memories through a model nobody selected.
+    if (wantedModel && !ids.includes(wantedModel)) {
+      return { provider: name, model: '', baseURL, apiKey, keyEnv, source: 'dsh', missingModel: wantedModel }
+    }
     const preferred = ids.find((id) => /flash|mini|small|lite/i.test(id)) ?? ids[0]
-    const model = wantedModel && ids.includes(wantedModel) ? wantedModel : preferred
+    const model = wantedModel || preferred
     if (!model) continue
     return { provider: name, model, baseURL, apiKey, keyEnv, source: 'dsh' }
   }

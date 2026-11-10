@@ -145,3 +145,10 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - The model that actually did the writing is recorded (`state.lastPromotionModel`) and exposed in the status payload, so the claim is checkable.
 - Repository renamed to `dsh-hy-memory` in every reference via `scripts/rename-repo.mjs`. The npm package name is unchanged on purpose: it is the loader id.
 
+## Phase 17: which model actually serves memory
+
+- Found: the saved settings pinned `llm.provider`/`llm.model` to `magpie/google/models/gemini-3.8-flash`, so "follow the session" was never in effect; and a pinned model the profile no longer offers used to resolve silently to `find(/flash/)` (observed: `workbuddy/deepseek-v4.1-flash`). `resolveDshRoute` now reports `missingModel` instead of substituting, and the banner names the model that is gone.
+- Follow mode is now real: the session's reported selection is tracked, handed to the sidecar through `getRoute()`, and a change restarts the sidecar so writes stop running on the profile default.
+- Limitation that remains: the sidecar's model is a process env var, so follow mode takes effect from the next start. A brand-new session's model is only known after its first turn, which is after the sidecar started. Writes in that window use the profile default.
+- Model resolution had no tests at all, which is why this survived; `test/model-route.test.mjs` now covers routing, missing pins, missing keys and the env handed to the sidecar.
+
