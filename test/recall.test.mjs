@@ -5,6 +5,7 @@ import {
   collectSearchItems,
   createMemoryMessage,
   extractQuery,
+  lexicalTokens,
   neutralize,
   renderRecall,
   selectRecall,
@@ -174,4 +175,45 @@ test('a recall still gives up when the sidecar never becomes ready', async () =>
   const out = await recall.handlePreStep({ agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 }, async () => ({ kind: 'proceed', messages }))
   assert.equal(out.messages.length, messages.length)
   assert.ok(Date.now() - started < 2000)
+})
+
+test('a memory that shares the query wording outranks a generic preference', { todo: 'overlap lifts rank but cannot close a large semantic gap; needs a specificity signal from the embedder' }, () => {
+  // Real regression: "磁盘快满了，归档文件该放哪" injected only "用户偏好中文回答",
+  // because a generic preference scores high on every query. The memory whose
+  // text actually overlaps the question is the one answering it. Kept failing on
+  // purpose: one shared bigram (文件) is not enough evidence to outweigh a 0.12
+  // semantic lead, and pretending otherwise would just hide the gap.
+  const now = Date.now()
+  const generic = {
+    id: 'generic',
+    content: '用户偏好中文回答。',
+    score: 0.62,
+    tier: 'personal',
+    updatedAt: now,
+  }
+  const specific = {
+    id: 'specific',
+    content: '用户项目中服务器备份目录约定为 /Volumes/archive/hy-backups，备份文件命名必须以 .tar.zst 结尾。',
+    score: 0.505,
+    tier: 'project',
+    updatedAt: now,
+  }
+  const queryTokens = lexicalTokens('磁盘快满了，归档文件该放哪')
+  const out = selectRecall(
+    [{ tier: 'personal', items: [generic] }, { tier: 'project', items: [specific] }],
+    { maxItems: 1, maxChars: 1200, minScore: 0.4, halfLifeDays: 30, queryTokens },
+  )
+  assert.equal(out.items[0]?.id, 'specific', 'the overlapping memory is picked when only one slot exists')
+})
+
+test('overlap never promotes an irrelevant memory', () => {
+  const now = Date.now()
+  const relevant = { id: 'relevant', content: '用户偏好中文回答。', score: 0.9, tier: 'personal', updatedAt: now }
+  const weak = { id: 'weak', content: '磁盘文件命名规范。', score: 0.2, tier: 'project', updatedAt: now }
+  const queryTokens = lexicalTokens('磁盘文件怎么命名')
+  const out = selectRecall(
+    [{ tier: 'personal', items: [relevant] }, { tier: 'project', items: [weak] }],
+    { maxItems: 1, maxChars: 1200, minScore: 0.15, halfLifeDays: 30, queryTokens },
+  )
+  assert.equal(out.items[0]?.id, 'relevant', 'a large relevance gap still wins over literal overlap')
 })

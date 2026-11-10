@@ -181,6 +181,11 @@ async function lexicalHits(client, query, context, user) {
  */
 export function selectRecall(groups, options = {}) {
   const maxItems = Math.max(1, options.maxItems ?? 5)
+  // Literal overlap with the query. A generic preference ("the user prefers
+  // Chinese answers") scores high on every query, so on a semantic near-tie it
+  // used to outrank the one memory that actually names the thing being asked
+  // about. Overlap only ever breaks a near-tie; relevance still decides.
+  const queryTokens = Array.isArray(options.queryTokens) ? options.queryTokens : []
   const maxChars = Math.max(0, options.maxChars ?? 1600)
   const minScore = Number.isFinite(options.minScore) ? options.minScore : 0.32
   const collected = []
@@ -219,10 +224,23 @@ export function selectRecall(groups, options = {}) {
     const ageDays = Math.max(0, (nowMs - at) / 86_400_000)
     return 0.5 ** (ageDays / halfLifeDays)
   }
-  const ranked = unique.map((item) => ({
-    item,
-    rank: (typeof item.score === 'number' ? item.score : 0) * recency(item),
-  }))
+  const overlap = (item) => {
+    if (queryTokens.length === 0) return 0
+    const haystack = String(item.content ?? '').toLowerCase()
+    if (!haystack) return 0
+    let hit = 0
+    for (const token of queryTokens) if (haystack.includes(token)) hit += 1
+    return hit / queryTokens.length
+  }
+  const ranked = unique.map((item) => {
+    const score = typeof item.score === 'number' ? item.score : 0
+    // A generic preference answers every query, so a tie on semantic score is
+    // not a real tie: the memory that shares the query's wording is answering
+    // this question. Literal agreement is therefore allowed to outweigh a
+    // modest semantic gap, and only literal agreement is.
+    const rank = score * recency(item) + 0.25 * overlap(item)
+    return { item, rank }
+  })
   ranked.sort((left, right) => {
     if (right.rank !== left.rank) return right.rank - left.rank
     return (TIER_ORDER[left.item.tier] ?? 9) - (TIER_ORDER[right.item.tier] ?? 9)
@@ -418,7 +436,8 @@ export function createRecall(deps) {
       if (!client) return decision
       const context = contextOf(payload, session)
       const groups = await search(client, query, context)
-      let merged = selectRecall(groups, config.recall ?? {})
+      const queryTokens = lexicalTokens(query)
+      let merged = selectRecall(groups, { ...(config.recall ?? {}), queryTokens })
       const semanticUsed = merged.items.length > 0
       let lexicalUsed = false
       // A weak embedder can leave the turn short even though keyword matches

@@ -105,3 +105,12 @@ Remaining Phase 1 work: fixtures from other projects, an English-only fixture se
 - Update line shows local and published versions side by side instead of a single number.
 - Bug found by audit: the single-writer lease called `dirname` without importing it; the ReferenceError was swallowed and the lease could never be acquired, so every `state.save()` silently did nothing (state.json stayed a two-key marker, the project index and promotions never persisted). Fixed by importing it; verified by the lease file appearing and state.json regaining `projects`, `capture`, `promotions`, `lastFlush`.
 
+## Phase 12: long-run memory test (local, in progress)
+
+End-to-end test with three planted probe facts (a release passphrase, a backup directory, an internal codename), written through the real `add_scene` pipeline and retrieved through the real `handlePreStep` path.
+
+- Works: writes land (async extraction returns a `memory_id` and the row appears shortly after), and a query that names none of the facts — "我要准备一次正式发布了，流程上第一步该做什么" — recalls the passphrase memory without any user hint.
+- Fixed: `selectRecall` ranked purely on the semantic score, so a generic preference ("用户偏好中文回答") that scores high on every query could take the only slot. Literal overlap with the query now contributes to rank, bounded so a large relevance gap still wins. A regression test covers the ordering and a second test covers the bound.
+- Known limitation (test kept as `todo`): "磁盘快满了，归档文件该放哪" still ranks the generic preference first. The backup memory shares only one bigram (文件) with the query, which is not enough evidence to close a 0.12 semantic lead. Closing this needs a specificity signal the embedder does not provide — not another weight tweak.
+- Observed: `recall.minScore` 0.56 keeps 3 of 6 verified-useful probe queries; 0.40–0.45 keeps 5 of 6. The default is therefore too strict for cross-domain recall and worth revisiting with more data.
+
