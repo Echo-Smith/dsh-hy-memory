@@ -234,5 +234,9 @@
   "engine.summaryFollow": "跟随 DSH 默认 · {model}",
   "engine.summaryPinned": "指定模型 · {model}",
   "engine.currentOption": "当前配置 · {provider}/{model}",
-  "update.localOnly": "本地 v{current}"
+  "update.localOnly": "本地 v{current}",
+  "update.install": "更新到 v{version}",
+  "update.installing": "安装中…",
+  "update.installed": "v{version} 已安装，重启 DSH 后生效",
+  "update.installFailed": "安装失败"
 }

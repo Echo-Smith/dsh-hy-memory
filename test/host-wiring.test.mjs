@@ -105,8 +105,10 @@ test('apply writes the boot marker and wires tools, routes and listeners', async
     assert.deepEqual(marker.routes, [...PANEL_ROUTE_PATHS])
     assert.deepEqual(marker.inject, ['tools', 'sessions', 'llm'])
 
-    const wired = await waitFor(() => harness.registeredTools.length === 7 && harness.panels.length === 22)
-    assert.ok(wired, `expected 7 tools and 22 routes, saw ${harness.registeredTools.length}/${harness.panels.length}`)
+    // Route count follows PANEL_ROUTE_PATHS; assert against it rather than a
+    // literal so adding a route does not read as a regression.
+    const wired = await waitFor(() => harness.registeredTools.length === 7 && harness.panels.length === PANEL_ROUTE_PATHS.length)
+    assert.ok(wired, `expected 7 tools and ${PANEL_ROUTE_PATHS.length} routes, saw ${harness.registeredTools.length}/${harness.panels.length}`)
     assert.deepEqual(harness.registeredTools.map((tool) => tool.name).sort(), [
       'memory_add',
       'memory_delete',

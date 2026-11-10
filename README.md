@@ -153,6 +153,19 @@ Project switch: [don't remember this project](docs/screenshots/panel-capture-swi
 
 MemHub not installed: [dashed card](docs/screenshots/panel-memhub-absent.png)
 
+### Updating from the panel
+
+When the check finds a newer release, the footer offers an update button. It
+downloads that release's tarball, verifies its package name and version, and
+installs it into this profile with the profile's own package manager (pnpm from
+the DSH app when the profile has a lockfile). It refuses to install anything but
+the version the check just reported, and refuses to downgrade.
+
+It does **not** restart DSH. A plugin runs inside the app's main process and
+cannot relaunch it, and a restart would drop every live session — so the panel
+reports the version now on disk and asks you to restart, which is the same
+contract DSH's own plugin manager uses.
+
 The footer's update line reports both numbers — `Up to date · local v0.1.6 / published v0.1.6` — because an
 unreleased local build is expected while developing, and a single number hid which side it meant.
 

@@ -177,6 +177,7 @@ export const api = {
   // Update check: the host compares the installed version with GitHub releases.
   // Without force the host answers from its 12 h cache; force always refetches.
   updateCheck: (force) => request('update/check', typeof force === 'boolean' ? { force } : {}),
+  updateInstall: (version) => request('update/install', { version }),
   sessions: (projectKey) => request('sessions', typeof projectKey === 'string' && projectKey !== '' ? { projectKey } : {}),
   // MemHub link (docs/CONTRACT.md addendum). Import/pull always target the
   // personal tier on the host; the panel only chooses the source.

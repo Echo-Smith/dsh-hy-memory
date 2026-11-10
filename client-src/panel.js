@@ -678,6 +678,10 @@ export function SettingsSection(props) {
   const [updateResult, setUpdateResult] = React.useState(null)
   const [autoUpdate, setAutoUpdate] = React.useState(null)
   const [masterBusy, setMasterBusy] = React.useState(false)
+  // Installing writes into the profile, so it is a separate, explicit action from
+  // checking, and it never restarts DSH on its own.
+  const [installing, setInstalling] = React.useState(false)
+  const [installResult, setInstallResult] = React.useState(null)
   const [masterError, setMasterError] = React.useState('')
   const [copiedId, setCopiedId] = React.useState('')
   const [copyFailedId, setCopyFailedId] = React.useState('')
@@ -1260,6 +1264,20 @@ export function SettingsSection(props) {
       setUpdateResult({ current: '', latest: '', behind: false, url: '', error: errorMessage(error) })
     } finally {
       setChecking(false)
+    }
+  }
+
+  const installUpdate = async () => {
+    const version = updateResult?.latest ?? ''
+    if (installing || version === '') return
+    setInstalling(true)
+    try {
+      const data = await api.updateInstall(version)
+      setInstallResult({ version: typeof data?.version === 'string' ? data.version : version, error: '' })
+    } catch (error) {
+      setInstallResult({ version: '', error: errorMessage(error) })
+    } finally {
+      setInstalling(false)
     }
   }
 
@@ -2112,10 +2130,22 @@ export function SettingsSection(props) {
       renderAutoNotice()),
     h('div', { className: 'hm-footerRight' },
       renderUpdateResult(),
+      installResult?.error
+        ? h('span', { className: 'hm-footerResult hm-error', title: installResult.error }, t('update.installFailed'))
+        : installResult
+          ? h('span', { className: 'hm-footerResult' }, t('update.installed', { version: installResult.version }))
+          : null,
+      updateResult?.behind === true && !installResult
+        ? h(ui.Button, {
+          size: 'sm',
+          disabled: installing || checking,
+          onClick: () => { void installUpdate() },
+        }, installing ? t('update.installing') : t('update.install', { version: updateResult?.latest ?? '' }))
+        : null,
       h(ui.Button, {
         size: 'sm',
         variant: 'outline',
-        disabled: checking,
+        disabled: checking || installing,
         onClick: () => { void checkUpdate() },
       }, checking ? t('update.checking') : t('update.check'))))
 

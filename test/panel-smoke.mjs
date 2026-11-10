@@ -627,6 +627,13 @@ function createFetch(fetchCalls, options = {}) {
       })
     }
     if (verb === 'projects') return jsonResponse({ ok: true, data: WORKSPACES })
+    if (verb === 'update/install') {
+      const body = JSON.parse(callOptions.body ?? '{}')
+      return jsonResponse({
+        ok: true,
+        data: { installed: true, previous: '0.1.0', version: body.version, needsRestart: true, restart: 'restart-required' },
+      })
+    }
     if (verb === 'update/check') {
       const body = JSON.parse(callOptions.body ?? '{}')
       // The automatic (non-force) read answers from the host cache; the button
@@ -1739,6 +1746,15 @@ async function exerciseUpdateBehind(harness) {
   ))
   assert.ok(release !== undefined, 'the newer-version line links the release URL')
   assert.equal(release.props.target, '_blank', 'the release link opens in a new tab')
+
+  // Installing is offered only when there is something to install, and it is a
+  // separate click from checking: it writes into the profile.
+  const installButton = findButton(harness, t('update.install', { version: '0.2.0' }))
+  assert.ok(installButton !== undefined, 'a newer release offers an install button')
+  await click(harness, t('update.install', { version: '0.2.0' }))
+  assertPost(harness, '/api/hy-memory/update/install', { version: '0.2.0' })
+  assert.ok(harness.mini.text().includes(t('update.installed', { version: '0.2.0' })),
+    'the result says the version is installed and needs a restart')
 }
 
 async function exerciseUpdateError(harness) {

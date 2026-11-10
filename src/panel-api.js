@@ -3,7 +3,9 @@
  * connection carrier. Every route answers JSON, including failures.
  */
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { MemHubError, detectPairing } from './memhub.js'
+import { installRelease } from './updater.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
 
 export const PANEL_PREFIX = '/api/hy-memory'
@@ -33,6 +35,9 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'purge', request: '{ confirm }' },
   { name: 'merge', request: '{ tier, keep?, drop }' },
   { name: 'update/check', request: '{}' },
+  // Installing is separate from checking: it writes to the profile, and it is
+  // deliberately the only way this plugin runs a package manager.
+  { name: 'update/install', request: '{ version, url }' },
 ])
 
 export const PANEL_ROUTE_PATHS = Object.freeze(PANEL_ROUTE_DEFS.map((def) => `${PANEL_PREFIX}/${def.name}`))
@@ -250,10 +255,19 @@ export function createPanelApi(deps) {
       }
       const clean = (value) => String(value).replace(/^v/i, '')
       const behind = latest !== '' && compareVersions(clean(latest), clean(current)) > 0
-      return { current, latest: clean(latest), behind, url, checkedAt: Date.now() }
+      const tarball = `https://github.com/${owner}/${repo}/releases/download/${latest}/${String(pkg?.name ?? 'dsh-hy-memory')}-${clean(latest)}.tgz`
+      return { current, latest: clean(latest), behind, url, tarball, checkedAt: Date.now() }
     } catch (error) {
       return { current, latest: '', behind: false, url: `https://github.com/${owner}/${repo}`, checkedAt: Date.now(), error: String(error?.message ?? error) }
     }
+  }
+
+  /** The tarball for the release the checker reported; never taken from a request. */
+  function releaseTarballUrl(checked) {
+    if (typeof checked?.tarball !== 'string' || !checked.tarball.startsWith('https://github.com/')) {
+      throw new MemHubError('update_no_artifact', 'this release publishes no plugin tarball', 404)
+    }
+    return checked.tarball
   }
 
   function compareVersions(left, right) {
@@ -423,6 +437,24 @@ export function createPanelApi(deps) {
         return jsonResponse(await ops.merge(body ?? {}))
       case 'update/check':
         return jsonResponse(await checkUpdate(body))
+      case 'update/install': {
+        // Only the version the checker just reported may be installed, and its
+        // URL must come from that same GitHub result rather than the request.
+        const wanted = String(body?.version ?? '')
+        const checked = await checkUpdate({ force: true })
+        if (checked.error) throw new MemHubError('update_check_failed', checked.error, 502)
+        if (!wanted || wanted !== checked.latest) {
+          throw new MemHubError('update_version_mismatch', `asked for ${wanted || '(none)'}, latest is ${checked.latest}`, 409)
+        }
+        const result = await installRelease({
+          packageDir: deps.packageDir ?? fileURLToPath(new URL('..', import.meta.url)),
+          url: releaseTarballUrl(checked),
+          version: wanted,
+          log: (message) => log(`[update] ${message}`),
+        })
+        activity?.record({ kind: 'sidecar', summary: `updated ${result.previous} -> ${result.version}`, ok: true })
+        return jsonResponse({ ...result, restart: 'restart-required' })
+      }
       case 'projects':
         return jsonResponse(await listProjects())
       case 'sessions':

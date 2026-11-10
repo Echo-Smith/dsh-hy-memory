@@ -116,3 +116,9 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - Fixed the budget monopoly found by the long-run test: two 493-character session memories filled 986 of a 1200 character budget, so a short but better-ranked fact never got injected ("正式对外发版前要念什么验证码" failed while the same memory ranked first in a direct search). Each injected memory is now capped at a share of the budget; the same six-probe suite went from 5/6 to 6/6.
 - Test-setup errors worth recording, since they cost the most time: writing probes with `agent_id: "project"` puts them in a bucket no project-scoped search reads; a re-write of near-identical text is deduplicated by the SDK and never appears, so a "silent drop" can be de-duplication rather than loss; and `scene: "all"` without an agent filter returns rows scored 0.016, which is not a retrieval failure.
 
+## Phase 13: panel self-update (A tier)
+
+- The panel can now install a published release: download the tarball, verify name and version, install through the profile's own package manager. Refuses any version other than the one the check reported, and refuses downgrades.
+- It does not restart DSH, by design. A plugin runs in the main process and cannot call `app.relaunch()`; DSH's own plugin manager also only asks the user to restart (`请重启 DSH 使更改生效`). Restarting would kill live sessions.
+- Verified end to end against the real profile: `0.1.7 -> 0.1.6` via the bundled pnpm succeeded, the drill then showed the downgrade risk, and a guard plus test were added.
+

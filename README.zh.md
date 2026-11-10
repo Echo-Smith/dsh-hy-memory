@@ -139,6 +139,14 @@ https://raw.githubusercontent.com/Echo-Smith/hy-memory4dsh/main/market/index.jso
 
 MemHub 未安装时：[虚线卡片](docs/screenshots/panel-memhub-absent.png)
 
+### 从面板更新
+
+检查到新版本后，页脚会出现更新按钮。它会下载该 Release 的 tarball，校验包名与版本，再用这个 profile 自己的
+包管理器安装（profile 有 lockfile 时用 DSH 应用内置的 pnpm）。它只接受检查结果刚报告的那个版本，并且拒绝降级。
+
+它**不会重启 DSH**。插件运行在应用主进程里，没有重启应用的能力，而重启会中断所有正在进行的会话——所以面板
+只报告磁盘上现在是哪个版本，并提示你重启，这与 DSH 自己的插件管理器行为一致。
+
 页脚的更新行会同时给出两个版本：`已是最新 · 本地 v0.1.6 / 线上 v0.1.6`。开发期本地版本领先于已发布版本是
 正常状态，只显示一个数字会让人分不清是哪一侧。
 

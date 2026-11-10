@@ -175,6 +175,7 @@ var api = {
   // Update check: the host compares the installed version with GitHub releases.
   // Without force the host answers from its 12 h cache; force always refetches.
   updateCheck: (force) => request("update/check", typeof force === "boolean" ? { force } : {}),
+  updateInstall: (version) => request("update/install", { version }),
   sessions: (projectKey) => request("sessions", typeof projectKey === "string" && projectKey !== "" ? { projectKey } : {}),
   // MemHub link (docs/CONTRACT.md addendum). Import/pull always target the
   // personal tier on the host; the panel only chooses the source.
@@ -420,7 +421,11 @@ var zh_default = {
   "engine.summaryFollow": "跟随 DSH 默认 · {model}",
   "engine.summaryPinned": "指定模型 · {model}",
   "engine.currentOption": "当前配置 · {provider}/{model}",
-  "update.localOnly": "本地 v{current}"
+  "update.localOnly": "本地 v{current}",
+  "update.install": "更新到 v{version}",
+  "update.installing": "安装中…",
+  "update.installed": "v{version} 已安装，重启 DSH 后生效",
+  "update.installFailed": "安装失败"
 };
 
 // locale/en.json
@@ -660,7 +665,11 @@ var en_default = {
   "engine.summaryFollow": "Following DSH default · {model}",
   "engine.summaryPinned": "Pinned model · {model}",
   "engine.currentOption": "Current setting · {provider}/{model}",
-  "update.localOnly": "Local v{current}"
+  "update.localOnly": "Local v{current}",
+  "update.install": "Update to v{version}",
+  "update.installing": "Installing…",
+  "update.installed": "v{version} installed — restart DSH to apply",
+  "update.installFailed": "Install failed"
 };
 
 // client-src/locale.js
@@ -1984,6 +1993,8 @@ function SettingsSection(props) {
   const [updateResult, setUpdateResult] = React2.useState(null);
   const [autoUpdate, setAutoUpdate] = React2.useState(null);
   const [masterBusy, setMasterBusy] = React2.useState(false);
+  const [installing, setInstalling] = React2.useState(false);
+  const [installResult, setInstallResult] = React2.useState(null);
   const [masterError, setMasterError] = React2.useState("");
   const [copiedId, setCopiedId] = React2.useState("");
   const [copyFailedId, setCopyFailedId] = React2.useState("");
@@ -2514,6 +2525,19 @@ function SettingsSection(props) {
       setUpdateResult({ current: "", latest: "", behind: false, url: "", error: errorMessage(error) });
     } finally {
       setChecking(false);
+    }
+  };
+  const installUpdate = async () => {
+    const version = updateResult?.latest ?? "";
+    if (installing || version === "") return;
+    setInstalling(true);
+    try {
+      const data = await api.updateInstall(version);
+      setInstallResult({ version: typeof data?.version === "string" ? data.version : version, error: "" });
+    } catch (error) {
+      setInstallResult({ version: "", error: errorMessage(error) });
+    } finally {
+      setInstalling(false);
     }
   };
   const sidecar = status?.sidecar ?? null;
@@ -3604,10 +3628,18 @@ function SettingsSection(props) {
       "div",
       { className: "hm-footerRight" },
       renderUpdateResult(),
+      installResult?.error ? h("span", { className: "hm-footerResult hm-error", title: installResult.error }, t("update.installFailed")) : installResult ? h("span", { className: "hm-footerResult" }, t("update.installed", { version: installResult.version })) : null,
+      updateResult?.behind === true && !installResult ? h(ui.Button, {
+        size: "sm",
+        disabled: installing || checking,
+        onClick: () => {
+          void installUpdate();
+        }
+      }, installing ? t("update.installing") : t("update.install", { version: updateResult?.latest ?? "" })) : null,
       h(ui.Button, {
         size: "sm",
         variant: "outline",
-        disabled: checking,
+        disabled: checking || installing,
         onClick: () => {
           void checkUpdate();
         }

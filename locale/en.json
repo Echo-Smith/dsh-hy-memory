@@ -234,5 +234,9 @@
   "engine.summaryFollow": "Following DSH default · {model}",
   "engine.summaryPinned": "Pinned model · {model}",
   "engine.currentOption": "Current setting · {provider}/{model}",
-  "update.localOnly": "Local v{current}"
+  "update.localOnly": "Local v{current}",
+  "update.install": "Update to v{version}",
+  "update.installing": "Installing…",
+  "update.installed": "v{version} installed — restart DSH to apply",
+  "update.installFailed": "Install failed"
 }
