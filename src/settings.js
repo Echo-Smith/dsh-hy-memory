@@ -11,6 +11,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.45, personalWrites: true, waitForStartMs: 2500, halfLifeDays: 30 },
   capture: { enabled: true, windowTurns: 3, idleFlushMs: 180000, includeToolCalls: true, toolResultChars: 1200, productivity: false, concurrency: 3, maxPerDrain: 8, maxAttempts: 20 },
   promotion: { enabled: true, everyTurns: 8, onSessionEnd: true },
+  // Session narratives are the SDK's own episode feature. It needs L1_RAW, which
+  // the engine does keep; the switch simply has to be on at process start.
+  narrative: { enabled: true },
   llm: { source: 'dsh', provider: '', model: '', baseURL: '', maxTokens: 4096, agentMaxTokens: 4096, timeoutMs: 180000, disableReasoning: true },
   embedding: { mode: 'local' },
   ui: { sessionPanel: true },

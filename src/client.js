@@ -153,6 +153,11 @@ export class MemoryClient {
     return this.#request('POST', '/bridge/v1/recent_history', payload, options)
   }
 
+  /** Turn one session into an episode narrative (SDK-side, idempotent). */
+  bridgeFinalize(payload, options) {
+    return this.#request('POST', '/bridge/v1/finalize', payload, options)
+  }
+
   /** Plain completion through the sidecar's configured endpoint. */
   bridgeComplete(payload, options) {
     return this.#request('POST', '/bridge/v1/complete', payload, options)

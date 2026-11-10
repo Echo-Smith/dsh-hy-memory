@@ -617,6 +617,11 @@ const PANEL_CSS = `
 .hm-disclosureTitle { color:var(--dsw-alias-label-primary); font-weight:600; }
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.hm-narratives { display:flex; flex-direction:column; gap:8px; margin:0 0 12px; }
+.hm-narrative { border:1px solid var(--hm-border-1, rgba(127,127,127,0.18)); border-radius:8px; padding:8px 10px; }
+.hm-narrativeHead { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; opacity:0.8; }
+.hm-narrativeTime { margin-left:auto; font-size:11px; opacity:0.55; }
+.hm-narrativeText { margin:8px 0 0; font-size:12px; line-height:1.55; opacity:0.85; white-space:pre-wrap; }
 .hm-activitySources { display:flex; gap:6px; margin:0 0 8px; }
 .hm-activityRow { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
 .hm-activityRowButton { appearance:none; width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:left; padding:4px 6px; border-radius:6px; cursor:pointer; }

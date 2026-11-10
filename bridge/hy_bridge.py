@@ -121,6 +121,8 @@ def install_bridge_routes() -> None:
                     result = _metrics(client, body)
                 elif path == "/bridge/v1/recent_history":
                     result = _recent_history(client, body)
+                elif path == "/bridge/v1/finalize":
+                    result = _finalize(client, body)
                 else:
                     return sdk_server._json_response(self, 404, {"error": "not_found", "path": path})
                 return sdk_server._json_response(self, 200, result)
@@ -317,6 +319,26 @@ def install_bridge_routes() -> None:
         agent_ids = _names(body, "agent_ids", "agent_id") or None
         limit = int(body.get("limit") or 20)
         return {"events": client.get_recent_history(user_ids[0], agent_ids, limit)}
+
+    def _finalize(client, body):
+        """Turn one caller session into an episode narrative.
+
+        Opt-in at the SDK level (MEMORY_SESSION_EPISODE_ENABLED). Calls are
+        idempotent per (user, agent, session), so a retry cannot duplicate the
+        narrative — which is what makes it safe to run on session end.
+        """
+        session_id = str(body.get("session_id") or "").strip()
+        if not session_id:
+            raise ValueError("session_id is required")
+        kwargs = {
+            "user_id": str(body.get("user_id") or "dsh"),
+            "session_id": session_id,
+        }
+        if body.get("agent_id"):
+            kwargs["agent_id"] = str(body["agent_id"])
+        if body.get("language"):
+            kwargs["language"] = str(body["language"])
+        return client.finalize_session(**kwargs)
 
     def _add_scene(client, body):
         """SDK add that honours an explicit scene.

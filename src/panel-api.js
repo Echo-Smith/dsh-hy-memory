@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { MemHubError, detectPairing } from './memhub.js'
 import { installRelease } from './updater.js'
-import { resolveUser } from './tiers.js'
+import { projectAgentId, resolveUser } from './tiers.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
 
 export const PANEL_PREFIX = '/api/hy-memory'
@@ -19,6 +19,7 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'update', request: '{ tier, id, content }' },
   { name: 'history', request: '{ id }' },
   { name: 'stats', request: '{}' },
+  { name: 'narratives', request: '{}' },
   { name: 'metrics', request: '{ minutes? }' },
   { name: 'activity/recent', request: '{ limit? }' },
   { name: 'delete', request: '{ tier, id }' },
@@ -595,6 +596,32 @@ export function createPanelApi(deps) {
       }
       case 'history':
         return jsonResponse(await ops.history({ id: body.id, ...runOptions }))
+      case 'narratives': {
+        // Read the narratives the engine actually stored (L3_SUMMARY), so what the
+        // panel shows is what recall will use, not a separate copy.
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeList !== 'function') {
+          throw new MemoryUnavailableError('narratives need a running sidecar')
+        }
+        const user = resolveUser(settings)
+        const key = contextOf().projectKey
+        const page = await client.bridgeList({
+          user_ids: [user],
+          ...(key ? { agent_ids: [projectAgentId(key)] } : {}),
+          scene: 'chat',
+          limit: 20,
+          layers: ['l3_summary'],
+        })
+        const rows = (page?.vdb?.memories ?? page?.memories ?? [])
+        return jsonResponse({
+          items: rows.map((row) => ({
+            id: String(row?.memory_id ?? ''),
+            sessionId: String(row?.session_id ?? ''),
+            at: Number(row?.gmt_created ?? row?.created_at ?? 0) || 0,
+            text: String(row?.content ?? ''),
+          })),
+        })
+      }
       case 'stats': {
         const client = sidecar?.client
         if (!client || typeof client.bridgeStatsOverview !== 'function') throw new MemoryUnavailableError('stats need a running sidecar')

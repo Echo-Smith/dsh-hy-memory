@@ -278,5 +278,7 @@
   "diag.engineRequestValue": "{done} done · {failed} failed · {active} active",
   "diag.engineLatency": "Average handling time",
   "activity.sourcePlugin": "Panel events",
-  "activity.sourceEngine": "Engine events"
+  "activity.sourceEngine": "Engine events",
+  "narrative.title": "Session summary",
+  "narrative.empty": "When a session ends, the engine writes a short summary of it."
 }

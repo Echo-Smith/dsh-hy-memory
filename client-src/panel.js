@@ -722,6 +722,8 @@ export function SettingsSection(props) {
   const [eraseBusy, setEraseBusy] = React.useState(false)
   const [eraseUsage, setEraseUsage] = React.useState(null)
   const [eraseError, setEraseError] = React.useState('')
+  // Session narratives, read from the engine rather than kept separately.
+  const [narratives, setNarratives] = React.useState({ items: [], error: '' })
   const [purgeText, setPurgeText] = React.useState('')
   const [purgeBusy, setPurgeBusy] = React.useState('')
   const [purgeDone, setPurgeDone] = React.useState(null)
@@ -1574,8 +1576,25 @@ export function SettingsSection(props) {
   // 会话记忆: the session tier grouped by session, with its own picker.
   const renderSessionBlock = () => h('section', { className: 'hm-block' },
     renderBlockHead(t('session.memories'), lists.session.total),
+    renderNarratives(),
     renderSessionPicker(),
     renderSessionArea())
+
+  /**
+   * Session narratives the engine wrote (L3_SUMMARY). Shown above the turn list
+   * because it is the summary of exactly the turns below it.
+   */
+  const renderNarratives = () => {
+    const items = asArray(narratives.items)
+    if (items.length === 0) return null
+    return h('div', { className: 'hm-narratives' },
+      items.map((item) => h('details', { key: item.id, className: 'hm-narrative' },
+        h('summary', { className: 'hm-narrativeHead' },
+          h(Icon, { name: 'brain', size: 14 }),
+          h('span', null, t('narrative.title')),
+          h('span', { className: 'hm-narrativeTime' }, timeText(t, item.at, Date.now()))),
+        h('p', { className: 'hm-narrativeText' }, item.text))))
+  }
 
   // The tab row carries only the tabs; the switch lives in the header.
   const renderTabsRow = () => h('div', { className: 'hm-tabsRow' }, renderTabs())

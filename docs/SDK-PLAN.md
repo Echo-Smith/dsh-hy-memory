@@ -30,13 +30,24 @@
 
 阶段二顺带修掉一个真缺陷：`status` 在 `describeModel()` 返回 null 时整体 500，导致面板全空。现在每个字段都做空值防护，并有测试锁住。
 
-## 阶段三：会话叙事（需要设计）
+## 阶段三：会话叙事 —— 已完成
 
 目标：会话结束时生成"这次做了什么"的摘要，而不是只有零散事实。
 
-- 接口：`finalize_session(user_id, agent_id, session_id, language)`
-- 触发：会话 dispose 时
-- 风险：会调用一次模型，需要确认成本；且叙事本身也是一条记忆，要避免无限递归。
+- 接口：`bridge/v1/finalize` → SDK `finalize_session`
+- 触发：会话 dispose 时，每会话只跑一次
+- 开关：侧车环境 `MEMORY_SESSION_EPISODE_ENABLED=1`（由 `narrative.enabled` 控制）
+- 产出：L3_SUMMARY 层，面板会话区可展开查看
+- 幂等：同一 (user, agent, session) 重复调用只更新同一个节点，重试不会重复。
+
+### 实测记录（推翻了我最初的错误判断）
+
+1. 最初在独立进程里直接构造 `HyMemoryClient()` 调用，得到 `no_raw_memories`，我据此判断"当前架构没有 L1_RAW，这条路走不通"。
+2. 这个判断是错的。查询变更历史发现 `layer: l1_raw` 的记录有 198 条——原始对话一直都在，只是 `list_memories` 默认不返回 raw 层。
+3. 改走桥接（复用侧车已初始化的客户端）后，错误变成 `disabled`——说明路径对了，只差开关。
+4. 加上 `MEMORY_SESSION_EPISODE_ENABLED=1` 后返回 `status: complete`，`episode_id` 生成，L3_SUMMARY 层出现真实叙事。
+
+结论写在这里，是因为以后还会有人犯同样的错：**判断 SDK 能力必须用桥接里那个已初始化的客户端，另起进程的结论一律不可信。**
 
 ## 不做（并说明原因）
 

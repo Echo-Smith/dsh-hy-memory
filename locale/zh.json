@@ -278,5 +278,7 @@
   "diag.engineRequestValue": "完成 {done} · 失败 {failed} · 进行中 {active}",
   "diag.engineLatency": "平均处理耗时",
   "activity.sourcePlugin": "面板事件",
-  "activity.sourceEngine": "引擎事件"
+  "activity.sourceEngine": "引擎事件",
+  "narrative.title": "本次会话摘要",
+  "narrative.empty": "会话结束后，引擎会把这段工作写成一段摘要。"
 }

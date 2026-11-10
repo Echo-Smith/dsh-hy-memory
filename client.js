@@ -472,7 +472,9 @@ var zh_default = {
   "diag.engineRequestValue": "完成 {done} · 失败 {failed} · 进行中 {active}",
   "diag.engineLatency": "平均处理耗时",
   "activity.sourcePlugin": "面板事件",
-  "activity.sourceEngine": "引擎事件"
+  "activity.sourceEngine": "引擎事件",
+  "narrative.title": "本次会话摘要",
+  "narrative.empty": "会话结束后，引擎会把这段工作写成一段摘要。"
 };
 
 // locale/en.json
@@ -756,7 +758,9 @@ var en_default = {
   "diag.engineRequestValue": "{done} done · {failed} failed · {active} active",
   "diag.engineLatency": "Average handling time",
   "activity.sourcePlugin": "Panel events",
-  "activity.sourceEngine": "Engine events"
+  "activity.sourceEngine": "Engine events",
+  "narrative.title": "Session summary",
+  "narrative.empty": "When a session ends, the engine writes a short summary of it."
 };
 
 // client-src/locale.js
@@ -1366,6 +1370,11 @@ var PANEL_CSS = `
 .hm-disclosureTitle { color:var(--dsw-alias-label-primary); font-weight:600; }
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.hm-narratives { display:flex; flex-direction:column; gap:8px; margin:0 0 12px; }
+.hm-narrative { border:1px solid var(--hm-border-1, rgba(127,127,127,0.18)); border-radius:8px; padding:8px 10px; }
+.hm-narrativeHead { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; opacity:0.8; }
+.hm-narrativeTime { margin-left:auto; font-size:11px; opacity:0.55; }
+.hm-narrativeText { margin:8px 0 0; font-size:12px; line-height:1.55; opacity:0.85; white-space:pre-wrap; }
 .hm-activitySources { display:flex; gap:6px; margin:0 0 8px; }
 .hm-activityRow { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
 .hm-activityRowButton { appearance:none; width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:left; padding:4px 6px; border-radius:6px; cursor:pointer; }
@@ -2157,6 +2166,7 @@ function SettingsSection(props) {
   const [eraseBusy, setEraseBusy] = React2.useState(false);
   const [eraseUsage, setEraseUsage] = React2.useState(null);
   const [eraseError, setEraseError] = React2.useState("");
+  const [narratives, setNarratives] = React2.useState({ items: [], error: "" });
   const [purgeText, setPurgeText] = React2.useState("");
   const [purgeBusy, setPurgeBusy] = React2.useState("");
   const [purgeDone, setPurgeDone] = React2.useState(null);
@@ -2973,9 +2983,30 @@ function SettingsSection(props) {
     "section",
     { className: "hm-block" },
     renderBlockHead(t("session.memories"), lists.session.total),
+    renderNarratives(),
     renderSessionPicker(),
     renderSessionArea()
   );
+  const renderNarratives = () => {
+    const items = asArray(narratives.items);
+    if (items.length === 0) return null;
+    return h(
+      "div",
+      { className: "hm-narratives" },
+      items.map((item) => h(
+        "details",
+        { key: item.id, className: "hm-narrative" },
+        h(
+          "summary",
+          { className: "hm-narrativeHead" },
+          h(Icon, { name: "brain", size: 14 }),
+          h("span", null, t("narrative.title")),
+          h("span", { className: "hm-narrativeTime" }, timeText(t, item.at, Date.now()))
+        ),
+        h("p", { className: "hm-narrativeText" }, item.text)
+      ))
+    );
+  };
   const renderTabsRow = () => h("div", { className: "hm-tabsRow" }, renderTabs());
   const renderTabs = () => h(ui.SegmentedTabs, {
     items: [

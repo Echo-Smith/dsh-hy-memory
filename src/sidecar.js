@@ -158,6 +158,9 @@ export class Sidecar {
         // expects plain JSON and gets an empty string when thinking is on.
         HY_MEMORY_THINKING_MODE: settings.llm?.thinking === 'enabled' ? 'enabled' : 'disabled',
         HY_MEMORY_SERVER_PORT: String(this.#port),
+        // Opt-in at the SDK level; without it `finalize_session` answers
+        // {"status": "disabled"} and no narrative is ever written.
+        MEMORY_SESSION_EPISODE_ENABLED: settings?.narrative?.enabled === false ? '0' : '1',
         ...buildModelEnv(route, settings),
       }
       if (settings.language && settings.language !== 'auto') env.MEMORY_LANGUAGE = settings.language

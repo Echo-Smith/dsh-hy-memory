@@ -57,6 +57,7 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/update',
     '/api/hy-memory/history',
     '/api/hy-memory/stats',
+    '/api/hy-memory/narratives',
     '/api/hy-memory/metrics',
     '/api/hy-memory/activity/recent',
     '/api/hy-memory/delete',
@@ -301,4 +302,31 @@ test('status survives a null model description instead of failing wholesale', as
   const body = await res.json()
   assert.equal(body.data.model.ready, false, 'the model reads as not ready rather than crashing')
   assert.equal(body.data.engineStats, null, 'engine stats degrade to null without a sidecar')
+})
+
+test('narratives come from the engine, not a private copy', async () => {
+  // The panel must show what recall will actually use, so the route reads
+  // L3_SUMMARY from the engine rather than a separate bookkeeping file.
+  const seen = []
+  const { api } = harness({
+    sidecarClient: {
+      bridgeList: async (body) => {
+        seen.push(body)
+        return { vdb: { memories: [{ memory_id: 'n1', session_id: 's1', content: 'did the thing', gmt_created: 1700000000 }] } }
+      },
+    },
+  })
+  const route = api.routes.find((entry) => entry.path.endsWith('/narratives'))
+  const body = await (await route.fetch(post('narratives', {}))).json()
+  assert.deepEqual(seen[0].layers, ['l3_summary'], 'the route asks for the summary layer')
+  assert.equal(body.data.items.length, 1)
+  assert.equal(body.data.items[0].text, 'did the thing')
+})
+
+test('narrative reads degrade clearly without a sidecar', async () => {
+  const { api } = harness({ sidecarClient: null })
+  const route = api.routes.find((entry) => entry.path.endsWith('/narratives'))
+  const res = await route.fetch(post('narratives', {}))
+  assert.equal(res.status === 200, false, 'no false empty list without a sidecar')
+  assert.equal((await res.json()).error.code, 'sidecar_unavailable')
 })

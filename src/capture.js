@@ -57,6 +57,8 @@ function drainWatchdogMs(settingsValue) {
 const SEARCH_TIMEOUT_MS = 15_000
 const PROMOTE_TIMEOUT_MS = 90_000
 const PROMPT_INPUT_CHARS = 6000
+// Finalizing reads every raw turn of a session and calls the model once.
+const NARRATIVE_TIMEOUT_MS = 180_000
 const SESSION_TRACK_LIMIT = 200
 const MISSING_CLIENT_RETRY_MS = 15_000
 
@@ -1066,6 +1068,45 @@ export function createCapture(deps) {
     }
   }
 
+  /**
+   * Ask the engine to turn this session into an episode narrative.
+   *
+   * The SDK does the work (`finalize_session`, L1_RAW -> L3_SUMMARY). It is
+   * idempotent per (user, agent, session), so a retry cannot duplicate it, and
+   * the feature needs `MEMORY_SESSION_EPISODE_ENABLED`, which the sidecar sets
+   * from `narrative.enabled`. A hand-written summary was tried first and thrown
+   * away: the SDK's own narrative is grounded in the raw turns.
+   */
+  async function finalizeSessionNarrative(entry) {
+    const client = getClient()
+    if (!client || typeof client.bridgeFinalize !== 'function') return
+    const store = state?.data
+    if (!store) return
+    if (!store.narratives || typeof store.narratives !== 'object') store.narratives = {}
+    if (store.narratives[entry.id]) return
+    const key = projectKey(entry.cwd)
+    if (!key) return
+    try {
+      const result = await client.bridgeFinalize({
+        user_id: resolveUser(settings()),
+        agent_id: projectAgentId(key),
+        session_id: entry.id,
+      }, { timeoutMs: NARRATIVE_TIMEOUT_MS })
+      const status = String(result?.status ?? '')
+      if (status === 'complete' || status === 'skipped') {
+        store.narratives[entry.id] = { at: Date.now(), status, episodeId: String(result?.episode_id ?? '') }
+        const keys = Object.keys(store.narratives)
+        if (keys.length > 60) delete store.narratives[keys.shift()]
+        state.save()
+        if (status === 'complete') {
+          activity?.record({ kind: 'promote', tier: 'session', summary: 'wrote a session narrative', detail: entry.id.slice(0, 12), ok: true })
+        }
+      }
+    } catch (error) {
+      log('session finalization failed', error)
+    }
+  }
+
   function handleSessionDisposed(session) {
     try {
       if (!session?.id) return
@@ -1075,6 +1116,12 @@ export function createCapture(deps) {
       const finished = flush(entry, 'disposed')
       if (settings()?.promotion?.onSessionEnd !== false) {
         void finished.then(() => maybePromote(entry, 'session-end'))
+      }
+      // The engine keeps L1_RAW and can turn a session into a narrative; the
+      // feature is gated on MEMORY_SESSION_EPISODE_ENABLED, which the sidecar gets
+      // from `narrative.enabled`.
+      if (settings()?.narrative?.enabled !== false) {
+        void finished.then(() => finalizeSessionNarrative(entry)).catch(() => {})
       }
     } catch (error) {
       log('session dispose handling failed', error)
