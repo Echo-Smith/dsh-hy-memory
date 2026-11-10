@@ -617,6 +617,11 @@ const PANEL_CSS = `
 .hm-disclosureTitle { color:var(--dsw-alias-label-primary); font-weight:600; }
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.hm-profileCard { margin-bottom:12px; }
+.hm-profileFields { display:flex; flex-wrap:wrap; gap:8px 18px; }
+.hm-profileField { display:flex; align-items:baseline; gap:6px; font-size:12px; }
+.hm-profileKey { opacity:0.55; }
+.hm-profileValue { font-weight:500; }
 .hm-narratives { display:flex; flex-direction:column; gap:8px; margin:0 0 12px; }
 .hm-narrative { border:1px solid var(--hm-border-1, rgba(127,127,127,0.18)); border-radius:8px; padding:8px 10px; }
 .hm-narrativeHead { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; opacity:0.8; }

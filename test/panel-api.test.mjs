@@ -58,6 +58,7 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/history',
     '/api/hy-memory/stats',
     '/api/hy-memory/narratives',
+    '/api/hy-memory/profile',
     '/api/hy-memory/metrics',
     '/api/hy-memory/activity/recent',
     '/api/hy-memory/delete',
@@ -329,4 +330,26 @@ test('narrative reads degrade clearly without a sidecar', async () => {
   const res = await route.fetch(post('narratives', {}))
   assert.equal(res.status === 200, false, 'no false empty list without a sidecar')
   assert.equal((await res.json()).error.code, 'sidecar_unavailable')
+})
+
+test('the profile is read from the engine and flattened for display', async () => {
+  const { api } = harness({
+    sidecarClient: {
+      bridgeProfile: async (body) => ({
+        profile: { content: 'The user is a developer in Hangzhou.', basic_info: { name: 'A', location: '杭州' }, memory_at: 1700000000 },
+        seen: body,
+      }),
+    },
+  })
+  const route = api.routes.find((entry) => entry.path.endsWith('/profile'))
+  const body = await (await route.fetch(post('profile', {}))).json()
+  assert.deepEqual(body.data.profile.fields, { name: 'A', location: '杭州' })
+  assert.equal(body.data.profile.at, 1700000000)
+})
+
+test('an absent profile is null, not a fabricated empty one', async () => {
+  const { api } = harness({ sidecarClient: { bridgeProfile: async () => ({ profile: null }) } })
+  const route = api.routes.find((entry) => entry.path.endsWith('/profile'))
+  const body = await (await route.fetch(post('profile', {}))).json()
+  assert.equal(body.data.profile, null, 'no profile is reported as none')
 })

@@ -154,6 +154,7 @@ var api = {
   purge: (confirm) => request("purge", { confirm }),
   history: (id) => request("history", { id }),
   stats: () => request("stats", {}),
+  profile: () => request("profile", {}),
   metrics: (minutes) => request("metrics", typeof minutes === "number" ? { minutes } : {}),
   recentActivity: (limit) => request("activity/recent", typeof limit === "number" ? { limit } : {}),
   // Removes everything the plugin stored, including the venv.
@@ -474,7 +475,13 @@ var zh_default = {
   "activity.sourcePlugin": "面板事件",
   "activity.sourceEngine": "引擎事件",
   "narrative.title": "本次会话摘要",
-  "narrative.empty": "会话结束后，引擎会把这段工作写成一段摘要。"
+  "narrative.empty": "会话结束后，引擎会把这段工作写成一段摘要。",
+  "profile.title": "个人画像",
+  "profile.field.name": "称呼",
+  "profile.field.age": "年龄",
+  "profile.field.location": "所在地",
+  "profile.field.occupation": "职业",
+  "profile.field.employer": "公司"
 };
 
 // locale/en.json
@@ -760,7 +767,13 @@ var en_default = {
   "activity.sourcePlugin": "Panel events",
   "activity.sourceEngine": "Engine events",
   "narrative.title": "Session summary",
-  "narrative.empty": "When a session ends, the engine writes a short summary of it."
+  "narrative.empty": "When a session ends, the engine writes a short summary of it.",
+  "profile.title": "Profile",
+  "profile.field.name": "Name",
+  "profile.field.age": "Age",
+  "profile.field.location": "Location",
+  "profile.field.occupation": "Occupation",
+  "profile.field.employer": "Employer"
 };
 
 // client-src/locale.js
@@ -1370,6 +1383,11 @@ var PANEL_CSS = `
 .hm-disclosureTitle { color:var(--dsw-alias-label-primary); font-weight:600; }
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.hm-profileCard { margin-bottom:12px; }
+.hm-profileFields { display:flex; flex-wrap:wrap; gap:8px 18px; }
+.hm-profileField { display:flex; align-items:baseline; gap:6px; font-size:12px; }
+.hm-profileKey { opacity:0.55; }
+.hm-profileValue { font-weight:500; }
 .hm-narratives { display:flex; flex-direction:column; gap:8px; margin:0 0 12px; }
 .hm-narrative { border:1px solid var(--hm-border-1, rgba(127,127,127,0.18)); border-radius:8px; padding:8px 10px; }
 .hm-narrativeHead { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; opacity:0.8; }
@@ -2167,6 +2185,7 @@ function SettingsSection(props) {
   const [eraseUsage, setEraseUsage] = React2.useState(null);
   const [eraseError, setEraseError] = React2.useState("");
   const [narratives, setNarratives] = React2.useState({ items: [], error: "" });
+  const [profileState, setProfileState] = React2.useState({ data: null, error: "" });
   const [purgeText, setPurgeText] = React2.useState("");
   const [purgeBusy, setPurgeBusy] = React2.useState("");
   const [purgeDone, setPurgeDone] = React2.useState(null);
@@ -2331,6 +2350,18 @@ function SettingsSection(props) {
     };
   }, [refreshTick, masterOff]);
   React2.useEffect(() => {
+    if (masterOff || tab !== "personal") return void 0;
+    let cancelled = false;
+    void api.profile().then((data) => {
+      if (!cancelled) setProfileState({ data: data?.profile ?? null, error: "" });
+    }).catch((error) => {
+      if (!cancelled) setProfileState({ data: null, error: errorMessage(error) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, masterOff, refreshTick]);
+  React2.useEffect(() => {
     if (masterOff || tab !== "project") return void 0;
     if (projectKey === "") {
       setSessions({ loading: false, error: "", items: [] });
@@ -2381,6 +2412,18 @@ function SettingsSection(props) {
     };
   }, [tab, masterOff, searchQuery, refreshTick, paging.personal]);
   React2.useEffect(() => {
+    if (masterOff || tab !== "personal") return void 0;
+    let cancelled = false;
+    void api.profile().then((data) => {
+      if (!cancelled) setProfileState({ data: data?.profile ?? null, error: "" });
+    }).catch((error) => {
+      if (!cancelled) setProfileState({ data: null, error: errorMessage(error) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, masterOff, refreshTick]);
+  React2.useEffect(() => {
     if (masterOff || tab !== "project") return void 0;
     let cancelled = false;
     const scope = projectKey === "" ? {} : { projectKey };
@@ -2406,6 +2449,18 @@ function SettingsSection(props) {
       cancelled = true;
     };
   }, [tab, masterOff, searchQuery, refreshTick, projectKey, paging.project]);
+  React2.useEffect(() => {
+    if (masterOff || tab !== "personal") return void 0;
+    let cancelled = false;
+    void api.profile().then((data) => {
+      if (!cancelled) setProfileState({ data: data?.profile ?? null, error: "" });
+    }).catch((error) => {
+      if (!cancelled) setProfileState({ data: null, error: errorMessage(error) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, masterOff, refreshTick]);
   React2.useEffect(() => {
     if (masterOff || tab !== "project") return void 0;
     let cancelled = false;
@@ -3234,7 +3289,38 @@ function SettingsSection(props) {
       renderPager("session", list)
     );
   };
-  const renderPersonalBody = () => h(React2.Fragment, null, renderFilesHead(), renderPersonal());
+  const renderPersonalBody = () => h(React2.Fragment, null, renderProfileCard(), renderFilesHead(), renderPersonal());
+  const renderProfileCard = () => {
+    const profile = profileState.data ?? null;
+    if (profileState.error !== "") return null;
+    if (profile === null || Object.keys(profile.fields ?? {}).length === 0) return null;
+    const entries = Object.entries(profile.fields);
+    return h(
+      "section",
+      { className: "hm-card hm-profileCard" },
+      h(
+        "div",
+        { className: "hm-cardHead" },
+        h("h2", { className: "hm-h2" }, t("profile.title")),
+        profile.at > 0 ? h("span", { className: "hm-muted" }, timeText(t, profile.at, Date.now())) : null
+      ),
+      h(
+        "div",
+        { className: "hm-profileFields" },
+        entries.map(([key, value]) => h(
+          "div",
+          { key, className: "hm-profileField" },
+          h("span", { className: "hm-profileKey" }, profileFieldLabel(t, key)),
+          h("span", { className: "hm-profileValue" }, String(value))
+        ))
+      )
+    );
+  };
+  const profileFieldLabel = (t2, key) => {
+    const labelKey = `profile.field.${key}`;
+    const label = t2(labelKey);
+    return label === labelKey ? key : label;
+  };
   const renderWorkspaceBody = () => h(
     React2.Fragment,
     null,

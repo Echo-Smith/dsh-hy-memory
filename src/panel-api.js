@@ -20,6 +20,7 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'history', request: '{ id }' },
   { name: 'stats', request: '{}' },
   { name: 'narratives', request: '{}' },
+  { name: 'profile', request: '{}' },
   { name: 'metrics', request: '{ minutes? }' },
   { name: 'activity/recent', request: '{ limit? }' },
   { name: 'delete', request: '{ tier, id }' },
@@ -596,6 +597,23 @@ export function createPanelApi(deps) {
       }
       case 'history':
         return jsonResponse(await ops.history({ id: body.id, ...runOptions }))
+      case 'profile': {
+        // The engine assembles this from L0 as it writes, so nothing extra needs
+        // generating: read it and show it.
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeProfile !== 'function') {
+          throw new MemoryUnavailableError('the profile needs a running sidecar')
+        }
+        const response = await client.bridgeProfile({ user_id: resolveUser(settings) })
+        const profile = response?.profile ?? null
+        return jsonResponse({
+          profile: profile === null ? null : {
+            content: String(profile.content ?? ''),
+            fields: profile.basic_info && typeof profile.basic_info === 'object' ? profile.basic_info : {},
+            at: Number(profile.memory_at ?? 0) || 0,
+          },
+        })
+      }
       case 'narratives': {
         // Read the narratives the engine actually stored (L3_SUMMARY), so what the
         // panel shows is what recall will use, not a separate copy.

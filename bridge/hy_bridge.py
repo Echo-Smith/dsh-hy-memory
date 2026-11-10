@@ -123,6 +123,10 @@ def install_bridge_routes() -> None:
                     result = _recent_history(client, body)
                 elif path == "/bridge/v1/finalize":
                     result = _finalize(client, body)
+                elif path == "/bridge/v1/profile":
+                    result = _profile(client, body)
+                elif path == "/bridge/v1/evolve":
+                    result = _evolve(client, body)
                 else:
                     return sdk_server._json_response(self, 404, {"error": "not_found", "path": path})
                 return sdk_server._json_response(self, 200, result)
@@ -319,6 +323,22 @@ def install_bridge_routes() -> None:
         agent_ids = _names(body, "agent_ids", "agent_id") or None
         limit = int(body.get("limit") or 20)
         return {"events": client.get_recent_history(user_ids[0], agent_ids, limit)}
+
+    def _evolve(client, body):
+        """Manual System 2 pass: folds memories into higher layers, L0 included."""
+        kwargs = {
+            "user_id": str(body.get("user_id") or "dsh"),
+            "agent_id": str(body.get("agent_id") or "personal"),
+        }
+        if body.get("max_batches"):
+            kwargs["max_batches"] = int(body["max_batches"])
+        if body.get("language"):
+            kwargs["language"] = str(body["language"])
+        return client.evolve(**kwargs)
+
+    def _profile(client, body):
+        """The user's assembled profile (L0 basics plus identity layer)."""
+        return client.get_user_profile(user_id=str(body.get("user_id") or "dsh"))
 
     def _finalize(client, body):
         """Turn one caller session into an episode narrative.

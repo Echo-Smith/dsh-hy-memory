@@ -280,5 +280,11 @@
   "activity.sourcePlugin": "Panel events",
   "activity.sourceEngine": "Engine events",
   "narrative.title": "Session summary",
-  "narrative.empty": "When a session ends, the engine writes a short summary of it."
+  "narrative.empty": "When a session ends, the engine writes a short summary of it.",
+  "profile.title": "Profile",
+  "profile.field.name": "Name",
+  "profile.field.age": "Age",
+  "profile.field.location": "Location",
+  "profile.field.occupation": "Occupation",
+  "profile.field.employer": "Employer"
 }

@@ -153,6 +153,11 @@ export class MemoryClient {
     return this.#request('POST', '/bridge/v1/recent_history', payload, options)
   }
 
+  /** The assembled user profile (L0 basic info plus identity). */
+  bridgeProfile(payload, options) {
+    return this.#request('POST', '/bridge/v1/profile', payload, options)
+  }
+
   /** Turn one session into an episode narrative (SDK-side, idempotent). */
   bridgeFinalize(payload, options) {
     return this.#request('POST', '/bridge/v1/finalize', payload, options)

@@ -156,6 +156,7 @@ export const api = {
   purge: (confirm) => request('purge', { confirm }),
   history: (id) => request('history', { id }),
   stats: () => request('stats', {}),
+  profile: () => request('profile', {}),
   metrics: (minutes) => request('metrics', typeof minutes === 'number' ? { minutes } : {}),
   recentActivity: (limit) => request('activity/recent', typeof limit === 'number' ? { limit } : {}),
   // Removes everything the plugin stored, including the venv.

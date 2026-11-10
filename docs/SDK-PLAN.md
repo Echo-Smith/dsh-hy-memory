@@ -59,3 +59,22 @@
 | `lag_snapshot` / `run` / `stop` | 内部生命周期，插件已通过进程管理覆盖 |
 | `delete_all` | 已有带确认的「彻底清除」，不需要第二个删除入口 |
 | `add_extracted` | 绕过提炼直接写入，与"自动沉淀"的设计相悖 |
+
+## 补充：个人画像（L0）—— 不需要 evolve，也不需要 ultra
+
+起因是问「个人画像有没有做可视化」。查证结论：
+
+- 代码里 `get_user_profile` 一次都没出现过，面板没有画像。
+- 引擎里 `l0_basic_info` 和 `l4_identity` 都是 0 行，`get_user_profile` 返回 `profile: null`。
+
+一度以为要用 `evolve`（ultra 模式专用）才能生成画像。**这个假设是错的**：
+
+- pro 模式下 `evolve` 直接抛 `requires mode='ultra'`。
+- 但读源码发现画像是在 **write 流程**里自动写的（`writer.py` 调用 `upsert_basic_profile`），条件是抽取结果里出现 `basic_info` 字段。
+- 实测：写入一句「我叫 X，是一名独立开发者，常驻杭州」，立刻得到
+  `{"name": "X", "occupation": "独立开发者", "location": "杭州"}`。
+
+所以画像一直可用，只是**我们的对话里没出现过 `basic_profile` 默认字段**（姓名/年龄/城市/职业/雇主）。这不是缺陷，是抽取 schema 与使用场景不匹配。
+
+已接入：`bridge/v1/profile` → 面板「个人」标签顶部的画像卡。字段名走 locale，未知字段原样显示。
+

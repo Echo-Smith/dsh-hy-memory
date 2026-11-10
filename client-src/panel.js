@@ -724,6 +724,7 @@ export function SettingsSection(props) {
   const [eraseError, setEraseError] = React.useState('')
   // Session narratives, read from the engine rather than kept separately.
   const [narratives, setNarratives] = React.useState({ items: [], error: '' })
+  const [profileState, setProfileState] = React.useState({ data: null, error: '' })
   const [purgeText, setPurgeText] = React.useState('')
   const [purgeBusy, setPurgeBusy] = React.useState('')
   const [purgeDone, setPurgeDone] = React.useState(null)
@@ -896,6 +897,15 @@ export function SettingsSection(props) {
   // Sessions of the selected workspace, read while the workspace tab is open:
   // they feed the picker and the group headers of the session list.
   React.useEffect(() => {
+    if (masterOff || tab !== 'personal') return undefined
+    let cancelled = false
+    void api.profile()
+      .then((data) => { if (!cancelled) setProfileState({ data: data?.profile ?? null, error: '' }) })
+      .catch((error) => { if (!cancelled) setProfileState({ data: null, error: errorMessage(error) }) })
+    return () => { cancelled = true }
+  }, [tab, masterOff, refreshTick])
+
+  React.useEffect(() => {
     if (masterOff || tab !== 'project') return undefined
     if (projectKey === '') {
       setSessions({ loading: false, error: '', items: [] })
@@ -946,6 +956,15 @@ export function SettingsSection(props) {
   }, [tab, masterOff, searchQuery, refreshTick, paging.personal])
 
   React.useEffect(() => {
+    if (masterOff || tab !== 'personal') return undefined
+    let cancelled = false
+    void api.profile()
+      .then((data) => { if (!cancelled) setProfileState({ data: data?.profile ?? null, error: '' }) })
+      .catch((error) => { if (!cancelled) setProfileState({ data: null, error: errorMessage(error) }) })
+    return () => { cancelled = true }
+  }, [tab, masterOff, refreshTick])
+
+  React.useEffect(() => {
     if (masterOff || tab !== 'project') return undefined
     let cancelled = false
     const scope = projectKey === '' ? {} : { projectKey }
@@ -969,6 +988,15 @@ export function SettingsSection(props) {
     })()
     return () => { cancelled = true }
   }, [tab, masterOff, searchQuery, refreshTick, projectKey, paging.project])
+
+  React.useEffect(() => {
+    if (masterOff || tab !== 'personal') return undefined
+    let cancelled = false
+    void api.profile()
+      .then((data) => { if (!cancelled) setProfileState({ data: data?.profile ?? null, error: '' }) })
+      .catch((error) => { if (!cancelled) setProfileState({ data: null, error: errorMessage(error) }) })
+    return () => { cancelled = true }
+  }, [tab, masterOff, refreshTick])
 
   React.useEffect(() => {
     if (masterOff || tab !== 'project') return undefined
@@ -1789,7 +1817,33 @@ export function SettingsSection(props) {
   // 个人 has no workspace scope at all: the file header (with search) starts the
   // panel. 项目与会话 scopes to a workspace, then shows 项目记忆 and 会话记忆 as
   // two independent blocks.
-  const renderPersonalBody = () => h(React.Fragment, null, renderFilesHead(), renderPersonal())
+  const renderPersonalBody = () => h(React.Fragment, null, renderProfileCard(), renderFilesHead(), renderPersonal())
+
+  /**
+   * The user profile the engine assembles while writing (L0). It is read, never
+   * generated here: a write that mentions a name/place/job already produces it.
+   */
+  const renderProfileCard = () => {
+    const profile = profileState.data ?? null
+    if (profileState.error !== '') return null
+    if (profile === null || Object.keys(profile.fields ?? {}).length === 0) return null
+    const entries = Object.entries(profile.fields)
+    return h('section', { className: 'hm-card hm-profileCard' },
+      h('div', { className: 'hm-cardHead' },
+        h('h2', { className: 'hm-h2' }, t('profile.title')),
+        profile.at > 0 ? h('span', { className: 'hm-muted' }, timeText(t, profile.at, Date.now())) : null),
+      h('div', { className: 'hm-profileFields' },
+        entries.map(([key, value]) => h('div', { key, className: 'hm-profileField' },
+          h('span', { className: 'hm-profileKey' }, profileFieldLabel(t, key)),
+          h('span', { className: 'hm-profileValue' }, String(value))))))
+  }
+
+  /** Known profile keys get a translated label; anything else shows as-is. */
+  const profileFieldLabel = (t, key) => {
+    const labelKey = `profile.field.${key}`
+    const label = t(labelKey)
+    return label === labelKey ? key : label
+  }
 
   const renderWorkspaceBody = () => h(React.Fragment, null,
     renderWorkspaceBar(),
