@@ -154,6 +154,9 @@ export const api = {
   // Purge: archive every memory to JSONL then delete it. The host refuses
   // anything but the literal confirmation string.
   purge: (confirm) => request('purge', { confirm }),
+  // Removes everything the plugin stored, including the venv.
+  erase: (bytes) => request('erase', { confirm: 'ERASE', acknowledgeBytes: bytes }),
+  dataUsage: () => request('dataUsage', {}),
   // Recall explanation: why (if ever) the host injected this memory.
   explain: (id) => request('explain', { id }),
   // Which memories appear in the recall log at all, and the text injected at one

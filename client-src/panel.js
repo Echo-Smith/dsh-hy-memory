@@ -653,6 +653,13 @@ export function SettingsSection(props) {
   const [captureBusy, setCaptureBusy] = React.useState(false)
   const [captureError, setCaptureError] = React.useState('')
   const [purgeOpen, setPurgeOpen] = React.useState(false)
+  // Erasing is stronger than purging: it removes the venv and every file the
+  // plugin wrote, so it needs its own confirmation and its size on screen.
+  const [eraseOpen, setEraseOpen] = React.useState(false)
+  const [eraseText, setEraseText] = React.useState('')
+  const [eraseBusy, setEraseBusy] = React.useState(false)
+  const [eraseUsage, setEraseUsage] = React.useState(null)
+  const [eraseError, setEraseError] = React.useState('')
   const [purgeText, setPurgeText] = React.useState('')
   const [purgeBusy, setPurgeBusy] = React.useState('')
   const [purgeDone, setPurgeDone] = React.useState(null)
@@ -1783,6 +1790,82 @@ export function SettingsSection(props) {
     body)
   }
 
+  const openErase = async () => {
+    setEraseText('')
+    setEraseError('')
+    setEraseUsage(null)
+    setEraseOpen(true)
+    try {
+      const usage = await api.dataUsage()
+      setEraseUsage(usage ?? null)
+    } catch {}
+  }
+
+  const confirmErase = async () => {
+    if (eraseBusy) return
+    setEraseBusy(true)
+    setEraseError('')
+    try {
+      await api.erase(eraseUsage?.bytes ?? 0)
+      setEraseOpen(false)
+      // The plugin has just deleted its own settings and data; a reload is the
+      // only honest way to show the empty state.
+      window.location?.reload?.()
+    } catch (error) {
+      setEraseError(errorMessage(error))
+    } finally {
+      setEraseBusy(false)
+    }
+  }
+
+  const formatBytes = (bytes) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB']
+    let value = bytes
+    let unit = 0
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024
+      unit += 1
+    }
+    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
+  }
+
+  const renderEraseModal = () => h(ui.Modal, {
+    open: eraseOpen,
+    onClose: () => { if (!eraseBusy) { setEraseOpen(false); setEraseText('') } },
+    title: t('erase.title'),
+    closeLabel: t('common.close'),
+    footer: h('div', { className: 'hm-row' },
+      h(ui.Button, {
+        size: 'sm', variant: 'ghost', 'data-modal-autofocus': '',
+        onClick: () => { setEraseOpen(false); setEraseText('') },
+      }, t('row.confirmDelete.cancel')),
+      h(ui.Button, {
+        size: 'sm',
+        variant: 'outline',
+        className: 'hm-dangerAction',
+        disabled: eraseBusy || eraseText.trim() !== 'ERASE' || eraseUsage === null,
+        onClick: () => { void confirmErase() },
+      }, eraseBusy ? t('erase.busy') : t('erase.confirm'))),
+  },
+  h('p', { className: 'hm-muted' }, t('erase.body')),
+  h('p', { className: 'hm-muted' },
+    eraseUsage === null
+      ? t('erase.measuring')
+      : t('erase.usage', { size: formatBytes(eraseUsage.bytes), path: eraseUsage.path })),
+  h('label', { className: 'hm-field hm-purgeField' },
+    h('span', { className: 'hm-fieldLabel' }, t('erase.hint')),
+    h('span', { className: 'hm-inputWrap' },
+      h('input', {
+        type: 'text',
+        className: 'hm-input',
+        value: eraseText,
+        disabled: eraseBusy,
+        placeholder: 'ERASE',
+        onChange: (event) => setEraseText(String(event.target.value ?? '')),
+      }))),
+  eraseError !== '' ? h('p', { className: 'hm-error' }, eraseError) : null)
+
   const renderPurgeModal = () => h(ui.Modal, {
     open: purgeOpen,
     onClose: () => {
@@ -1968,6 +2051,13 @@ export function SettingsSection(props) {
             setPurgeOpen(true)
           },
         }, purgeBusy !== '' ? t('purge.busy') : t('purge.action')),
+        h(ui.Button, {
+          size: 'sm',
+          variant: 'outline',
+          className: 'hm-dangerAction',
+          disabled: eraseBusy,
+          onClick: () => { void openErase() },
+        }, t('erase.action')),
         purgeHint() !== ''
           ? h('span', {
             className: `hm-dupeHint${purgeError !== '' ? ' hm-error' : ''}`,
@@ -2240,5 +2330,6 @@ export function SettingsSection(props) {
     renderForgetModal(),
     renderDupeModal(),
     renderWhyModal(),
-    renderPurgeModal())
+    renderPurgeModal(),
+    renderEraseModal())
 }

@@ -167,7 +167,12 @@ https://raw.githubusercontent.com/Echo-Smith/dsh-hy-memory/main/market/index.jso
 
 ## 隐私与数据位置
 
-全部数据在 `$DSH_HOME/integrations/hy-memory/` 下：SQLite + 向量库 + 日志。删掉这个目录就是彻底清除。除了调用你配置的模型端点，插件不向外发任何数据。
+全部数据在 `$DSH_HOME/integrations/hy-memory/` 下：SQLite + 向量库 + 日志 + 私有 Python 环境。除了调用你配置的模型端点，插件不向外发任何数据。
+
+**彻底清除**：面板诊断区有「清除全部数据」按钮。它会删除这个目录下的所有内容（含 Python 环境，通常几百 MB），
+需要输入 `ERASE` 并在弹窗里看到实际占用大小才能确认。不会影响 DSH、你的会话或其他插件。
+
+只删插件不影响记忆：卸载后数据留在原处，重装即恢复。
 
 ---
 ---

@@ -252,5 +252,13 @@
   "usage.lexicalHint": "语义不足时的次数",
   "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型",
   "usage.intro": "记忆引擎在本进程里的调用量与注入开销。模型在下方「记忆引擎」里选择。",
-  "engine.modelEmpty": "这个 profile 没有可用的模型"
+  "engine.modelEmpty": "这个 profile 没有可用的模型",
+  "erase.action": "清除全部数据",
+  "erase.title": "删除所有记忆数据？",
+  "erase.body": "这会删除这个插件保存的一切：三层记忆、向量库、日志、设置，以及它的 Python 环境。DSH 与你的会话不受影响，但这个插件会回到刚安装的状态。删除后无法撤销。",
+  "erase.measuring": "正在统计占用…",
+  "erase.usage": "将删除 {size}，位置：{path}",
+  "erase.hint": "输入 ERASE 确认",
+  "erase.confirm": "永久删除",
+  "erase.busy": "删除中…"
 }

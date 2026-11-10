@@ -252,5 +252,13 @@
   "usage.lexicalHint": "when semantic recall came up short",
   "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine",
   "usage.intro": "What the memory engine did in this process and what it injected. The model is chosen under Memory engine below.",
-  "engine.modelEmpty": "This profile offers no models"
+  "engine.modelEmpty": "This profile offers no models",
+  "erase.action": "Erase all data",
+  "erase.title": "Delete all memory data?",
+  "erase.body": "This removes everything the plugin stored: all three tiers, the vector store, logs, settings, and its Python environment. DSH and your conversations are unaffected, but the plugin returns to a freshly installed state. This cannot be undone.",
+  "erase.measuring": "Measuring disk usage…",
+  "erase.usage": "Will delete {size} at {path}",
+  "erase.hint": "Type ERASE to confirm",
+  "erase.confirm": "Erase permanently",
+  "erase.busy": "Erasing…"
 }

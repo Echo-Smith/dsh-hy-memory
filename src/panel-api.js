@@ -33,6 +33,10 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'explained', request: '{}' },
   { name: 'injected', request: '{ at }' },
   { name: 'purge', request: '{ confirm }' },
+  // Deleting everything the plugin ever stored: memories, the venv, logs.
+  // Separate from `purge`, which only clears memory rows.
+  { name: 'erase', request: '{ confirm }' },
+  { name: 'dataUsage', request: '{}' },
   { name: 'merge', request: '{ tier, keep?, drop }' },
   { name: 'update/check', request: '{}' },
   // Installing is separate from checking: it writes to the profile, and it is
@@ -210,6 +214,49 @@ export function createPanelApi(deps) {
         }
       })(),
     }
+  }
+
+  /** How much disk this plugin occupies, so a destructive action can state it. */
+  async function describeDataUsage() {
+    const { statSync, readdirSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const { integrationDir } = await import('./paths.js')
+    const walk = (path) => {
+      let total = 0
+      let entries = []
+      try {
+        entries = readdirSync(path, { withFileTypes: true })
+      } catch {
+        return 0
+      }
+      for (const entry of entries) {
+        const child = join(path, entry.name)
+        try {
+          total += entry.isDirectory() ? walk(child) : statSync(child).size
+        } catch {}
+      }
+      return total
+    }
+    return { path: integrationDir(), bytes: walk(integrationDir()) }
+  }
+
+  /** Remove the data, the venv, the logs and the settings file. */
+  async function eraseStoredData() {
+    const { rm } = await import('node:fs/promises')
+    const { integrationDir, dataDir, venvDir, settingsPath } = await import('./paths.js')
+    const before = (await describeDataUsage()).bytes
+    for (const target of [dataDir(), venvDir(), settingsPath()]) {
+      await rm(target, { recursive: true, force: true }).catch(() => {})
+    }
+    // Everything else the plugin wrote (state, queue, logs, projects index).
+    const { readdirSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    try {
+      for (const entry of readdirSync(integrationDir())) {
+        await rm(join(integrationDir(), entry), { recursive: true, force: true }).catch(() => {})
+      }
+    } catch {}
+    return before
   }
 
   /** Cheap read-only detection; a status poll must never fail because of it. */
@@ -473,6 +520,26 @@ export function createPanelApi(deps) {
         })
         activity?.record({ kind: 'sidecar', summary: `updated ${result.previous} -> ${result.version}`, ok: true })
         return jsonResponse({ ...result, restart: 'restart-required' })
+      }
+      case 'dataUsage':
+        return jsonResponse(await describeDataUsage())
+      case 'erase': {
+        // Two doors: an explicit phrase, and an acknowledgement of the size.
+        if (String(body?.confirm ?? '') !== 'ERASE') {
+          throw new MemHubError('confirm_required', 'confirm ERASE is required', 400)
+        }
+        const usage = await describeDataUsage()
+        if (usage.bytes > 0 && body?.acknowledgeBytes !== usage.bytes) {
+          throw new MemHubError('size_not_acknowledged', `call again with acknowledgeBytes: ${usage.bytes}`, 409)
+        }
+        // Stop first: SQLite and the vector store must not be written while the
+        // directory underneath them disappears.
+        try {
+          sidecar?.stop?.()
+        } catch {}
+        const removed = await eraseStoredData()
+        activity?.record({ kind: 'delete', summary: 'erased all memory data', detail: `${removed} bytes freed`, ok: true })
+        return jsonResponse({ erased: true, bytes: removed })
       }
       case 'projects':
         return jsonResponse(await listProjects())

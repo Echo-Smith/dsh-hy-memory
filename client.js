@@ -152,6 +152,9 @@ var api = {
   // Purge: archive every memory to JSONL then delete it. The host refuses
   // anything but the literal confirmation string.
   purge: (confirm) => request("purge", { confirm }),
+  // Removes everything the plugin stored, including the venv.
+  erase: (bytes) => request("erase", { confirm: "ERASE", acknowledgeBytes: bytes }),
+  dataUsage: () => request("dataUsage", {}),
   // Recall explanation: why (if ever) the host injected this memory.
   explain: (id) => request("explain", { id }),
   // Which memories appear in the recall log at all, and the text injected at one
@@ -439,7 +442,15 @@ var zh_default = {
   "usage.lexicalHint": "语义不足时的次数",
   "usage.modelFailing": "模型连续失败 {count} 次（{code}），建议在「记忆引擎」里换一个模型",
   "usage.intro": "记忆引擎在本进程里的调用量与注入开销。模型在下方「记忆引擎」里选择。",
-  "engine.modelEmpty": "这个 profile 没有可用的模型"
+  "engine.modelEmpty": "这个 profile 没有可用的模型",
+  "erase.action": "清除全部数据",
+  "erase.title": "删除所有记忆数据？",
+  "erase.body": "这会删除这个插件保存的一切：三层记忆、向量库、日志、设置，以及它的 Python 环境。DSH 与你的会话不受影响，但这个插件会回到刚安装的状态。删除后无法撤销。",
+  "erase.measuring": "正在统计占用…",
+  "erase.usage": "将删除 {size}，位置：{path}",
+  "erase.hint": "输入 ERASE 确认",
+  "erase.confirm": "永久删除",
+  "erase.busy": "删除中…"
 };
 
 // locale/en.json
@@ -697,7 +708,15 @@ var en_default = {
   "usage.lexicalHint": "when semantic recall came up short",
   "usage.modelFailing": "The model failed {count} times in a row ({code}); switch it under Memory engine",
   "usage.intro": "What the memory engine did in this process and what it injected. The model is chosen under Memory engine below.",
-  "engine.modelEmpty": "This profile offers no models"
+  "engine.modelEmpty": "This profile offers no models",
+  "erase.action": "Erase all data",
+  "erase.title": "Delete all memory data?",
+  "erase.body": "This removes everything the plugin stored: all three tiers, the vector store, logs, settings, and its Python environment. DSH and your conversations are unaffected, but the plugin returns to a freshly installed state. This cannot be undone.",
+  "erase.measuring": "Measuring disk usage…",
+  "erase.usage": "Will delete {size} at {path}",
+  "erase.hint": "Type ERASE to confirm",
+  "erase.confirm": "Erase permanently",
+  "erase.busy": "Erasing…"
 };
 
 // client-src/locale.js
@@ -2003,6 +2022,11 @@ function SettingsSection(props) {
   const [captureBusy, setCaptureBusy] = React2.useState(false);
   const [captureError, setCaptureError] = React2.useState("");
   const [purgeOpen, setPurgeOpen] = React2.useState(false);
+  const [eraseOpen, setEraseOpen] = React2.useState(false);
+  const [eraseText, setEraseText] = React2.useState("");
+  const [eraseBusy, setEraseBusy] = React2.useState(false);
+  const [eraseUsage, setEraseUsage] = React2.useState(null);
+  const [eraseError, setEraseError] = React2.useState("");
   const [purgeText, setPurgeText] = React2.useState("");
   const [purgeBusy, setPurgeBusy] = React2.useState("");
   const [purgeDone, setPurgeDone] = React2.useState(null);
@@ -3173,6 +3197,102 @@ function SettingsSection(props) {
       body
     );
   };
+  const openErase = async () => {
+    setEraseText("");
+    setEraseError("");
+    setEraseUsage(null);
+    setEraseOpen(true);
+    try {
+      const usage = await api.dataUsage();
+      setEraseUsage(usage ?? null);
+    } catch {
+    }
+  };
+  const confirmErase = async () => {
+    if (eraseBusy) return;
+    setEraseBusy(true);
+    setEraseError("");
+    try {
+      await api.erase(eraseUsage?.bytes ?? 0);
+      setEraseOpen(false);
+      window.location?.reload?.();
+    } catch (error) {
+      setEraseError(errorMessage(error));
+    } finally {
+      setEraseBusy(false);
+    }
+  };
+  const formatBytes2 = (bytes) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit += 1;
+    }
+    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+  };
+  const renderEraseModal = () => h(
+    ui.Modal,
+    {
+      open: eraseOpen,
+      onClose: () => {
+        if (!eraseBusy) {
+          setEraseOpen(false);
+          setEraseText("");
+        }
+      },
+      title: t("erase.title"),
+      closeLabel: t("common.close"),
+      footer: h(
+        "div",
+        { className: "hm-row" },
+        h(ui.Button, {
+          size: "sm",
+          variant: "ghost",
+          "data-modal-autofocus": "",
+          onClick: () => {
+            setEraseOpen(false);
+            setEraseText("");
+          }
+        }, t("row.confirmDelete.cancel")),
+        h(ui.Button, {
+          size: "sm",
+          variant: "outline",
+          className: "hm-dangerAction",
+          disabled: eraseBusy || eraseText.trim() !== "ERASE" || eraseUsage === null,
+          onClick: () => {
+            void confirmErase();
+          }
+        }, eraseBusy ? t("erase.busy") : t("erase.confirm"))
+      )
+    },
+    h("p", { className: "hm-muted" }, t("erase.body")),
+    h(
+      "p",
+      { className: "hm-muted" },
+      eraseUsage === null ? t("erase.measuring") : t("erase.usage", { size: formatBytes2(eraseUsage.bytes), path: eraseUsage.path })
+    ),
+    h(
+      "label",
+      { className: "hm-field hm-purgeField" },
+      h("span", { className: "hm-fieldLabel" }, t("erase.hint")),
+      h(
+        "span",
+        { className: "hm-inputWrap" },
+        h("input", {
+          type: "text",
+          className: "hm-input",
+          value: eraseText,
+          disabled: eraseBusy,
+          placeholder: "ERASE",
+          onChange: (event) => setEraseText(String(event.target.value ?? ""))
+        })
+      )
+    ),
+    eraseError !== "" ? h("p", { className: "hm-error" }, eraseError) : null
+  );
   const renderPurgeModal = () => h(
     ui.Modal,
     {
@@ -3432,6 +3552,15 @@ function SettingsSection(props) {
             setPurgeOpen(true);
           }
         }, purgeBusy !== "" ? t("purge.busy") : t("purge.action")),
+        h(ui.Button, {
+          size: "sm",
+          variant: "outline",
+          className: "hm-dangerAction",
+          disabled: eraseBusy,
+          onClick: () => {
+            void openErase();
+          }
+        }, t("erase.action")),
         purgeHint() !== "" ? h("span", {
           className: `hm-dupeHint${purgeError !== "" ? " hm-error" : ""}`,
           role: "status"
@@ -3778,7 +3907,8 @@ function SettingsSection(props) {
     renderForgetModal(),
     renderDupeModal(),
     renderWhyModal(),
-    renderPurgeModal()
+    renderPurgeModal(),
+    renderEraseModal()
   );
 }
 

@@ -152,3 +152,9 @@ End-to-end test with three planted probe facts (a release passphrase, a backup d
 - Limitation that remains: the sidecar's model is a process env var, so follow mode takes effect from the next start. A brand-new session's model is only known after its first turn, which is after the sidecar started. Writes in that window use the profile default.
 - Model resolution had no tests at all, which is why this survived; `test/model-route.test.mjs` now covers routing, missing pins, missing keys and the env handed to the sidecar.
 
+## Phase 18: erasing everything, and what happens on uninstall
+
+- New Diagnostics action: erase all data (memories, vector store, logs, settings, private venv). Two doors — the literal phrase `ERASE` and an echo of the measured byte count — so a stale or guessed size cannot drive the call. Verified it leaves other plugins and DSH session files untouched.
+- Uninstalling the plugin never deletes data: `stop()` only kills the sidecar, flushes the queue and releases the lease. A test now forbids `rm` on the integration or data directory.
+- First-run framework install failure (a PyPI download) now reports an actionable message instead of a pip traceback.
+

@@ -167,7 +167,11 @@ Credentials are filtered before a batch reaches the capture queue and never reac
 
 ## Privacy and data location
 
-Everything lives under `$DSH_HOME/integrations/hy-memory/`: SQLite, the vector store, and logs. Deleting that directory removes all of it. Apart from calls to the model endpoint you configured, the plugin sends nothing anywhere.
+Everything lives under `$DSH_HOME/integrations/hy-memory/`: SQLite, the vector store, logs and a private Python environment. Apart from calls to the model endpoint you configured, the plugin sends nothing anywhere.
+
+**Erasing everything**: the Diagnostics card has an "Erase all data" button. It removes the whole directory including the Python environment (usually a few hundred MB), and requires typing `ERASE` plus seeing the measured size before it will run. DSH, your conversations and other plugins are untouched.
+
+Removing only the plugin keeps your memories: the data stays in place and is there again on reinstall.
 
 ---
 ---

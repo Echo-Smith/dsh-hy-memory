@@ -70,6 +70,8 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/explained',
     '/api/hy-memory/injected',
     '/api/hy-memory/purge',
+    '/api/hy-memory/erase',
+    '/api/hy-memory/dataUsage',
     '/api/hy-memory/merge',
     '/api/hy-memory/update/check',
     '/api/hy-memory/update/install',
@@ -230,4 +232,24 @@ test('a recovered project title wins over a key-only placeholder in state', asyn
   const body = await (await route.fetch(post('projects', {}))).json()
   const item = (body.data.items ?? []).find((entry) => entry.key === 'abc123')
   assert.equal(item?.title, 'default-workspace', 'the entry with a real path supplies the title')
+})
+
+test('erase refuses without the exact confirmation phrase', async () => {
+  const { api } = harness()
+  for (const body of [{}, { confirm: 'erase' }, { confirm: 'PURGE' }, { confirm: 'ERASE ' }]) {
+    const res = await api.routes.find((r) => r.path.endsWith('/erase'))
+      .fetch(post('erase', body))
+    assert.equal(res.status, 400, `refused: ${JSON.stringify(body)}`)
+    assert.equal((await res.json()).error.code, 'confirm_required')
+  }
+})
+
+test('erase refuses before the caller acknowledges the size', async () => {
+  const { api } = harness()
+  const res = await api.routes.find((r) => r.path.endsWith('/erase'))
+    .fetch(post('erase', { confirm: 'ERASE' }))
+  // A non-empty data dir requires the measured byte count to be echoed back, so
+  // a stale or guessed size cannot drive a destructive call.
+  assert.equal(res.status, 409)
+  assert.equal((await res.json()).error.code, 'size_not_acknowledged')
 })
