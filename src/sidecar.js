@@ -80,6 +80,10 @@ export class Sidecar {
     const uv = await findUv()
     const log = (text) => this.#log(`${text}\n`)
     if (uv) {
+      // uv pins 3.12 on purpose: it can fetch that interpreter itself, so uv
+      // users get a known-good version instead of whatever happens to be on the
+      // machine. The fallback below accepts any 3.11+, which is what the README
+      // documents.
       await run(uv, ['venv', '--python', '3.12', venvDir()], log)
       await run(uv, ['pip', 'install', '--python', python, `${SDK_PACKAGE}==${SDK_VERSION}`], log)
     } else {

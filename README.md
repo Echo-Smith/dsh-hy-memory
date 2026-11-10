@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/npm/l/dsh-hy-memory)](LICENSE)
 [![dshfind](https://dshfind.com/api/badge/Echo-Smith/dsh-hy-memory?lang=zh)](https://dshfind.com/zh/plugins/Echo-Smith/dsh-hy-memory?ref=badge)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-informational)
-![python](https://img.shields.io/badge/python-3.12%20%7C%20uv-informational)
+![python](https://img.shields.io/badge/python-%E2%89%A53.11-informational)
 
 > 给 DSH 装上三层长期记忆。新开一个会话，它仍然记得你的偏好、这个项目的约定，以及上次踩过的坑——不用你重讲一遍。
 
@@ -81,7 +81,7 @@ node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/dsh-h
 
 - DSH 0.2.x（在这台机器上验证的是 0.2.2-rc.1）
 - 一个 OpenAI 兼容的模型路由；记忆直接沿用你 DSH 里已配好的，不需要额外填 key
-- Python 3.11+：首次启动自动准备独立 venv，不污染系统环境
+- Python 3.11+：首次启动自动准备独立 venv，不污染系统环境。装了 [uv](https://docs.astral.sh/uv/) 的话由 uv 自行下载并固定用 3.12；没有 uv 则回退到你系统里的 3.11 及以上版本
 
 ## 你会用到的东西
 

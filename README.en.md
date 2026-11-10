@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/npm/l/dsh-hy-memory)](LICENSE)
 [![dshfind](https://dshfind.com/api/badge/Echo-Smith/dsh-hy-memory?lang=zh)](https://dshfind.com/zh/plugins/Echo-Smith/dsh-hy-memory?ref=badge)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-informational)
-![python](https://img.shields.io/badge/python-3.12%20%7C%20uv-informational)
+![python](https://img.shields.io/badge/python-%E2%89%A53.11-informational)
 
 > Three tiers of long-term memory for DSH. Open a new session and it still knows your preferences, this project's conventions, and the mistakes you already paid for — without you repeating any of it.
 
@@ -81,7 +81,7 @@ node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/dsh-h
 
 - DSH 0.2.x (verified on 0.2.2-rc.1)
 - An OpenAI-compatible model route; memory reuses whatever you already configured in DSH, no extra key
-- Python 3.11+: a private venv is prepared on first start, nothing is installed into your system Python
+- Python 3.11+: a private venv is prepared on first start, nothing is installed into your system Python. With [uv](https://docs.astral.sh/uv/) installed, uv fetches and pins Python 3.12 itself; without uv it falls back to whatever 3.11+ you already have
 
 ## What you will use
 
