@@ -85,8 +85,8 @@ Settings → Memory. Two tabs (personal, project & sessions), each with search, 
 
 | | |
 |---|---|
-| ![Row actions](docs/screenshots/panel-row-actions.png) | ![Why recalled](docs/screenshots/panel-why-recalled.png) |
-| Every row expands to details and deletion | "Why was this recalled": which retrieval brought it in |
+| ![Row actions](docs/screenshots/panel-row-actions.png) | **"Why was this recalled"** |
+| Every row expands to details and deletion | Open any memory to see which retrieval brought it in: the query, how many matched, and each score. Screenshot pending. |
 
 | | |
 |---|---|

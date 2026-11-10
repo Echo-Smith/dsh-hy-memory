@@ -85,8 +85,8 @@ node scripts/install-into-profile.mjs --spec https://github.com/Echo-Smith/dsh-h
 
 | | |
 |---|---|
-| ![行操作](docs/screenshots/panel-row-actions.png) | ![为什么召回](docs/screenshots/panel-why-recalled.png) |
-| 每行都能展开看详情、删除 | 「为什么被召回」：这条记忆是哪次检索带进来的 |
+| ![行操作](docs/screenshots/panel-row-actions.png) | **「为什么被召回」** |
+| 每行都能展开看详情、删除 | 点到任意一条记忆，能看到它是哪一次检索带进来的：哪句查询、命中了几条、各自什么分数。截图待补。 |
 
 | | |
 |---|---|

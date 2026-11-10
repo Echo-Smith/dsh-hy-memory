@@ -34,7 +34,7 @@ const staging = arg('staging', join(tmpdir(), `hy-memory-publish-${Date.now()}`)
 const registry = arg('registry', '')
 const dist = join(ROOT, 'dist')
 
-const ENTRY = ['index.js', 'build.mjs', 'cordis.patch.yml', 'client.js', 'client-src', 'src', 'bridge', 'locale', 'icon.svg', 'docs/screenshots', 'package.json', 'README.md', 'README.zh.md', 'LICENSE']
+const ENTRY = ['index.js', 'build.mjs', 'cordis.patch.yml', 'client.js', 'client-src', 'src', 'bridge', 'locale', 'icon.svg', 'docs/screenshots', 'package.json', 'README.md', 'README.zh.md', 'CHANGELOG.md', 'LICENSE']
 
 function exec(command, commandArgs, { cwd = staging, env = process.env } = {}) {
   return execFileSync(command, commandArgs, { cwd, env, encoding: 'utf8' })
