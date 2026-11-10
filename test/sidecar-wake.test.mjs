@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -69,5 +69,16 @@ test('a missing route retries instead of latching the sidecar into idle+error', 
   } finally {
     sidecar.stop()
     rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('plugin shutdown never deletes the data directory', async () => {
+  // Removing the plugin must not destroy the user's memories: the data lives
+  // outside the package on purpose, and uninstalling is reversible by design.
+  const sources = ['index.js', 'src/sidecar.js', 'src/paths.js']
+  for (const file of sources) {
+    const text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
+    assert.doesNotMatch(text, /rm(?:Sync)?\(\s*integrationDir\(\)/, `${file} must not remove the integration directory`)
+    assert.doesNotMatch(text, /rm(?:Sync)?\(\s*dataDir\(\)/, `${file} must not remove the data directory`)
   }
 })

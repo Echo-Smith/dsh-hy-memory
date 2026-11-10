@@ -501,6 +501,19 @@ function createRuntime(ctx, config) {
    */
   async function failoverModel(info) {
     try {
+      // Never override a choice the user made explicitly. Failover exists for
+      // the case where nobody chose and the default happens to be broken; if the
+      // user picked a model, a failure is reported, not silently replaced.
+      if (state?.data?.modelChosenByUser === true) {
+        log('memory model is failing, but it was chosen by the user; not switching')
+        activity.record({
+          kind: 'error',
+          summary: 'memory model keeps failing',
+          detail: `chosen by the user: ${settings?.llm?.provider ?? ''}/${settings?.llm?.model ?? ''}`,
+          ok: false,
+        })
+        return
+      }
       const options = await listModelOptions()
       if (!Array.isArray(options) || options.length === 0) return
       const current = settings?.llm ?? {}
@@ -519,18 +532,95 @@ function createRuntime(ctx, config) {
     }
   }
 
+  /**
+   * Adopt a model once and keep it.
+   *
+   * The rule the user asked for: an explicit configuration always wins; with no
+   * configuration the first model the profile resolves (which reflects the
+   * session's own model) is adopted and recorded as configuration. After that
+   * the choice is stable — switching sessions must not move memory onto a
+   * different model, because a switch costs a sidecar restart and drops the
+   * in-flight writes.
+   */
+  async function adoptInitialModel() {
+    const configured = settings?.llm ?? {}
+    if (configured.provider && configured.model) return null
+    if (configured.source === 'custom') return null
+    const resolved = route ?? (await ensureRoute())
+    if (!resolved || !resolved.provider || !resolved.model) return null
+    // Prefer a cheap model for this one-time choice: it runs in the background
+    // and its job is to turn conversation into facts, not to reason.
+    const options = await listModelOptions()
+    const cheap = pickCheapModel(options, resolved.provider)
+    const provider = cheap?.provider ?? resolved.provider
+    const model = cheap?.model ?? resolved.model
+    await applySettingsPatch({ llm: { ...settings.llm, provider, model } })
+    if (state?.data) {
+      state.data.modelAdopted = { at: Date.now(), provider, model, source: cheap ? 'cheap' : 'session' }
+      state.save()
+    }
+    log(`adopted memory model ${provider}/${model}`)
+    return { provider, model }
+  }
+
+  /** Cheapest usable option: small/flash/mini tiers first, same provider if possible. */
+  function pickCheapModel(options, preferProvider) {
+    if (!Array.isArray(options) || options.length === 0) return null
+    const cheapness = (option) => {
+      const id = String(option.model ?? '').toLowerCase()
+      if (/nano|mini|small|lite|flash/.test(id)) return 0
+      if (/pro|max|opus|large/.test(id)) return 2
+      return 1
+    }
+    const ranked = [...options].sort((a, b) => {
+      const byCost = cheapness(a) - cheapness(b)
+      if (byCost !== 0) return byCost
+      const aPreferred = a.provider === preferProvider ? 0 : 1
+      const bPreferred = b.provider === preferProvider ? 0 : 1
+      return aPreferred - bPreferred
+    })
+    return ranked[0] ?? null
+  }
+
+  // Settings are written from three places (the panel, model adoption, and
+  // failover). Two writers racing left a saved model and the running model
+  // disagreeing, so writes are serialised.
+  let settingsWrite = Promise.resolve()
+
   async function applySettingsPatch(patch) {
+    const run = () => applySettingsPatchNow(patch)
+    const chained = settingsWrite.then(run, run)
+    settingsWrite = chained.catch(() => {})
+    return chained
+  }
+
+  async function applySettingsPatchNow(patch) {
     const previous = settings
     settings = mergeSettings(previous, patch)
     await saveSettings(settings)
     activity.record({ kind: 'sidecar', summary: 'settings updated', ok: true })
     void ensureRoute()
-    const needsRestart = ['mode', 'embedding', 'language', 'llm']
-      .some((key) => JSON.stringify(previous[key]) !== JSON.stringify(settings[key]))
-    if (needsRestart && sidecar && sidecar.status().state === 'ready') {
+    // Only a real change restarts the sidecar: saving an unchanged form must not
+    // interrupt writes (the user asked to verify that a save takes effect, not
+    // to pay for it).
+    const llmChanged = (previous.llm?.provider ?? '') !== (settings.llm?.provider ?? '')
+      || (previous.llm?.model ?? '') !== (settings.llm?.model ?? '')
+      || (previous.llm?.source ?? '') !== (settings.llm?.source ?? '')
+      || (previous.llm?.baseURL ?? '') !== (settings.llm?.baseURL ?? '')
+      || (previous.llm?.apiKey ?? '') !== (settings.llm?.apiKey ?? '')
+    const needsRestart = ['mode', 'embedding', 'language'].some((key) => JSON.stringify(previous[key]) !== JSON.stringify(settings[key])) || llmChanged
+    if (needsRestart && sidecar) {
+      // Stop whatever is running regardless of the reported state: a sidecar in
+      // 'starting' also holds the old model, and leaving it up meant a saved
+      // model change silently kept serving writes on the previous model.
+      const before = sidecar.status().state
       try {
         sidecar.stop()
       } catch {}
+      if (state?.data) {
+        state.data.lastLlmRestart = { at: Date.now(), from: before, provider: settings.llm?.provider, model: settings.llm?.model }
+        state.save()
+      }
       maybeAutoStart()
     }
     return settings
@@ -620,6 +710,9 @@ function createRuntime(ctx, config) {
       settings = await loadSettings()
       if (config?.enabled === false) settings = { ...settings, enabled: false }
       await ensureRoute()
+      // Freeze the model before the sidecar starts, so the first start already
+      // uses the model this profile will keep.
+      await adoptInitialModel().catch((error) => log('initial model adoption failed', error))
       sidecar = new Sidecar({
         settings: settingsNow,
         getRoute: () => route,
@@ -770,7 +863,18 @@ function createRuntime(ctx, config) {
         contextOf,
         log,
         describeModel: () => describeModelRoute(route, settings),
-        onSettingsChange: applySettingsPatch,
+        onSettingsChange: async (patch) => {
+          // A model coming from the panel is the user's decision: record it so
+          // failover will not override it later.
+          const chosen = Boolean(patch?.llm?.provider && patch?.llm?.model)
+          const next = await applySettingsPatch(patch)
+          if (chosen && state?.data) {
+            state.data.modelChosenByUser = true
+            state.data.modelChoice = { at: Date.now(), provider: next.llm?.provider, model: next.llm?.model }
+            state.save()
+          }
+          return next
+        },
       })
 
       const definitions = createTools({ settings: settingsNow, state, activity, getClient, ensureClient, contextOf, log })

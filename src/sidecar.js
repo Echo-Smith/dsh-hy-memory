@@ -113,7 +113,20 @@ export class Sidecar {
 
   async #start() {
     try {
-      const python = await this.ensureVenv()
+      let python
+      try {
+        python = await this.ensureVenv()
+      } catch (error) {
+        // The most common first-run failure is not a plugin bug: the memory
+        // framework is a PyPI package and installing it needs network. Say what
+        // is missing and what to do, rather than surfacing a pip traceback.
+        const message = String(error?.message ?? error)
+        const offline = /No matching distribution|Could not find a version|ConnectTimeout|Network is unreachable|Temporary failure in name resolution/i.test(message)
+        this.#lastError = offline
+          ? 'Memory needs to download its Python framework (hy-memory) once, and that download failed. Check the network, then press Start again.'
+          : `Memory could not prepare its Python environment: ${message.slice(0, 200)}`
+        throw new Error(this.#lastError)
+      }
       if (!existsSync(BRIDGE)) throw new Error(`sidecar bridge missing at ${BRIDGE}`)
       this.#port = await freePort()
       const settings = this.#settings()
