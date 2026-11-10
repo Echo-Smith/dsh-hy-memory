@@ -2075,6 +2075,37 @@ export function SettingsSection(props) {
   // model" — the same question the reference screenshot's usage page answers for
   // API calls. Values come from status.context (recall accounting) and
   // status.modelHealth (is the configured model answering).
+  /**
+   * Seven-day bars for recalls and for write cost. Plain divs rather than a
+   * chart library: two series, seven points, and a dependency would outweigh it.
+   */
+  const renderUsageDays = (usage, write) => {
+    const days = status?.usageDays
+    if (!days) return null
+    const bar = (series, key, label, format) => {
+      const rows = Array.isArray(days[key]) ? days[key] : []
+      const max = Math.max(1, ...rows.map((row) => Number(row[series] ?? 0)))
+      return h('div', { className: 'hm-days' },
+        h('div', { className: 'hm-daysHead' }, label),
+        h('div', { className: 'hm-daysBars' },
+          rows.map((row) => {
+            const value = Number(row[series] ?? 0)
+            const height = Math.round((value / max) * 100)
+            const day = String(row.day ?? '')
+            return h('div', {
+              key: `${series}-${day}`,
+              className: 'hm-daysBar',
+              title: `${day}: ${format(value)}`,
+            },
+            h('span', { className: 'hm-daysFill', style: { height: `${Math.max(value > 0 ? 6 : 0, height)}%` } }),
+            h('span', { className: 'hm-daysLabel' }, day.slice(5)))
+          })))
+    }
+    return h('div', { className: 'hm-daysGrid' },
+      bar('tokens', 'days', t('usage.daysRecalls'), (v) => `${v} tok`),
+      bar('total', 'writes', t('usage.daysWrites'), (v) => `${v} tok`))
+  }
+
   const renderUsage = () => {
     const usage = status?.context ?? null
     const write = status?.writeUsage ?? null
@@ -2096,6 +2127,7 @@ export function SettingsSection(props) {
         row(t('usage.items'), String(usage?.totalItems ?? 0), t('usage.itemsHint')),
         row(t('usage.tokens'), String(usage?.totalTokens ?? 0), t('usage.tokensHint')),
         row(t('usage.lexical'), String(usage?.lexicalTurns ?? 0), t('usage.lexicalHint'))),
+      renderUsageDays(usage, write),
       // Writing memory costs tokens too, and the SDK reports the real number
       // per write. Shown separately so memory can be accounted for on its own.
       h('div', { className: 'hm-usageGrid' },

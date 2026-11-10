@@ -458,7 +458,9 @@ var zh_default = {
   "usage.promptTokens": "输入 tokens",
   "usage.promptHint": "提炼提示词",
   "usage.completionTokens": "输出 tokens",
-  "usage.completionHint": "提炼结果"
+  "usage.completionHint": "提炼结果",
+  "usage.daysRecalls": "近 7 天召回 tokens",
+  "usage.daysWrites": "近 7 天写入 tokens"
 };
 
 // locale/en.json
@@ -732,7 +734,9 @@ var en_default = {
   "usage.promptTokens": "Input tokens",
   "usage.promptHint": "extraction prompt",
   "usage.completionTokens": "Output tokens",
-  "usage.completionHint": "extraction result"
+  "usage.completionHint": "extraction result",
+  "usage.daysRecalls": "Recall tokens, last 7 days",
+  "usage.daysWrites": "Write tokens, last 7 days"
 };
 
 // client-src/locale.js
@@ -1245,6 +1249,14 @@ var PANEL_CSS = `
 .hm-usageLabel { font-size:12px; opacity:0.72; }
 .hm-usageValue { font-size:20px; font-weight:600; line-height:1.2; font-variant-numeric:tabular-nums; }
 .hm-usageHint { font-size:11px; opacity:0.55; }
+/* Seven-day bars: fixed height so a quiet day still occupies its slot. */
+.hm-daysGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; margin-top:12px; }
+.hm-days { display:flex; flex-direction:column; gap:6px; }
+.hm-daysHead { font-size:12px; opacity:0.72; }
+.hm-daysBars { display:flex; align-items:flex-end; gap:4px; height:56px; padding:4px 0; border-bottom:1px solid var(--hm-border-1, rgba(127,127,127,0.18)); }
+.hm-daysBar { flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; gap:2px; min-width:0; }
+.hm-daysFill { display:block; width:100%; max-width:18px; border-radius:3px 3px 0 0; background:var(--hm-accent, #6b8afd); opacity:0.85; }
+.hm-daysLabel { font-size:10px; opacity:0.5; white-space:nowrap; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-fileHead { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }
@@ -3586,6 +3598,44 @@ function SettingsSection(props) {
       diagOpen ? h("pre", { className: "hm-pre" }, JSON.stringify(status, null, 2)) : null
     );
   };
+  const renderUsageDays = (usage, write) => {
+    const days = status?.usageDays;
+    if (!days) return null;
+    const bar = (series, key, label, format) => {
+      const rows = Array.isArray(days[key]) ? days[key] : [];
+      const max = Math.max(1, ...rows.map((row) => Number(row[series] ?? 0)));
+      return h(
+        "div",
+        { className: "hm-days" },
+        h("div", { className: "hm-daysHead" }, label),
+        h(
+          "div",
+          { className: "hm-daysBars" },
+          rows.map((row) => {
+            const value = Number(row[series] ?? 0);
+            const height = Math.round(value / max * 100);
+            const day = String(row.day ?? "");
+            return h(
+              "div",
+              {
+                key: `${series}-${day}`,
+                className: "hm-daysBar",
+                title: `${day}: ${format(value)}`
+              },
+              h("span", { className: "hm-daysFill", style: { height: `${Math.max(value > 0 ? 6 : 0, height)}%` } }),
+              h("span", { className: "hm-daysLabel" }, day.slice(5))
+            );
+          })
+        )
+      );
+    };
+    return h(
+      "div",
+      { className: "hm-daysGrid" },
+      bar("tokens", "days", t("usage.daysRecalls"), (v) => `${v} tok`),
+      bar("total", "writes", t("usage.daysWrites"), (v) => `${v} tok`)
+    );
+  };
   const renderUsage = () => {
     const usage = status?.context ?? null;
     const write = status?.writeUsage ?? null;
@@ -3619,6 +3669,7 @@ function SettingsSection(props) {
         row(t("usage.tokens"), String(usage?.totalTokens ?? 0), t("usage.tokensHint")),
         row(t("usage.lexical"), String(usage?.lexicalTurns ?? 0), t("usage.lexicalHint"))
       ),
+      renderUsageDays(usage, write),
       // Writing memory costs tokens too, and the SDK reports the real number
       // per write. Shown separately so memory can be accounted for on its own.
       h(

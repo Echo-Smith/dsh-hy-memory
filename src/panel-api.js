@@ -218,6 +218,24 @@ export function createPanelApi(deps) {
       })(),
       // What writing memory actually cost, measured by the SDK per write.
       writeUsage: state?.data?.memoryUsage ?? null,
+      // Last 7 local days for both counters, zero-filled so a chart always has
+      // seven bars.
+      usageDays: await (async () => {
+        const { recentDays } = await import('./usage.js')
+        return {
+          days: recentDays(state?.data?.recallUsageByDay, 7).map((row) => ({
+            day: row.day,
+            turns: row.turns ?? 0,
+            items: row.items ?? 0,
+            tokens: row.tokens ?? 0,
+          })),
+          writes: recentDays(state?.data?.memoryUsageByDay, 7).map((row) => ({
+            day: row.day,
+            writes: row.writes ?? 0,
+            total: row.total ?? 0,
+          })),
+        }
+      })(),
     }
   }
 

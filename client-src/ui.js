@@ -520,6 +520,14 @@ const PANEL_CSS = `
 .hm-usageLabel { font-size:12px; opacity:0.72; }
 .hm-usageValue { font-size:20px; font-weight:600; line-height:1.2; font-variant-numeric:tabular-nums; }
 .hm-usageHint { font-size:11px; opacity:0.55; }
+/* Seven-day bars: fixed height so a quiet day still occupies its slot. */
+.hm-daysGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; margin-top:12px; }
+.hm-days { display:flex; flex-direction:column; gap:6px; }
+.hm-daysHead { font-size:12px; opacity:0.72; }
+.hm-daysBars { display:flex; align-items:flex-end; gap:4px; height:56px; padding:4px 0; border-bottom:1px solid var(--hm-border-1, rgba(127,127,127,0.18)); }
+.hm-daysBar { flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; gap:2px; min-width:0; }
+.hm-daysFill { display:block; width:100%; max-width:18px; border-radius:3px 3px 0 0; background:var(--hm-accent, #6b8afd); opacity:0.85; }
+.hm-daysLabel { font-size:10px; opacity:0.5; white-space:nowrap; }
 .hm-contextLine { margin:0; font-size:11px; color:var(--dsw-alias-label-tertiary); }
 .hm-countLine { margin:0; font-size:11px; color:var(--dsw-alias-label-secondary); }
 .hm-fileHead { display:flex; align-items:center; gap:10px; width:100%; min-width:0; }

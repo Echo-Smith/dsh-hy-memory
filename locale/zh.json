@@ -268,5 +268,7 @@
   "usage.promptTokens": "输入 tokens",
   "usage.promptHint": "提炼提示词",
   "usage.completionTokens": "输出 tokens",
-  "usage.completionHint": "提炼结果"
+  "usage.completionHint": "提炼结果",
+  "usage.daysRecalls": "近 7 天召回 tokens",
+  "usage.daysWrites": "近 7 天写入 tokens"
 }

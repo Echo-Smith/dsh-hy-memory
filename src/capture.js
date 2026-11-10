@@ -9,6 +9,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { collectSearchItems, truncateChars } from './recall.js'
+import { addToDay } from './usage.js'
 import { contentHash, projectAgentId, projectKey, projectTitleForPath, pickScene, resolveUser, workspaceIdFor, writeScope } from './tiers.js'
 import { integrationDir } from './paths.js'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -590,6 +591,12 @@ export function createCapture(deps) {
       total: (previous.total ?? 0) + Number(usage.total || 0),
       lastAt: Date.now(),
     }
+    store.memoryUsageByDay = addToDay(store.memoryUsageByDay, {
+      writes: 1,
+      prompt: Number(usage.prompt || 0),
+      completion: Number(usage.completion || 0),
+      total: Number(usage.total || 0),
+    })
     state.save()
   }
 

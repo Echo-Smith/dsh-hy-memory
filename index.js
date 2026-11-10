@@ -18,6 +18,7 @@ import { describeModel as describeModelRoute, readDotEnv, readProviders, resolve
 import { DEFAULT_SETTINGS, loadSettings, mergeSettings, saveSettings } from './src/settings.js'
 import { dshHome, integrationDir, projectsPath, statePath } from './src/paths.js'
 import { projectKeysFromRows, projectKey, projectTitleForPath, resolveUser } from './src/tiers.js'
+import { addToDay } from './src/usage.js'
 import { sessionDirPathCandidates } from './src/session-path.js'
 import { Sidecar } from './src/sidecar.js'
 
@@ -816,6 +817,12 @@ function createRuntime(ctx, config) {
               lexical: (previous.lexical ?? 0) + (info?.source === 'lexical' || info?.source === 'both' ? 1 : 0),
               lastAt: Date.now(),
             }
+            usageStore.recallUsageByDay = addToDay(usageStore.recallUsageByDay, {
+              turns: 1,
+              items: info?.items ?? 0,
+              tokens,
+              lexical: info?.source === 'lexical' || info?.source === 'both' ? 1 : 0,
+            })
             state.save()
           }
         },

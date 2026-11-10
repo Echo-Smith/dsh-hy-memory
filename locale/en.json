@@ -268,5 +268,7 @@
   "usage.promptTokens": "Input tokens",
   "usage.promptHint": "extraction prompt",
   "usage.completionTokens": "Output tokens",
-  "usage.completionHint": "extraction result"
+  "usage.completionHint": "extraction result",
+  "usage.daysRecalls": "Recall tokens, last 7 days",
+  "usage.daysWrites": "Write tokens, last 7 days"
 }
