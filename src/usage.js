@@ -43,3 +43,34 @@ export function recentDays(days, count = 7, now = Date.now()) {
   }
   return out
 }
+
+/**
+ * Compact token counts: K / M / B, one decimal place, but never at the cost of
+ * small numbers. A memory engine's usage is often four or five digits, and
+ * "0.02M" hides exactly the change a user is watching for, so anything below ten
+ * thousand is shown in full.
+ *
+ *   68       -> "68"
+ *   9_999    -> "9,999"
+ *   19_987   -> "19.9K"
+ *   1_234_567 -> "1.2M"
+ */
+export function formatTokens(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '0'
+  const abs = Math.abs(n)
+  if (abs < 10_000) return Math.round(n).toLocaleString('en-US')
+  const units = [
+    { limit: 1e9, suffix: 'B' },
+    { limit: 1e6, suffix: 'M' },
+    { limit: 1e3, suffix: 'K' },
+  ]
+  const unit = units.find((u) => abs >= u.limit) ?? units.at(-1)
+  const scaled = n / unit.limit
+  // Truncate rather than round: 19,987 must read "19.9K", not "20K". Rounding
+  // upward hides the very change the user is watching for, and a count that
+  // only ever rounds up overstates usage.
+  const truncated = Math.trunc(scaled * 10) / 10
+  const text = truncated.toFixed(1).replace(/\.0$/, '')
+  return `${text}${unit.suffix}`
+}

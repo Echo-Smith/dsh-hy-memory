@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addToDay, localDayKey, recentDays } from '../src/usage.js'
+import { addToDay, formatTokens, localDayKey, recentDays } from '../src/usage.js'
 
 test('the day key follows local time, not UTC', () => {
   const evening = new Date(2026, 10, 10, 23, 30) // local
@@ -32,4 +32,27 @@ test('a week view fills quiet days with zeros so every bar exists', () => {
   assert.equal(week.at(-1).day, '2026-11-10')
   assert.equal(week.at(-1).tokens, 900)
   assert.equal(week[0].turns, 0, 'an empty day reads as zero, not as missing')
+})
+
+test('small counts keep full precision', () => {
+  // A five-digit engine total is the common case; "0.07K" would be worse than
+  // the number itself.
+  assert.equal(formatTokens(0), '0')
+  assert.equal(formatTokens(68), '68')
+  assert.equal(formatTokens(9999), '9,999')
+})
+
+test('counts at or above ten thousand use K, then M, then B', () => {
+  assert.equal(formatTokens(10_000), '10K')
+  assert.equal(formatTokens(19_987), '19.9K')
+  assert.equal(formatTokens(123_456), '123.4K')
+  assert.equal(formatTokens(1_234_567), '1.2M')
+  assert.equal(formatTokens(3_000_000_000), '3B')
+})
+
+test('the abbreviation truncates rather than rounds up', () => {
+  // 19,987 rounding to "20K" would hide the change a user is watching for, and
+  // would overstate usage.
+  assert.equal(formatTokens(19_987), '19.9K')
+  assert.equal(formatTokens(20_000), '20K', 'an exact round number drops the decimal')
 })

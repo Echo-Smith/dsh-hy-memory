@@ -1390,6 +1390,24 @@ var PANEL_CSS = `
 .hm-sectionTitle { margin:0; font-size:13px; font-weight:600; }
 `;
 
+// src/usage.js
+function formatTokens(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  const abs = Math.abs(n);
+  if (abs < 1e4) return Math.round(n).toLocaleString("en-US");
+  const units = [
+    { limit: 1e9, suffix: "B" },
+    { limit: 1e6, suffix: "M" },
+    { limit: 1e3, suffix: "K" }
+  ];
+  const unit = units.find((u) => abs >= u.limit) ?? units.at(-1);
+  const scaled = n / unit.limit;
+  const truncated = Math.trunc(scaled * 10) / 10;
+  const text = truncated.toFixed(1).replace(/\.0$/, "");
+  return `${text}${unit.suffix}`;
+}
+
 // client-src/panel.js
 var TIERS = ["personal", "project", "session"];
 var ACTIVITY_LIMIT = 60;
@@ -3601,7 +3619,7 @@ function SettingsSection(props) {
   const renderUsageDays = (usage, write) => {
     const days = status?.usageDays;
     if (!days) return null;
-    const bar = (series, key, label, format) => {
+    const bar = (series, key, label) => {
       const rows = Array.isArray(days[key]) ? days[key] : [];
       const max = Math.max(1, ...rows.map((row) => Number(row[series] ?? 0)));
       return h(
@@ -3620,7 +3638,7 @@ function SettingsSection(props) {
               {
                 key: `${series}-${day}`,
                 className: "hm-daysBar",
-                title: `${day}: ${format(value)}`
+                title: `${day}: ${formatTokens(value)}`
               },
               h("span", { className: "hm-daysFill", style: { height: `${Math.max(value > 0 ? 6 : 0, height)}%` } }),
               h("span", { className: "hm-daysLabel" }, day.slice(5))
@@ -3632,17 +3650,20 @@ function SettingsSection(props) {
     return h(
       "div",
       { className: "hm-daysGrid" },
-      bar("tokens", "days", t("usage.daysRecalls"), (v) => `${v} tok`),
-      bar("total", "writes", t("usage.daysWrites"), (v) => `${v} tok`)
+      bar("tokens", "days", t("usage.daysRecalls")),
+      bar("total", "writes", t("usage.daysWrites"))
     );
   };
   const renderUsage = () => {
     const usage = status?.context ?? null;
     const write = status?.writeUsage ?? null;
     const health = status?.modelHealth ?? null;
-    const row = (label, value, hint) => h(
+    const row = (label, value, hint, exact) => h(
       "div",
-      { className: "hm-usageCell" },
+      {
+        className: "hm-usageCell",
+        title: exact === void 0 ? void 0 : `${exact}`
+      },
       h("span", { className: "hm-usageLabel" }, label),
       h("strong", { className: "hm-usageValue" }, value),
       hint ? h("span", { className: "hm-usageHint" }, hint) : null
@@ -3666,8 +3687,8 @@ function SettingsSection(props) {
         { className: "hm-usageGrid" },
         row(t("usage.recalls"), String(usage?.turns ?? 0), t("usage.recallsHint")),
         row(t("usage.items"), String(usage?.totalItems ?? 0), t("usage.itemsHint")),
-        row(t("usage.tokens"), String(usage?.totalTokens ?? 0), t("usage.tokensHint")),
-        row(t("usage.lexical"), String(usage?.lexicalTurns ?? 0), t("usage.lexicalHint"))
+        row(t("usage.tokens"), formatTokens(usage?.totalTokens ?? 0), t("usage.tokensHint"), `${usage?.totalTokens ?? 0}`),
+        row(t("usage.lexical"), formatTokens(usage?.lexicalTurns ?? 0), t("usage.lexicalHint"), `${usage?.lexicalTurns ?? 0}`)
       ),
       renderUsageDays(usage, write),
       // Writing memory costs tokens too, and the SDK reports the real number
@@ -3675,10 +3696,10 @@ function SettingsSection(props) {
       h(
         "div",
         { className: "hm-usageGrid" },
-        row(t("usage.writes"), String(write?.writes ?? 0), t("usage.writesHint")),
-        row(t("usage.writeTokens"), String(write?.total ?? 0), t("usage.writeTokensHint")),
-        row(t("usage.promptTokens"), String(write?.prompt ?? 0), t("usage.promptHint")),
-        row(t("usage.completionTokens"), String(write?.completion ?? 0), t("usage.completionHint"))
+        row(t("usage.writes"), formatTokens(write?.writes ?? 0), t("usage.writesHint"), `${write?.writes ?? 0}`),
+        row(t("usage.writeTokens"), formatTokens(write?.total ?? 0), t("usage.writeTokensHint"), `${write?.total ?? 0}`),
+        row(t("usage.promptTokens"), formatTokens(write?.prompt ?? 0), t("usage.promptHint"), `${write?.prompt ?? 0}`),
+        row(t("usage.completionTokens"), formatTokens(write?.completion ?? 0), t("usage.completionHint"), `${write?.completion ?? 0}`)
       )
     );
   };
