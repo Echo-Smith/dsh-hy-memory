@@ -12,7 +12,7 @@ function fakeState() {
   }
 }
 
-function harness({ settings = DEFAULT_SETTINGS, getClient = () => null, readProjectIndex = () => ({}) } = {}) {
+function harness({ settings = DEFAULT_SETTINGS, getClient = () => null, readProjectIndex = () => ({}), sidecarClient = null } = {}) {
   const state = fakeState()
   const activity = new ActivityLog()
   const current = settings
@@ -27,6 +27,8 @@ function harness({ settings = DEFAULT_SETTINGS, getClient = () => null, readProj
     settings: () => current,
     sidecar: {
       status: () => ({ state: 'idle', port: 0, pid: 0, startedAt: 0, lastError: '', venvReady: false }),
+      // Routes that talk to the sidecar directly read this, not getClient.
+      get client() { return sidecarClient },
     },
     ops,
     activity,
@@ -256,4 +258,47 @@ test('erase refuses before the caller acknowledges the size', async () => {
   // a stale or guessed size cannot drive a destructive call.
   assert.equal(res.status, 409)
   assert.equal((await res.json()).error.code, 'size_not_acknowledged')
+})
+
+test('the three engine routes surface what the sidecar reports', async () => {
+  const { api } = harness({
+    sidecarClient: {
+      bridgeStatsOverview: async (body) => ({ total: 1298, scenes: { chat: { count: 613 } }, seen: body }),
+      bridgeMetrics: async (body) => ({ window_minutes: body.minutes, requests: { completed: 51, failed: 9 } }),
+      bridgeRecentHistory: async (body) => ({ events: [{ event: 'ADD', new_memory: 'x' }], limit: body.limit }),
+    },
+  })
+  const call = async (name, body) => {
+    const route = api.routes.find((entry) => entry.path.endsWith(`/${name}`))
+    return (await route.fetch(post(name, body))).json()
+  }
+  const stats = await call('stats', {})
+  assert.equal(stats.data.total, 1298, 'the SDK aggregate is passed through untouched')
+  const metrics = await call('metrics', { minutes: 30 })
+  assert.equal(metrics.data.window_minutes, 30, 'the requested window reaches the engine')
+  const history = await call('activity/recent', { limit: 5 })
+  assert.equal(history.data.events.length, 1)
+  assert.equal(history.data.limit, 5, 'the requested limit reaches the engine')
+})
+
+test('engine routes report a clear error when no sidecar is running', async () => {
+  const { api } = harness({ sidecarClient: null })
+  for (const name of ['stats', 'metrics', 'activity/recent']) {
+    const route = api.routes.find((entry) => entry.path.endsWith(`/${name}`))
+    const res = await route.fetch(post(name, {}))
+    assert.notEqual(res.status, 200, `${name} refuses without a sidecar`)
+    assert.equal((await res.json()).error.code, 'sidecar_unavailable')
+  }
+})
+
+test('status survives a null model description instead of failing wholesale', async () => {
+  // A throwing field used to fail the whole route, which blanks every card in
+  // the panel. One bad dependency must not take the status read down.
+  const { api } = harness({ sidecarClient: null })
+  const route = api.routes.find((entry) => entry.path.endsWith('/status'))
+  const res = await route.fetch(post('status', {}))
+  assert.equal(res.status, 200, 'status still answers')
+  const body = await res.json()
+  assert.equal(body.data.model.ready, false, 'the model reads as not ready rather than crashing')
+  assert.equal(body.data.engineStats, null, 'engine stats degrade to null without a sidecar')
 })

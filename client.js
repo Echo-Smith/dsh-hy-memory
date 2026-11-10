@@ -465,7 +465,14 @@ var zh_default = {
   "usage.completionHint": "提炼结果",
   "usage.daysRecalls": "近 7 天召回 tokens",
   "usage.daysWrites": "近 7 天写入 tokens",
-  "tabs.engine": "引擎与用量"
+  "tabs.engine": "引擎与用量",
+  "diag.engineTotal": "引擎记忆总数",
+  "diag.engineScene": "引擎 · {scene}",
+  "diag.engineRequests": "引擎请求（近 1 小时）",
+  "diag.engineRequestValue": "完成 {done} · 失败 {failed} · 进行中 {active}",
+  "diag.engineLatency": "平均处理耗时",
+  "activity.sourcePlugin": "面板事件",
+  "activity.sourceEngine": "引擎事件"
 };
 
 // locale/en.json
@@ -742,7 +749,14 @@ var en_default = {
   "usage.completionHint": "extraction result",
   "usage.daysRecalls": "Recall tokens, last 7 days",
   "usage.daysWrites": "Write tokens, last 7 days",
-  "tabs.engine": "Engine"
+  "tabs.engine": "Engine",
+  "diag.engineTotal": "Memories in the engine",
+  "diag.engineScene": "Engine · {scene}",
+  "diag.engineRequests": "Engine requests (last hour)",
+  "diag.engineRequestValue": "{done} done · {failed} failed · {active} active",
+  "diag.engineLatency": "Average handling time",
+  "activity.sourcePlugin": "Panel events",
+  "activity.sourceEngine": "Engine events"
 };
 
 // client-src/locale.js
@@ -1352,6 +1366,7 @@ var PANEL_CSS = `
 .hm-disclosureTitle { color:var(--dsw-alias-label-primary); font-weight:600; }
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.hm-activitySources { display:flex; gap:6px; margin:0 0 8px; }
 .hm-activityRow { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
 .hm-activityRowButton { appearance:none; width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:left; padding:4px 6px; border-radius:6px; cursor:pointer; }
 .hm-activityRowButton:hover { background:var(--dsw-alias-interactive-bg-hover); }
@@ -1483,6 +1498,9 @@ function ActivityPanel(props) {
   const [open, setOpen] = React2.useState(false);
   const [tick, setTick] = React2.useState(0);
   const [now, setNow] = React2.useState(() => Date.now());
+  const [source, setSource] = React2.useState("plugin");
+  const [engineEvents, setEngineEvents] = React2.useState([]);
+  const [engineError, setEngineError] = React2.useState("");
   const [injected, setInjected] = React2.useState(null);
   const [injectedLoading, setInjectedLoading] = React2.useState(false);
   const [injectedError, setInjectedError] = React2.useState("");
@@ -1522,6 +1540,25 @@ function ActivityPanel(props) {
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [tick]);
+  React2.useEffect(() => {
+    if (source !== "engine") return void 0;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await api.recentActivity(30);
+        if (cancelled) return;
+        setEngineEvents(asArray(data?.events));
+        setEngineError("");
+      } catch (error2) {
+        if (cancelled) return;
+        setEngineError(errorMessage(error2));
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [source, tick]);
   const openInjected = async (event) => {
     setInjected({ at: event.at });
     setInjectedLoading(true);
@@ -1623,6 +1660,47 @@ function ActivityPanel(props) {
     }
     return h("div", { key, className: "hm-activityRow" }, content);
   });
+  const engineRows = engineEvents.map((event, index) => {
+    const kind = String(event?.event ?? event?.kind ?? "event");
+    const at = Number(event?.at ?? event?.timestamp ?? 0) || 0;
+    const after = String(event?.new_memory ?? event?.after ?? "");
+    const before = String(event?.old_memory ?? event?.before ?? "");
+    return h(
+      "div",
+      { key: `${kind}-${index}`, className: "hm-activityRow" },
+      h(ui.StateDot, { state: dotState(kind === "DELETE" ? "error" : "done") }),
+      h(
+        "span",
+        { className: "hm-activityBody" },
+        h(
+          "span",
+          { className: "hm-activitySummary" },
+          h(ui.Tag, { tone: kind === "DELETE" ? "danger" : "outline" }, kind),
+          " ",
+          after.slice(0, 90) || before.slice(0, 90)
+        )
+      ),
+      at > 0 ? h("span", { className: "hm-activityTime" }, timeText(t, at, now)) : null
+    );
+  });
+  const renderSourceSwitch = () => h(
+    "div",
+    { className: "hm-activitySources" },
+    h(ui.Button, {
+      size: "sm",
+      variant: source === "plugin" ? "outline" : "ghost",
+      onClick: () => setSource("plugin")
+    }, t("activity.sourcePlugin")),
+    h(ui.Button, {
+      size: "sm",
+      variant: source === "engine" ? "outline" : "ghost",
+      onClick: () => setSource("engine")
+    }, t("activity.sourceEngine"))
+  );
+  if (source === "engine") {
+    const engineBody = engineError !== "" ? h("div", { className: "hm-empty", role: "alert" }, h("p", { className: "hm-error" }, engineError)) : engineRows.length === 0 ? h("div", { className: "hm-empty" }, t("activity.empty")) : h("div", { className: "hm-activity" }, engineRows);
+    return h(React2.Fragment, null, renderSourceSwitch(), engineBody);
+  }
   let body;
   if (loading) {
     body = h("div", { className: "hm-state" }, h(ui.StateDot, { state: "ongoing" }), t("common.loading"));
@@ -3551,6 +3629,51 @@ function SettingsSection(props) {
         h("span", { className: "hm-fieldLabel" }, t("diag.dataSize")),
         h("span", { className: "hm-fieldValue" }, size)
       ));
+    }
+    const engineStats = status?.engineStats ?? null;
+    const engineMetrics = status?.engineMetrics ?? null;
+    if (engineStats && typeof engineStats.total === "number") {
+      const scenes = engineStats.scenes && typeof engineStats.scenes === "object" ? engineStats.scenes : {};
+      details.push(h(
+        "div",
+        { key: "engineTotal", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("diag.engineTotal")),
+        h("span", { className: "hm-fieldValue hm-mono" }, `${engineStats.total}`)
+      ));
+      for (const [name, value] of Object.entries(scenes)) {
+        details.push(h(
+          "div",
+          { key: `scene-${name}`, className: "hm-field" },
+          h("span", { className: "hm-fieldLabel" }, t("diag.engineScene", { scene: name })),
+          h("span", { className: "hm-fieldValue hm-mono" }, `${value?.count ?? 0}`)
+        ));
+      }
+    }
+    if (engineMetrics && engineMetrics.requests) {
+      const requests = engineMetrics.requests;
+      const latency = engineMetrics.avg_latency_ms ?? {};
+      details.push(h(
+        "div",
+        { key: "engineReq", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("diag.engineRequests")),
+        h(
+          "span",
+          { className: "hm-fieldValue hm-mono" },
+          t("diag.engineRequestValue", {
+            done: requests.completed ?? 0,
+            failed: requests.failed ?? 0,
+            active: requests.active_sys1 ?? 0
+          })
+        )
+      ));
+      if (Number.isFinite(Number(latency.sys1_workflow_ms))) {
+        details.push(h(
+          "div",
+          { key: "engineLatency", className: "hm-field" },
+          h("span", { className: "hm-fieldLabel" }, t("diag.engineLatency")),
+          h("span", { className: "hm-fieldValue hm-mono" }, `${Math.round(Number(latency.sys1_workflow_ms))} ms`)
+        ));
+      }
     }
     const totalCount = memoryTotal();
     const context = status?.context ?? null;

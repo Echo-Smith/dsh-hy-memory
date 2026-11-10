@@ -617,6 +617,7 @@ const PANEL_CSS = `
 .hm-disclosureTitle { color:var(--dsw-alias-label-primary); font-weight:600; }
 .hm-disclosureBody { display:flex; flex-direction:column; gap:8px; padding:0 12px 12px; }
 .hm-activity { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.hm-activitySources { display:flex; gap:6px; margin:0 0 8px; }
 .hm-activityRow { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
 .hm-activityRowButton { appearance:none; width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:left; padding:4px 6px; border-radius:6px; cursor:pointer; }
 .hm-activityRowButton:hover { background:var(--dsw-alias-interactive-bg-hover); }

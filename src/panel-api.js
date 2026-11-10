@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { MemHubError, detectPairing } from './memhub.js'
 import { installRelease } from './updater.js'
+import { resolveUser } from './tiers.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
 
 export const PANEL_PREFIX = '/api/hy-memory'
@@ -125,7 +126,9 @@ export function createPanelApi(deps) {
       counts = await ops.counts(context)
     } catch {}
     const status = sidecar.status()
-    const model = describeModel()
+    // A null here used to throw and take the whole status route with it, which
+    // blanks the entire panel. Every field below is read defensively instead.
+    const model = describeModel() ?? { ready: false, provider: '', model: '', source: 'dsh' }
     const defaultModel = await describeDefaultModel().catch(() => null)
     const embedding = config.embedding ?? { mode: 'local' }
     const embeddingReady = embedding.mode === 'local'
@@ -162,6 +165,28 @@ export function createPanelApi(deps) {
         })(),
       },
       counts,
+      // SDK-native aggregation: instant and consistent with the engine's own
+      // view, where the per-tier counters below scan rows by tier.
+      engineStats: await (async () => {
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeStatsOverview !== 'function') return null
+        try {
+          const user = resolveUser(settings)
+          return await client.bridgeStatsOverview({ user_id: user })
+        } catch {
+          return null
+        }
+      })(),
+      // Live engine load; a failure here must not break the whole status read.
+      engineMetrics: await (async () => {
+        const client = sidecar?.client
+        if (!client || typeof client.bridgeMetrics !== 'function') return null
+        try {
+          return await client.bridgeMetrics({ minutes: 60 })
+        } catch {
+          return null
+        }
+      })(),
       scene: state?.data?.lastScene ?? 'chat',
       mode: config.mode ?? 'pro',
       embedding: { mode: embedding.mode ?? 'local', ready: embeddingReady },

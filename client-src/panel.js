@@ -118,6 +118,12 @@ function ActivityPanel(props) {
   // The poll refreshes this clock too, so relative times in this list stay live
   // without re-rendering the rest of the section.
   const [now, setNow] = React.useState(() => Date.now())
+  // The engine keeps its own event log (ADD/UPDATE/DELETE with before/after).
+  // It answers a different question than the plugin's activity feed: "what did
+  // the engine do", not "what did the plugin decide".
+  const [source, setSource] = React.useState('plugin')
+  const [engineEvents, setEngineEvents] = React.useState([])
+  const [engineError, setEngineError] = React.useState('')
   const [injected, setInjected] = React.useState(null)
   const [injectedLoading, setInjectedLoading] = React.useState(false)
   const [injectedError, setInjectedError] = React.useState('')
@@ -156,6 +162,24 @@ function ActivityPanel(props) {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [tick])
+
+  React.useEffect(() => {
+    if (source !== 'engine') return undefined
+    let cancelled = false
+    const load = async () => {
+      try {
+        const data = await api.recentActivity(30)
+        if (cancelled) return
+        setEngineEvents(asArray(data?.events))
+        setEngineError('')
+      } catch (error) {
+        if (cancelled) return
+        setEngineError(errorMessage(error))
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [source, tick])
 
   /** The text the host injected for one recall entry (or "not in the log"). */
   const openInjected = async (event) => {
@@ -243,6 +267,43 @@ function ActivityPanel(props) {
     }
     return h('div', { key, className: 'hm-activityRow' }, content)
   })
+
+  // Engine events reuse the activity row layout so the two views read the same.
+  const engineRows = engineEvents.map((event, index) => {
+    const kind = String(event?.event ?? event?.kind ?? 'event')
+    const at = Number(event?.at ?? event?.timestamp ?? 0) || 0
+    const after = String(event?.new_memory ?? event?.after ?? '')
+    const before = String(event?.old_memory ?? event?.before ?? '')
+    return h('div', { key: `${kind}-${index}`, className: 'hm-activityRow' },
+      h(ui.StateDot, { state: dotState(kind === 'DELETE' ? 'error' : 'done') }),
+      h('span', { className: 'hm-activityBody' },
+        h('span', { className: 'hm-activitySummary' },
+          h(ui.Tag, { tone: kind === 'DELETE' ? 'danger' : 'outline' }, kind),
+          ' ',
+          after.slice(0, 90) || before.slice(0, 90))),
+      at > 0 ? h('span', { className: 'hm-activityTime' }, timeText(t, at, now)) : null)
+  })
+
+  const renderSourceSwitch = () => h('div', { className: 'hm-activitySources' },
+    h(ui.Button, {
+      size: 'sm',
+      variant: source === 'plugin' ? 'outline' : 'ghost',
+      onClick: () => setSource('plugin'),
+    }, t('activity.sourcePlugin')),
+    h(ui.Button, {
+      size: 'sm',
+      variant: source === 'engine' ? 'outline' : 'ghost',
+      onClick: () => setSource('engine'),
+    }, t('activity.sourceEngine')))
+
+  if (source === 'engine') {
+    const engineBody = engineError !== ''
+      ? h('div', { className: 'hm-empty', role: 'alert' }, h('p', { className: 'hm-error' }, engineError))
+      : engineRows.length === 0
+        ? h('div', { className: 'hm-empty' }, t('activity.empty'))
+        : h('div', { className: 'hm-activity' }, engineRows)
+    return h(React.Fragment, null, renderSourceSwitch(), engineBody)
+  }
 
   let body
   if (loading) {
@@ -2014,6 +2075,39 @@ export function SettingsSection(props) {
       details.push(h('div', { key: 'size', className: 'hm-field' },
         h('span', { className: 'hm-fieldLabel' }, t('diag.dataSize')),
         h('span', { className: 'hm-fieldValue' }, size)))
+    }
+    // Real engine numbers: aggregate counts come from the SDK, load from its
+    // metrics collector. Both were already reachable; they were simply never
+    // shown.
+    const engineStats = status?.engineStats ?? null
+    const engineMetrics = status?.engineMetrics ?? null
+    if (engineStats && typeof engineStats.total === 'number') {
+      const scenes = engineStats.scenes && typeof engineStats.scenes === 'object' ? engineStats.scenes : {}
+      details.push(h('div', { key: 'engineTotal', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.engineTotal')),
+        h('span', { className: 'hm-fieldValue hm-mono' }, `${engineStats.total}`)))
+      for (const [name, value] of Object.entries(scenes)) {
+        details.push(h('div', { key: `scene-${name}`, className: 'hm-field' },
+          h('span', { className: 'hm-fieldLabel' }, t('diag.engineScene', { scene: name })),
+          h('span', { className: 'hm-fieldValue hm-mono' }, `${value?.count ?? 0}`)))
+      }
+    }
+    if (engineMetrics && engineMetrics.requests) {
+      const requests = engineMetrics.requests
+      const latency = engineMetrics.avg_latency_ms ?? {}
+      details.push(h('div', { key: 'engineReq', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.engineRequests')),
+        h('span', { className: 'hm-fieldValue hm-mono' },
+          t('diag.engineRequestValue', {
+            done: requests.completed ?? 0,
+            failed: requests.failed ?? 0,
+            active: requests.active_sys1 ?? 0,
+          }))))
+      if (Number.isFinite(Number(latency.sys1_workflow_ms))) {
+        details.push(h('div', { key: 'engineLatency', className: 'hm-field' },
+          h('span', { className: 'hm-fieldLabel' }, t('diag.engineLatency')),
+          h('span', { className: 'hm-fieldValue hm-mono' }, `${Math.round(Number(latency.sys1_workflow_ms))} ms`)))
+      }
     }
     const totalCount = memoryTotal()
     const context = status?.context ?? null

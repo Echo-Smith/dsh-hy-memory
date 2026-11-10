@@ -271,5 +271,12 @@
   "usage.completionHint": "extraction result",
   "usage.daysRecalls": "Recall tokens, last 7 days",
   "usage.daysWrites": "Write tokens, last 7 days",
-  "tabs.engine": "Engine"
+  "tabs.engine": "Engine",
+  "diag.engineTotal": "Memories in the engine",
+  "diag.engineScene": "Engine · {scene}",
+  "diag.engineRequests": "Engine requests (last hour)",
+  "diag.engineRequestValue": "{done} done · {failed} failed · {active} active",
+  "diag.engineLatency": "Average handling time",
+  "activity.sourcePlugin": "Panel events",
+  "activity.sourceEngine": "Engine events"
 }

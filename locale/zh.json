@@ -271,5 +271,12 @@
   "usage.completionHint": "提炼结果",
   "usage.daysRecalls": "近 7 天召回 tokens",
   "usage.daysWrites": "近 7 天写入 tokens",
-  "tabs.engine": "引擎与用量"
+  "tabs.engine": "引擎与用量",
+  "diag.engineTotal": "引擎记忆总数",
+  "diag.engineScene": "引擎 · {scene}",
+  "diag.engineRequests": "引擎请求（近 1 小时）",
+  "diag.engineRequestValue": "完成 {done} · 失败 {failed} · 进行中 {active}",
+  "diag.engineLatency": "平均处理耗时",
+  "activity.sourcePlugin": "面板事件",
+  "activity.sourceEngine": "引擎事件"
 }

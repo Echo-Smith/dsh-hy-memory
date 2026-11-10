@@ -8,24 +8,27 @@
 - 五个端点已在真实侧车连通：`update`、`history`、`stats_overview`、`metrics`、`recent_history`。
 - `update` 真实生效，`history` 在编辑后记录 `UPDATE` 事件。
 
-## 阶段一：记忆可编辑可审计（低风险，立刻可用）
+## 阶段一：记忆可编辑可审计（低风险，立刻可用）—— 已完成
 
 目标：改一条记忆不用先删后建，并且能看见它被改过什么。
 
 | 板块 | 接口 | 面板 | 完成标准 |
 |---|---|---|---|
-| 原地编辑 | `bridge/v1/update` | 个人记忆行的编辑改为走 update | 编辑后内容变化、id 不变、history 多一条 UPDATE |
+| 原地编辑 | `bridge/v1/update` | 个人记忆行的编辑改为走 update | ✅ 实测两次编辑累积 2 条 UPDATE；发现并修复了原路径 404 |
 | 变更历史 | `bridge/v1/history` | 行详情里展示时间线 | 能列出每条事件的类型与前后内容 |
 | 全局统计 | `bridge/v1/stats_overview` | 诊断卡显示三层真实计数 | 数字与 SDK 聚合一致，不再前端累加 |
 
-## 阶段二：可观测性（让引擎行为可见）
+## 阶段二：可观测性（让引擎行为可见）—— 已完成
 
 目标：把"引擎在干什么"变成面板上能看懂的数字。
 
 | 板块 | 接口 | 面板 | 完成标准 |
 |---|---|---|---|
-| 负载指标 | `bridge/v1/metrics` | 诊断卡显示请求数/失败数/延迟 | 与 `get_metrics` 返回值一致 |
-| 操作历史 | `bridge/v1/recent_history` | 「写入活动」改用真实历史 | 显示 ADD/UPDATE/DELETE 事件流 |
+| 负载指标 | `bridge/v1/metrics` | 诊断卡显示请求数/失败数/延迟 | ✅ status 返回真实指标（completed/failed/active） |
+| 操作历史 | `bridge/v1/recent_history` | 活动面板可切到「引擎事件」 | ✅ ADD/UPDATE/DELETE 事件流 |
+| 全局统计 | `bridge/v1/stats_overview` | 诊断卡显示三层真实计数 | ✅ 1310 条，按场景分列 |
+
+阶段二顺带修掉一个真缺陷：`status` 在 `describeModel()` 返回 null 时整体 500，导致面板全空。现在每个字段都做空值防护，并有测试锁住。
 
 ## 阶段三：会话叙事（需要设计）
 
