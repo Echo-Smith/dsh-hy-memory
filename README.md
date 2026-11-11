@@ -5,6 +5,7 @@
 [![npm](https://img.shields.io/npm/v/dsh-hy-memory)](https://www.npmjs.com/package/dsh-hy-memory)
 [![license](https://img.shields.io/npm/l/dsh-hy-memory)](LICENSE)
 [![dshfind](https://dshfind.com/api/badge/Echo-Smith/dsh-hy-memory?lang=zh)](https://dshfind.com/zh/plugins/Echo-Smith/dsh-hy-memory?ref=badge)
+[![listed on awesome-dsh-plugin](https://img.shields.io/badge/listed-awesome--dsh--plugin-blue)](https://awesome-dsh-plugin.com/zh/p/Echo-Smith/dsh-hy-memory/)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-informational)
 ![python](https://img.shields.io/badge/python-%E2%89%A53.11-informational)
 

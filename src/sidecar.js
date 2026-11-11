@@ -145,7 +145,9 @@ export class Sidecar {
       if (route && route.missingModel) {
         // A pin that the profile no longer offers used to resolve silently to
         // some other model. Say which one is gone instead.
-        this.#lastError = `The memory model "${route.missingModel}" is no longer offered by this profile. Pick another under Memory engine, or clear it to follow the session model.`
+        // "Clear it" no longer means "follow the session model": clearing lets the
+        // next start adopt one model and keep it. Say that, not the removed behavior.
+        this.#lastError = `The memory model "${route.missingModel}" is no longer offered by this profile. Pick another under Memory engine, or clear it to adopt the profile's default on the next start.`
       }
       if (!route && mode !== 'lite') {
         // At true app start DSH may still be writing its own settings.yaml and

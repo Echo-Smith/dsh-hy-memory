@@ -1,6 +1,6 @@
 {
   "name": "dsh-hy-memory",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "给 DSH 装上三层长期记忆（个人、项目、会话）：自动沉淀、按需召回，并可在设置面板查看整理。 Long-term memory for DSH in three tiers with automatic capture and recall.",
