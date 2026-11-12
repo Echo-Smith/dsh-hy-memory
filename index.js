@@ -417,15 +417,24 @@ function createRuntime(ctx, config) {
     }
   }
 
-  /** OpenAI-compatible providers/models this profile offers, for the panel picker. */
+  /**
+   * Every model this profile offers, for the panel picker.
+   *
+   * This used to filter to `api === 'openai-completions'`, which hid the
+   * openai-responses and anthropic-messages providers entirely — the user saw
+   * "only the first provider's models". The gateway routes every model through
+   * one chat/completions endpoint regardless of the provider's declared API
+   * shape (verified against magpie: responses and anthropic models answer on
+   * /v1/chat/completions), so the sidecar can drive any of them. Listing them
+   * is about choice; the sidecar's own endpoint config is unchanged.
+   */
   async function listModelOptions() {
     try {
       const providers = await readProviders()
       const options = []
       for (const [providerName, provider] of Object.entries(providers)) {
-        if (!provider || provider.api !== 'openai-completions') continue
-        const models = Array.isArray(provider.models) ? provider.models : []
-        for (const entry of models) {
+        if (!provider || !Array.isArray(provider.models)) continue
+        for (const entry of provider.models) {
           const id = typeof entry?.id === 'string' ? entry.id : ''
           if (!id) continue
           options.push({ provider: providerName, model: id, label: `${id} · ${providerName}` })
