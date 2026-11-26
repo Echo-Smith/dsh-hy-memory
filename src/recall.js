@@ -550,6 +550,9 @@ export function createRecall(deps) {
             tier: item.tier,
             score: typeof item.score === 'number' ? Number(item.score.toFixed(4)) : null,
             rank: index + 1,
+            // Kept for the usage signal, which compares the memory text with the
+            // reply; the journal stores only what the panel needs to explain.
+            preview: String(item.content ?? '').slice(0, 200),
           })),
         })
       }
