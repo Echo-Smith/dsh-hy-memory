@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { MemHubError, detectPairing } from './memhub.js'
+import { runMaintenance } from './maintenance.js'
 import { installRelease } from './updater.js'
 import { projectAgentId, resolveUser } from './tiers.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
@@ -19,6 +20,7 @@ export const PANEL_ROUTE_DEFS = Object.freeze([
   { name: 'update', request: '{ tier, id, content }' },
   { name: 'history', request: '{ id }' },
   { name: 'stats', request: '{}' },
+  { name: 'maintenance/run', request: '{}' },
   { name: 'narratives', request: '{}' },
   { name: 'profile', request: '{}' },
   { name: 'metrics', request: '{ minutes? }' },
@@ -261,6 +263,8 @@ export function createPanelApi(deps) {
           turns: persisted?.turns ?? usage?.turns ?? 0,
         }
       })(),
+      // Last daily maintenance pass: how many exact duplicates were merged.
+      maintenance: state?.data?.lastMaintenance ?? null,
       // What writing memory actually cost, measured by the SDK per write.
       writeUsage: state?.data?.memoryUsage ?? null,
       // Last 7 local days for both counters, zero-filled so a chart always has
@@ -668,6 +672,10 @@ export function createPanelApi(deps) {
             text: String(row?.content ?? ''),
           })),
         })
+      }
+      case 'maintenance/run': {
+        const report = await runMaintenance({ ops, state, activity, force: true })
+        return jsonResponse(report ?? {})
       }
       case 'stats': {
         const client = sidecar?.client

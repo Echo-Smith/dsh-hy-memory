@@ -14,6 +14,7 @@ import { createMemHub } from './src/memhub.js'
 import { registerPanelApi, PANEL_ROUTE_PATHS } from './src/panel-api.js'
 import { createRecall } from './src/recall.js'
 import { scoreRecallUsage } from './src/recall-usage.js'
+import { runMaintenance } from './src/maintenance.js'
 import { createMemoryOps, createTools } from './src/tools.js'
 import { describeModel as describeModelRoute, readDotEnv, readProviders, resolveDshRoute } from './src/model.js'
 import { DEFAULT_SETTINGS, loadSettings, mergeSettings, saveSettings } from './src/settings.js'
@@ -745,6 +746,16 @@ function createRuntime(ctx, config) {
       if (capture) capture.handleSessionDisposed(session)
     } catch (error) {
       log('session disposal failed', error)
+    }
+    // At most once a day; a failure here must never affect the session shutdown.
+    if (settings?.maintenance?.enabled !== false && ops) {
+      void runMaintenance({
+        ops,
+        state,
+        activity,
+        log,
+        intervalHours: Number(settings?.maintenance?.intervalHours) || 24,
+      }).catch((error) => log('memory maintenance failed', error))
     }
   }
 

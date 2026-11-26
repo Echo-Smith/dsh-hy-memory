@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // Session narratives are the SDK's own episode feature. It needs L1_RAW, which
   // the engine does keep; the switch simply has to be on at process start.
   narrative: { enabled: true },
+  // Daily pass that merges exact duplicates; never deletes a unique memory.
+  maintenance: { enabled: true, intervalHours: 24 },
   llm: { source: 'dsh', provider: '', model: '', baseURL: '', maxTokens: 4096, agentMaxTokens: 4096, timeoutMs: 180000, disableReasoning: true },
   embedding: { mode: 'local' },
   ui: { sessionPanel: true },

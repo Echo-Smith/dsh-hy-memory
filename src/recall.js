@@ -334,6 +334,10 @@ export function personalWriteInstruction() {
     '- When you recognise one, call memory_add with tier "personal" and a self-contained one-line statement, without waiting for me to ask. Do this at most once per fact.',
     '- Do not store: one-off debugging details, transient task state, secrets or credentials, or anything already obvious from the repository. Project facts belong to the project tier, which the plugin captures by itself.',
     '- If I correct a stored preference, update the existing memory instead of adding a second one.',
+    // Capability hint rather than a content index: the index ZCode relies on is
+    // their only retrieval path, while ours is semantic search, so a list of
+    // memory titles would cost context every session and add little.
+    '- To look up something that was not recalled, call memory_search (pass allProjects: true to search outside this project) instead of asking me to repeat it.',
   ].join('\n')
 }
 
