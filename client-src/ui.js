@@ -556,6 +556,7 @@ const PANEL_CSS = `
 .hm-menuItem:hover { background:var(--dsw-alias-interactive-bg-hover); }
 .hm-menuItemIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }
 .hm-menuItemLabel { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hm-menuItemLabelWrap { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; line-height:1.35; }
 .hm-menuItemCheck { display:inline-flex; flex:none; color:var(--dsw-alias-label-primary); }
 .hm-menuEmpty { padding:10px 8px; font-size:12px; color:var(--dsw-alias-label-secondary); }
 .hm-searchField { margin-left:auto; display:flex; align-items:center; gap:6px; min-width:180px; max-width:280px; height:28px; padding:0 10px; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-tertiary); }

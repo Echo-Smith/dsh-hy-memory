@@ -1545,9 +1545,12 @@ async function exerciseSessionGrouping(harness) {
 
   assert.ok(findButton(harness, t('session.all')) !== undefined, 'the picker starts on 全部会话')
   await activate(harness, findButton(harness, t('session.all')), 'the session picker')
-  await activate(harness, findButtons(harness, 'sess-9e8')[0], 'the second session option')
+  // Session ids are shown in full: shortening them to eight characters turned
+  // every option into "session-" and made them indistinguishable.
+  assert.ok(harness.mini.text().includes('sess-9e8d7c6b'), 'the full session id is listed')
+  await activate(harness, findButtons(harness, 'sess-9e8d7c6b')[0], 'the second session option')
   assert.equal(groups().length, 1, 'picking a session narrows the list to that group')
-  assert.ok(harness.mini.textOf(groups()[0]).includes('sess-9e8'), 'the picked group renders')
+  assert.ok(harness.mini.textOf(groups()[0]).includes('sess-9e8d7c6b'), 'the picked group renders its full id')
   assert.equal(harness.mini.text().includes(SESSION_ITEMS[0].content), false, 'other sessions are filtered out')
 }
 

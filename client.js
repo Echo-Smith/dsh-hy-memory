@@ -1350,6 +1350,7 @@ var PANEL_CSS = `
 .hm-menuItem:hover { background:var(--dsw-alias-interactive-bg-hover); }
 .hm-menuItemIcon { display:inline-flex; flex:none; color:var(--dsw-alias-label-tertiary); }
 .hm-menuItemLabel { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hm-menuItemLabelWrap { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; line-height:1.35; }
 .hm-menuItemCheck { display:inline-flex; flex:none; color:var(--dsw-alias-label-primary); }
 .hm-menuEmpty { padding:10px 8px; font-size:12px; color:var(--dsw-alias-label-secondary); }
 .hm-searchField { margin-left:auto; display:flex; align-items:center; gap:6px; min-width:180px; max-width:280px; height:28px; padding:0 10px; border:1px solid var(--dsw-alias-border-l2); border-radius:999px; background:var(--dsw-alias-bg-layer-2); color:var(--dsw-alias-label-tertiary); }
@@ -2064,7 +2065,10 @@ function PickerPill(props) {
         }
       },
       h("span", { className: "hm-menuItemIcon" }, h(Icon, { name: props.icon, size: 15 })),
-      h("span", { className: "hm-menuItemLabel", title: item.title }, item.title),
+      h("span", {
+        className: item.wrap ? "hm-menuItemLabel hm-menuItemLabelWrap" : "hm-menuItemLabel",
+        title: item.title
+      }, item.title),
       selected ? h("span", { className: "hm-menuItemCheck" }, h(Icon, { name: "check", size: 14 })) : null
     );
   });
@@ -3225,7 +3229,9 @@ function SettingsSection(props) {
   const renderSessionPicker = () => {
     const items = [
       { key: "", title: t("session.all") },
-      ...sessions.items.map((entry) => ({ key: entry.sessionId, title: shortId(entry.sessionId) }))
+      // Session ids are the only identifier a user can match against a log or a
+      // URL; shortening them to "session-" made every row look identical.
+      ...sessions.items.map((entry) => ({ key: entry.sessionId, title: entry.sessionId, wrap: true }))
     ];
     return h(
       "div",
@@ -3233,7 +3239,7 @@ function SettingsSection(props) {
       h(PickerPill, {
         t,
         icon: "hash",
-        label: sessionFilter === "" ? t("session.all") : shortId(sessionFilter),
+        label: sessionFilter === "" ? t("session.all") : sessionFilter,
         title: t("session.picker"),
         ariaLabel: t("session.select"),
         emptyText: t("session.emptyPicker"),
@@ -3308,7 +3314,7 @@ function SettingsSection(props) {
             "h4",
             { className: "hm-groupLabel" },
             h(Icon, { name: "hash", size: 13 }),
-            group.key === "" ? t("row.ungrouped") : shortId(group.key)
+            group.key === "" ? t("row.ungrouped") : group.key
           ),
           h("span", { className: "hm-meta" }, t("count.items", { n: group.rows.length }))
         ),
@@ -3767,7 +3773,7 @@ function SettingsSection(props) {
         "div",
         { key: "session", className: "hm-field" },
         h("span", { className: "hm-fieldLabel" }, t("diag.session")),
-        h("span", { className: "hm-fieldValue" }, status?.session?.title || (currentSessionId !== "" ? shortId(currentSessionId) : t("diag.unknown")))
+        h("span", { className: "hm-fieldValue hm-mono" }, status?.session?.title || (currentSessionId !== "" ? currentSessionId : t("diag.unknown")))
       )
     ];
     if (dir !== "") {
