@@ -588,7 +588,10 @@ function PickerPill(props) {
       },
     },
     h('span', { className: 'hm-menuItemIcon' }, h(Icon, { name: props.icon, size: 15 })),
-    h('span', { className: 'hm-menuItemLabel', title: item.title }, item.title),
+    h('span', {
+      className: item.wrap ? 'hm-menuItemLabel hm-menuItemLabelWrap' : 'hm-menuItemLabel',
+      title: item.title,
+    }, item.title),
     selected ? h('span', { className: 'hm-menuItemCheck' }, h(Icon, { name: 'check', size: 14 })) : null)
   })
 
@@ -1741,13 +1744,15 @@ export function SettingsSection(props) {
   const renderSessionPicker = () => {
     const items = [
       { key: '', title: t('session.all') },
-      ...sessions.items.map((entry) => ({ key: entry.sessionId, title: shortId(entry.sessionId) })),
+      // Session ids are the only identifier a user can match against a log or a
+      // URL; shortening them to "session-" made every row look identical.
+      ...sessions.items.map((entry) => ({ key: entry.sessionId, title: entry.sessionId, wrap: true })),
     ]
     return h('div', { className: 'hm-sessionBar' },
       h(PickerPill, {
         t,
         icon: 'hash',
-        label: sessionFilter === '' ? t('session.all') : shortId(sessionFilter),
+        label: sessionFilter === '' ? t('session.all') : sessionFilter,
         title: t('session.picker'),
         ariaLabel: t('session.select'),
         emptyText: t('session.emptyPicker'),
@@ -1808,7 +1813,7 @@ export function SettingsSection(props) {
       h('div', { className: 'hm-groupHead' },
         h('h4', { className: 'hm-groupLabel' },
           h(Icon, { name: 'hash', size: 13 }),
-          group.key === '' ? t('row.ungrouped') : shortId(group.key)),
+          group.key === '' ? t('row.ungrouped') : group.key),
         h('span', { className: 'hm-meta' }, t('count.items', { n: group.rows.length }))),
       renderRows('session', group.rows))),
       renderPager('session', list))
@@ -2145,7 +2150,7 @@ export function SettingsSection(props) {
           status?.project?.title || (projectKey !== '' ? shortId(projectKey) : t('diag.unknown')))),
       h('div', { key: 'session', className: 'hm-field' },
         h('span', { className: 'hm-fieldLabel' }, t('diag.session')),
-        h('span', { className: 'hm-fieldValue' }, status?.session?.title || (currentSessionId !== '' ? shortId(currentSessionId) : t('diag.unknown')))),
+        h('span', { className: 'hm-fieldValue hm-mono' }, status?.session?.title || (currentSessionId !== '' ? currentSessionId : t('diag.unknown')))),
     ]
     if (dir !== '') {
       details.push(h('div', { key: 'dir', className: 'hm-field' },
