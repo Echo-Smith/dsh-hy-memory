@@ -122,6 +122,16 @@ test('injected message carries a unique id and a source the harness can attribut
   assert.notEqual(left.id, right.id)
 })
 
+test('the recall block guards against profile drift and stale references', () => {
+  // Two failure modes seen in practice: a profile memory looking relevant only
+  // because the question shares a word with it, and a memory naming a file that
+  // has since moved or been renamed.
+  const text = renderRecall([{ tier: 'personal', content: 'the user works on DB performance' }])
+  assert.match(text, /does not become relevant just because the question shares a word/)
+  assert.match(text, /verify it still exists before relying on it/)
+  assert.match(text, /1\. \[personal\] the user works on DB performance/, 'the list itself is unchanged')
+})
+
 test('deadline resolves null and cannot leak a late rejection', async () => {
   const slow = withDeadline(() => new Promise((resolve) => setTimeout(() => resolve('late'), 200)), 20)
   const started = Date.now()
