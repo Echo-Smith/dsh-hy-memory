@@ -668,6 +668,6 @@ const PANEL_CSS = `
 .hm-modalBody { font-size:12px; color:var(--dsw-alias-label-secondary); }
 .hm-modalFooter { display:flex; justify-content:flex-end; gap:8px; }
 .hm-tip { display:inline-flex; min-width:0; }
-.hm-sessionPanel { gap:14px; }
+.hm-sessionPanel { gap:14px; padding:4px 16px 20px; }
 .hm-sectionTitle { margin:0; font-size:13px; font-weight:600; }
 `

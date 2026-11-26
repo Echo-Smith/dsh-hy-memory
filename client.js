@@ -1450,7 +1450,7 @@ var PANEL_CSS = `
 .hm-modalBody { font-size:12px; color:var(--dsw-alias-label-secondary); }
 .hm-modalFooter { display:flex; justify-content:flex-end; gap:8px; }
 .hm-tip { display:inline-flex; min-width:0; }
-.hm-sessionPanel { gap:14px; }
+.hm-sessionPanel { gap:14px; padding:4px 16px 20px; }
 .hm-sectionTitle { margin:0; font-size:13px; font-weight:600; }
 `;
 
@@ -4376,7 +4376,9 @@ function SessionMemoryView(props) {
       "div",
       { className: "hm-cardHead" },
       h("h2", { className: "hm-h2" }, title),
-      h("span", { className: "hm-meta" }, t("counts.total", { n: list.items.length }))
+      // The API caps the page at 100 rows, so items.length is not the total; and
+      // while loading it is 0, which reads as "no memory here".
+      h("span", { className: "hm-meta" }, list.loading ? "…" : t("counts.total", { n: list.total }))
     ),
     renderRows(list, emptyKey)
   );
