@@ -2190,6 +2190,15 @@ export function SettingsSection(props) {
           h('span', { className: 'hm-fieldValue hm-mono' }, `${Math.round(Number(latency.sys1_workflow_ms))} ms`)))
       }
     }
+    if (status?.maintenance?.at) {
+      details.push(h('div', { key: 'maintenance', className: 'hm-field' },
+        h('span', { className: 'hm-fieldLabel' }, t('diag.maintenance')),
+        h('span', { className: 'hm-fieldValue' },
+          t('diag.maintenanceValue', {
+            time: timeText(t, status.maintenance.at, Date.now()),
+            n: asNumber(status.maintenance.merged),
+          }))))
+    }
     const totalCount = memoryTotal()
     const context = status?.context ?? null
     const pending = Number.isFinite(Number(status?.capture?.pending)) ? Number(status.capture.pending) : null

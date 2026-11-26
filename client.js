@@ -493,7 +493,9 @@ var zh_default = {
   "why.usage": "是否被使用",
   "why.usage.likely_used": "回复里出现了这条记忆的内容",
   "why.usage.no_overlap": "回复里没看到这条记忆的内容",
-  "why.usage.unknown": "无法判断（记忆太短）"
+  "why.usage.unknown": "无法判断（记忆太短）",
+  "diag.maintenance": "上次整理",
+  "diag.maintenanceValue": "{time} · 合并 {n} 条重复"
 };
 
 // locale/en.json
@@ -797,7 +799,9 @@ var en_default = {
   "why.usage": "Used in the reply",
   "why.usage.likely_used": "the reply reused this memory",
   "why.usage.no_overlap": "no overlap found in the reply",
-  "why.usage.unknown": "not judgeable (memory too short)"
+  "why.usage.unknown": "not judgeable (memory too short)",
+  "diag.maintenance": "Last clean-up",
+  "diag.maintenanceValue": "{time} · merged {n} duplicates"
 };
 
 // client-src/locale.js
@@ -3826,6 +3830,21 @@ function SettingsSection(props) {
           h("span", { className: "hm-fieldValue hm-mono" }, `${Math.round(Number(latency.sys1_workflow_ms))} ms`)
         ));
       }
+    }
+    if (status?.maintenance?.at) {
+      details.push(h(
+        "div",
+        { key: "maintenance", className: "hm-field" },
+        h("span", { className: "hm-fieldLabel" }, t("diag.maintenance")),
+        h(
+          "span",
+          { className: "hm-fieldValue" },
+          t("diag.maintenanceValue", {
+            time: timeText(t, status.maintenance.at, Date.now()),
+            n: asNumber(status.maintenance.merged)
+          })
+        )
+      ));
     }
     const totalCount = memoryTotal();
     const context = status?.context ?? null;

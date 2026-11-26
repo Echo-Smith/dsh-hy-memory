@@ -57,6 +57,7 @@ test('every contract route is registered as an exact POST below /api', () => {
     '/api/hy-memory/update',
     '/api/hy-memory/history',
     '/api/hy-memory/stats',
+    '/api/hy-memory/maintenance/run',
     '/api/hy-memory/narratives',
     '/api/hy-memory/profile',
     '/api/hy-memory/metrics',
