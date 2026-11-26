@@ -95,7 +95,9 @@ export function SessionMemoryView(props) {
   const renderSection = (title, list, emptyKey) => h('section', { className: 'hm-card' },
     h('div', { className: 'hm-cardHead' },
       h('h2', { className: 'hm-h2' }, title),
-      h('span', { className: 'hm-meta' }, t('counts.total', { n: list.items.length }))),
+      // The API caps the page at 100 rows, so items.length is not the total; and
+      // while loading it is 0, which reads as "no memory here".
+      h('span', { className: 'hm-meta' }, list.loading ? '…' : t('counts.total', { n: list.total }))),
     renderRows(list, emptyKey))
 
   return h('section', { className: 'hm-panel hm-sessionPanel', 'aria-label': t('session.tabTitle') },
