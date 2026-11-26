@@ -289,9 +289,23 @@ export function renderRecall(items) {
       + 'If a memory names a file, function, or flag, verify it still exists before relying on it.',
   ]
   list.forEach((item, index) => {
-    lines.push(`${index + 1}. [${item.tier}] ${item.content}`)
+    // A memory with no age reads as current. Saying how old it is lets the model
+    // discount a stale claim on its own, the same reason a code review marks a
+    // comment's date.
+    lines.push(`${index + 1}. [${item.tier}${ageSuffix(item.updatedAt)}] ${item.content}`)
   })
   return lines.join('\n')
+}
+
+const DAY_MS = 86_400_000
+
+/** `, 5 days old` once a memory is at least two days old; nothing younger. */
+export function ageSuffix(updatedAt, now = Date.now()) {
+  const stamp = Number(updatedAt)
+  if (!Number.isFinite(stamp) || stamp <= 0) return ''
+  const days = Math.floor((now - stamp) / DAY_MS)
+  if (days < 2) return ''
+  return `, ${days} days old`
 }
 
 export function createMemoryMessage(text, tier = 'mixed') {

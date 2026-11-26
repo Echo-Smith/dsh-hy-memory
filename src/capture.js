@@ -213,6 +213,18 @@ export function projectToPersonalPrompt(items) {
   ].join('\n')
 }
 
+// Pure acknowledgements carry no memory on their own. The assistant turn that
+// follows is still captured, so only the one-word user echo is dropped.
+const TRIVIAL_USER_TEXT = /^(?:ok|okay|yes|no|yep|nope|thanks?|thx|continue|go|继续|好的?|好|可以|嗯+|收到|行|谢谢|多谢|辛苦了)[\s。.!！?？]*$/iu
+
+export function isTrivialUserText(text) {
+  const value = String(text ?? '').trim()
+  if (!value) return true
+  // Only explicit acknowledgements; a short message like "做P0" is a real
+  // instruction, and length alone cannot tell them apart.
+  return TRIVIAL_USER_TEXT.test(value)
+}
+
 export function createCapture(deps) {
   const settings = deps.settings
   const state = deps.state
@@ -221,6 +233,7 @@ export function createCapture(deps) {
   const modelFor = deps.modelFor ?? (() => null)
   const getLlm = deps.getLlm
   const resolveModel = deps.resolveModel ?? (() => null)
+  const onAssistantText = deps.onAssistantText ?? (() => {})
   const log = deps.log ?? (() => {})
   // One failover attempt per problem streak, cleared by a success.
   let failoverRequested = false
@@ -348,13 +361,25 @@ export function createCapture(deps) {
           if (data.source?.kind !== 'user') break
           const text = textOfBlocks(data.content).trim()
           if (!text) break
+          // One-word acknowledgements ("继续", "ok") carry no memory by
+          // themselves; the assistant turn that follows still gets captured.
+          if (isTrivialUserText(text)) break
           push(entry, { role: 'user', content: text, seq })
           entry.lastQuery = truncateChars(text.replace(/\s+/g, ' ').trim(), 500)
           break
         }
         case 'assistant/message': {
           const text = textOfBlocks(data.message?.content).trim()
-          if (text) push(entry, { role: 'assistant', content: text, seq })
+          if (text) {
+            push(entry, { role: 'assistant', content: text, seq })
+            // Observation only: did the reply reuse a recalled memory? Kept out
+            // of the capture path so a scoring bug cannot drop a write.
+            try {
+              onAssistantText(text)
+            } catch (error) {
+              log('recall usage scoring failed', error)
+            }
+          }
           break
         }
         case 'tool/call': {
@@ -415,6 +440,32 @@ export function createCapture(deps) {
       }
       const toolsSeen = entry.tools.map((tool) => tool.name)
       const batch = buildBatch({ items: entry.buffer, tools: entry.tools }, config)
+      // If the model already saved a memory itself this window, skip the
+      // automatic write — but only when there is no substantial assistant prose
+      // to lose. Memory_* writes the personal tier; capture writes the session
+      // tier, so a blanket skip would drop project history.
+      const wroteMemoryDirectly = toolsSeen.includes('memory_add') || toolsSeen.includes('memory_update')
+      const substantialProse = batch.messages.some((message) => (
+        message.role === 'assistant' && String(message.content ?? '').length >= 200
+      ))
+      // Only the "remember this" shape: a short ask plus a short reply. A real
+      // task that happened to call memory_add must still reach project memory.
+      const userAsksAreShort = batch.messages
+        .filter((message) => message.role === 'user')
+        .every((message) => String(message.content ?? '').length < 20)
+      if (wroteMemoryDirectly && !substantialProse && userAsksAreShort) {
+        entry.buffer = []
+        entry.tools = []
+        entry.turnsSinceFlush = 0
+        persistEntry(entry)
+        activity?.record({
+          kind: 'capture', tier: 'session',
+          summary: 'capture skipped: the model already wrote memory this turn',
+          detail: toolsSeen.filter((name) => name === 'memory_add' || name === 'memory_update').join(', '),
+          ok: true,
+        })
+        return
+      }
       // Keep tools and text together: an idle flush can arrive when only tool
       // calls are pending (between steps), and clearing then would downgrade the
       // next text flush to the chat scene.

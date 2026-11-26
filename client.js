@@ -489,7 +489,11 @@ var zh_default = {
   "profile.field.platforms": "平台",
   "profile.field.projects": "项目",
   "profile.field.conventions": "约定",
-  "profile.field.preferences": "偏好"
+  "profile.field.preferences": "偏好",
+  "why.usage": "是否被使用",
+  "why.usage.likely_used": "回复里出现了这条记忆的内容",
+  "why.usage.no_overlap": "回复里没看到这条记忆的内容",
+  "why.usage.unknown": "无法判断（记忆太短）"
 };
 
 // locale/en.json
@@ -789,7 +793,11 @@ var en_default = {
   "profile.field.platforms": "Platforms",
   "profile.field.projects": "Projects",
   "profile.field.conventions": "Conventions",
-  "profile.field.preferences": "Preferences"
+  "profile.field.preferences": "Preferences",
+  "why.usage": "Used in the reply",
+  "why.usage.likely_used": "the reply reused this memory",
+  "why.usage.no_overlap": "no overlap found in the reply",
+  "why.usage.unknown": "not judgeable (memory too short)"
 };
 
 // client-src/locale.js
@@ -3423,6 +3431,17 @@ function SettingsSection(props) {
         h("span", { className: "hm-fieldLabel" }, t("why.at")),
         h("span", { className: "hm-fieldValue" }, timeText(t, result.at, now))
       ));
+      const usage = String(result.usage ?? "");
+      if (usage !== "") {
+        const usageKey = `why.usage.${usage}`;
+        const usageText = t(usageKey);
+        fields.push(h(
+          "div",
+          { key: "usage", className: "hm-field" },
+          h("span", { className: "hm-fieldLabel" }, t("why.usage")),
+          h("span", { className: "hm-fieldValue" }, usageText === usageKey ? usage : usageText)
+        ));
+      }
       const sourceKey = `why.source.${String(result.source ?? "")}`;
       const sourceText = t(sourceKey);
       fields.push(h(

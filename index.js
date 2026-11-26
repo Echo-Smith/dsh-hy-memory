@@ -13,6 +13,7 @@ import { createCapture } from './src/capture.js'
 import { createMemHub } from './src/memhub.js'
 import { registerPanelApi, PANEL_ROUTE_PATHS } from './src/panel-api.js'
 import { createRecall } from './src/recall.js'
+import { scoreRecallUsage } from './src/recall-usage.js'
 import { createMemoryOps, createTools } from './src/tools.js'
 import { describeModel as describeModelRoute, readDotEnv, readProviders, resolveDshRoute } from './src/model.js'
 import { DEFAULT_SETTINGS, loadSettings, mergeSettings, saveSettings } from './src/settings.js'
@@ -24,6 +25,9 @@ import { Sidecar } from './src/sidecar.js'
 
 export const name = 'hy-memory'
 export const inject = ['tools', 'sessions', 'llm']
+
+// A reply more than ten minutes after the recall is a different turn.
+const RECALL_USAGE_WINDOW_MS = 10 * 60_000
 
 const HOST_VERSION = '0.1.0'
 const STATE_SAVE_DEBOUNCE_MS = 250
@@ -697,6 +701,36 @@ function createRuntime(ctx, config) {
     return recall.handlePreStep(payload, next)
   }
 
+  /**
+   * Mark the most recent recall entry with whether its memories showed up in the
+   * reply. The signal is a heuristic (see src/recall-usage.js), so it is stored
+   * as evidence, never used to change ranking.
+   */
+  function recordRecallUsage(replyText) {
+    const store = state?.data
+    const logEntries = Array.isArray(store?.recallLog) ? store.recallLog : []
+    for (let index = logEntries.length - 1; index >= 0; index -= 1) {
+      const entry = logEntries[index]
+      if (entry.usage) continue
+      const at = Number(entry.at ?? 0)
+      // Only the reply that follows the recall belongs to it; anything older is
+      // a different turn and scoring it would attribute usage wrongly.
+      if (!at || Date.now() - at > RECALL_USAGE_WINDOW_MS) return
+      const scored = (entry.items ?? []).map((item) => {
+        const result = scoreRecallUsage(item.content ?? '', replyText)
+        return { ...item, usage: result.signal }
+      })
+      entry.items = scored
+      entry.usage = {
+        at: Date.now(),
+        signal: scored.some((item) => item.usage === 'likely_used') ? 'likely_used' : 'no_overlap',
+      }
+      store.recallLog[index] = entry
+      state.save()
+      return
+    }
+  }
+
   function sessionEvent(session, event) {
     try {
       trackSession(session, event)
@@ -854,6 +888,9 @@ function createRuntime(ctx, config) {
         // Memory writes use the sidecar's fixed model; when it keeps failing the
         // plugin moves itself to another model rather than asking the user to.
         onModelUnhealthy: (info) => { void failoverModel(info) },
+        // Observation only: score the reply against the memories injected for
+        // this turn, so we can tell whether recall is actually earning its cost.
+        onAssistantText: (text) => recordRecallUsage(text),
         log,
       })
 

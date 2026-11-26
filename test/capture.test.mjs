@@ -8,6 +8,7 @@ import {
   buildBatch,
   createCapture,
   isDuplicate,
+  isTrivialUserText,
   nextBackoff,
   promotionLines,
   projectToPersonalPrompt,
@@ -330,4 +331,92 @@ test('profile JSON is parsed defensively', async () => {
   // be dropped rather than written into the engine.
   assert.match(source, /indexOf\('\{'\)/, 'the parser finds the object in prose')
   assert.match(source, /for \(const key of fields\)/, 'only known keys are kept')
+})
+
+test('only explicit acknowledgements count as trivial', () => {
+  for (const text of ['继续', 'ok', '好', '嗯', '收到', '谢谢']) {
+    assert.equal(isTrivialUserText(text), true, `${text} is an acknowledgement`)
+  }
+  for (const text of ['做P0', '改！', 'hello', 'fix the build']) {
+    assert.equal(isTrivialUserText(text), false, `${text} is an instruction`)
+  }
+})
+
+test('a turn that already wrote memory is not captured again', async () => {
+  // memory_* writes the personal tier; capture writes the session tier. The skip
+  // only applies when the turn carries no substantial assistant prose, so real
+  // project history is never dropped.
+  const state = fakeState()
+  const calls = []
+  const capture = createCapture({
+    queuePath: tempQueuePath(),
+    settings: () => fakeSettings(),
+    state,
+    activity: fakeActivity(),
+    getClient: () => ({ add: async (payload) => { calls.push(payload); return { success: true } } }),
+    modelFor: () => null,
+    getLlm: () => null,
+    log: () => {},
+  })
+  try {
+    const session = fakeSession()
+    capture.handleSessionEvent(session, userEvent(1, '记住：这个项目用 pnpm'))
+    capture.handleSessionEvent(session, { seq: 2, type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '已记住。' }] } } })
+    capture.handleSessionEvent(session, { seq: 3, type: 'tool/call', data: { name: 'memory_add', callId: 'c1', arguments: '{}' } })
+    capture.handleSessionEvent(session, { seq: 4, type: 'turn/end', data: { turn: 1 } })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    assert.equal(calls.length, 0, 'the automatic write is skipped')
+    assert.equal(state.data.capture.queue.length, 0, 'nothing is queued either')
+  } finally {
+    capture.dispose()
+  }
+})
+
+test('assistant text is handed to the usage scorer', () => {
+  const seen = []
+  const capture = createCapture({
+    queuePath: tempQueuePath(),
+    settings: () => fakeSettings(),
+    state: fakeState(),
+    activity: fakeActivity(),
+    getClient: () => null,
+    modelFor: () => null,
+    getLlm: () => null,
+    onAssistantText: (text) => seen.push(text),
+    log: () => {},
+  })
+  try {
+    const session = fakeSession()
+    capture.handleSessionEvent(session, { seq: 1, type: 'assistant/message', data: { message: { content: [{ type: 'text', text: 'the reply' }] } } })
+    capture.handleSessionEvent(session, { seq: 2, type: 'assistant/message', data: { message: { content: [] } } })
+    assert.deepEqual(seen, ['the reply'], 'only non-empty replies are scored')
+  } finally {
+    capture.dispose()
+  }
+})
+
+test('a real task that also wrote memory is still captured', async () => {
+  const state = fakeState()
+  const calls = []
+  const capture = createCapture({
+    queuePath: tempQueuePath(),
+    settings: () => fakeSettings(),
+    state,
+    activity: fakeActivity(),
+    getClient: () => ({ add: async (payload) => { calls.push(payload); return { success: true } } }),
+    modelFor: () => null,
+    getLlm: () => null,
+    log: () => {},
+  })
+  try {
+    const session = fakeSession()
+    capture.handleSessionEvent(session, userEvent(1, '帮我把发布脚本里的版本号改成读取 package.json，然后跑一遍测试'))
+    capture.handleSessionEvent(session, { seq: 2, type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '改好了。' }] } } })
+    capture.handleSessionEvent(session, { seq: 3, type: 'tool/call', data: { name: 'memory_add', callId: 'c1', arguments: '{}' } })
+    capture.handleSessionEvent(session, { seq: 4, type: 'turn/end', data: { turn: 1 } })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    assert.equal(calls.length, 1, 'a substantive task is still captured')
+  } finally {
+    capture.dispose()
+  }
 })

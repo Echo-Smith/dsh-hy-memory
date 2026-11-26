@@ -1910,6 +1910,14 @@ export function SettingsSection(props) {
       fields.push(h('div', { key: 'at', className: 'hm-field' },
         h('span', { className: 'hm-fieldLabel' }, t('why.at')),
         h('span', { className: 'hm-fieldValue' }, timeText(t, result.at, now))))
+      const usage = String(result.usage ?? '')
+      if (usage !== '') {
+        const usageKey = `why.usage.${usage}`
+        const usageText = t(usageKey)
+        fields.push(h('div', { key: 'usage', className: 'hm-field' },
+          h('span', { className: 'hm-fieldLabel' }, t('why.usage')),
+          h('span', { className: 'hm-fieldValue' }, usageText === usageKey ? usage : usageText)))
+      }
       const sourceKey = `why.source.${String(result.source ?? '')}`
       const sourceText = t(sourceKey)
       fields.push(h('div', { key: 'source', className: 'hm-field' },
