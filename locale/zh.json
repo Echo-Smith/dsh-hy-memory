@@ -294,5 +294,9 @@
   "profile.field.platforms": "平台",
   "profile.field.projects": "项目",
   "profile.field.conventions": "约定",
-  "profile.field.preferences": "偏好"
+  "profile.field.preferences": "偏好",
+  "why.usage": "是否被使用",
+  "why.usage.likely_used": "回复里出现了这条记忆的内容",
+  "why.usage.no_overlap": "回复里没看到这条记忆的内容",
+  "why.usage.unknown": "无法判断（记忆太短）"
 }

@@ -561,7 +561,19 @@ export function createPanelApi(deps) {
         for (let index = log.length - 1; index >= 0; index -= 1) {
           const entry = log[index]
           const hit = (entry.items ?? []).find((item) => item.id === id)
-          if (hit) return jsonResponse({ found: true, at: entry.at, query: entry.query, source: entry.source, tier: hit.tier, score: hit.score, rank: hit.rank })
+          if (hit) {
+            return jsonResponse({
+              found: true,
+              at: entry.at,
+              query: entry.query,
+              source: entry.source,
+              tier: hit.tier,
+              score: hit.score,
+              rank: hit.rank,
+              // Heuristic evidence, not a claim: see src/recall-usage.js.
+              usage: hit.usage ?? null,
+            })
+          }
         }
         return jsonResponse({ found: false })
       }

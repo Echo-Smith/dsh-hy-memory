@@ -132,6 +132,14 @@ test('the recall block guards against profile drift and stale references', () =>
   assert.match(text, /1\. \[personal\] the user works on DB performance/, 'the list itself is unchanged')
 })
 
+test('a memory older than a day carries its age into the block', () => {
+  const now = Date.now()
+  const old = renderRecall([{ tier: 'project', content: 'deploy needs the tag', updatedAt: now - 5 * 86_400_000 }])
+  assert.match(old, /, 5 days old\]/, 'the age sits beside the tier')
+  const fresh = renderRecall([{ tier: 'personal', content: 'just learned', updatedAt: now }])
+  assert.doesNotMatch(fresh, /days old/, 'a fresh memory is not marked')
+})
+
 test('deadline resolves null and cannot leak a late rejection', async () => {
   const slow = withDeadline(() => new Promise((resolve) => setTimeout(() => resolve('late'), 200)), 20)
   const started = Date.now()

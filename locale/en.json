@@ -294,5 +294,9 @@
   "profile.field.platforms": "Platforms",
   "profile.field.projects": "Projects",
   "profile.field.conventions": "Conventions",
-  "profile.field.preferences": "Preferences"
+  "profile.field.preferences": "Preferences",
+  "why.usage": "Used in the reply",
+  "why.usage.likely_used": "the reply reused this memory",
+  "why.usage.no_overlap": "no overlap found in the reply",
+  "why.usage.unknown": "not judgeable (memory too short)"
 }
