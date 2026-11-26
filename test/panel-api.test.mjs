@@ -38,6 +38,13 @@ function harness({ settings = DEFAULT_SETTINGS, getClient = () => null, readProj
     contextOf: () => ({ projectKey: 'p1', sessionId: 's1', sessionTitle: 'Fixing the build' }),
     onSettingsChange: async (patch) => mergeSettings(current, patch),
     readProjectIndex,
+    // Tests keep their journal in memory; the real one lives on disk and is
+    // shared across plugin instances.
+    recallJournal: {
+      read: () => state.data.recallLog ?? [],
+      stats: () => null,
+      usage: () => null,
+    },
   })
   return { api, state, activity }
 }

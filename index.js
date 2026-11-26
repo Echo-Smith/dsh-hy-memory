@@ -14,13 +14,13 @@ import { createMemHub } from './src/memhub.js'
 import { registerPanelApi, PANEL_ROUTE_PATHS } from './src/panel-api.js'
 import { createRecall } from './src/recall.js'
 import { scoreRecallUsage } from './src/recall-usage.js'
+import { appendRecall, readRecallJournal, readRecallUsage, writeRecallUsage } from './src/recall-journal.js'
 import { runMaintenance } from './src/maintenance.js'
 import { createMemoryOps, createTools } from './src/tools.js'
 import { describeModel as describeModelRoute, readDotEnv, readProviders, resolveDshRoute } from './src/model.js'
 import { DEFAULT_SETTINGS, loadSettings, mergeSettings, saveSettings } from './src/settings.js'
 import { dshHome, integrationDir, projectsPath, statePath } from './src/paths.js'
 import { projectKeysFromRows, projectKey, projectTitleForPath, resolveUser } from './src/tiers.js'
-import { addToDay } from './src/usage.js'
 import { sessionDirPathCandidates } from './src/session-path.js'
 import { Sidecar } from './src/sidecar.js'
 
@@ -708,28 +708,22 @@ function createRuntime(ctx, config) {
    * as evidence, never used to change ranking.
    */
   function recordRecallUsage(replyText) {
-    const store = state?.data
-    const logEntries = Array.isArray(store?.recallLog) ? store.recallLog : []
-    for (let index = logEntries.length - 1; index >= 0; index -= 1) {
-      const entry = logEntries[index]
-      if (entry.usage) continue
-      const at = Number(entry.at ?? 0)
-      // Only the reply that follows the recall belongs to it; anything older is
-      // a different turn and scoring it would attribute usage wrongly.
-      if (!at || Date.now() - at > RECALL_USAGE_WINDOW_MS) return
-      const scored = (entry.items ?? []).map((item) => {
-        const result = scoreRecallUsage(item.content ?? '', replyText)
-        return { ...item, usage: result.signal }
-      })
-      entry.items = scored
-      entry.usage = {
-        at: Date.now(),
-        signal: scored.some((item) => item.usage === 'likely_used') ? 'likely_used' : 'no_overlap',
-      }
-      store.recallLog[index] = entry
-      state.save()
-      return
-    }
+    const [entry] = readRecallJournal(1)
+    if (!entry) return
+    const at = Number(entry.at ?? 0)
+    // Only the reply that follows the recall belongs to it; anything older is a
+    // different turn and scoring it would attribute usage wrongly.
+    if (!at || Date.now() - at > RECALL_USAGE_WINDOW_MS) return
+    if (readRecallUsage()?.at === at) return
+    const items = (entry.items ?? []).map((item) => {
+      const text = String(item.preview ?? item.content ?? '')
+      const result = scoreRecallUsage(text, replyText)
+      return { id: item.id, signal: result.signal }
+    })
+    writeRecallUsage(at, {
+      signal: items.some((item) => item.signal === 'likely_used') ? 'likely_used' : 'no_overlap',
+      items,
+    })
   }
 
   function sessionEvent(session, event) {
@@ -841,44 +835,24 @@ function createRuntime(ctx, config) {
           memoryContext.lastSource = info?.source ?? 'semantic'
           if (info?.source === 'lexical' || info?.source === 'both') memoryContext.lexicalTurns = (memoryContext.lexicalTurns ?? 0) + 1
           memoryContext.turns = (memoryContext.turns ?? 0) + 1
-          const store = state?.data
-          if (store && Array.isArray(info?.entries) && info.entries.length > 0) {
-            if (!Array.isArray(store.recallLog)) store.recallLog = []
-            store.recallLog.push({
+          // Written to a journal, not state.json: the panel runs in a different
+          // plugin instance, and the capture instance's frequent state saves
+          // overwrite anything recall puts there.
+          if (Array.isArray(info?.entries) && info.entries.length > 0) {
+            appendRecall({
               at: Date.now(),
-              query: String(info.query ?? '').slice(0, 200),
-              text: String(info.text ?? '').slice(0, 4000),
-              source: info.source ?? 'semantic',
+              query: info.query,
+              text: info.text,
+              source: info.source,
               items: info.entries,
             })
-            if (store.recallLog.length > 50) store.recallLog.splice(0, store.recallLog.length - 50)
-            state.save()
           }
           memoryContext.lastAt = Date.now()
           memoryContext.totalTokens += tokens
           memoryContext.totalItems += info?.items ?? 0
           // Persist the running totals: the panel showed zeros after every
           // reload, which read as a bug rather than an empty window.
-          const usageStore = state?.data
-          if (usageStore) {
-            const previous = usageStore.recallUsage && typeof usageStore.recallUsage === 'object'
-              ? usageStore.recallUsage
-              : { turns: 0, items: 0, tokens: 0, lexical: 0 }
-            usageStore.recallUsage = {
-              turns: (previous.turns ?? 0) + 1,
-              items: (previous.items ?? 0) + (info?.items ?? 0),
-              tokens: (previous.tokens ?? 0) + tokens,
-              lexical: (previous.lexical ?? 0) + (info?.source === 'lexical' || info?.source === 'both' ? 1 : 0),
-              lastAt: Date.now(),
-            }
-            usageStore.recallUsageByDay = addToDay(usageStore.recallUsageByDay, {
-              turns: 1,
-              items: info?.items ?? 0,
-              tokens,
-              lexical: info?.source === 'lexical' || info?.source === 'both' ? 1 : 0,
-            })
-            state.save()
-          }
+
         },
       })
       capture = createCapture({

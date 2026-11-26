@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { MemHubError, detectPairing } from './memhub.js'
 import { runMaintenance } from './maintenance.js'
+import { readRecallJournal, readRecallStats, readRecallUsage } from './recall-journal.js'
 import { installRelease } from './updater.js'
 import { projectAgentId, resolveUser } from './tiers.js'
 import { MemoryRequestError, MemoryUnavailableError } from './tools.js'
@@ -125,6 +126,12 @@ export function createPanelApi(deps) {
   const recoverProjects = typeof deps.recoverProjects === 'function' ? deps.recoverProjects : null
   const readProjectIndex = typeof deps.readProjectIndex === 'function' ? deps.readProjectIndex : () => ({})
   const onSettingsChange = deps.onSettingsChange ?? (() => {})
+  // Injected so tests never touch the real journal file on disk.
+  const recallJournal = deps.recallJournal ?? {
+    read: (limit) => readRecallJournal(limit),
+    stats: () => readRecallStats(),
+    usage: () => readRecallUsage(),
+  }
 
   function contextOfRequest(body) {
     const base = typeof contextOf === 'function' ? contextOf() : {}
@@ -248,19 +255,20 @@ export function createPanelApi(deps) {
         }
       })(),
       context: (() => {
+        // Read the journal stats, not this process's counters: recall runs in the
+        // session runtime while this handler is served by another plugin
+        // instance, so the in-process counters here are always zero.
+        const stats = recallJournal.stats()
         const usage = contextUsage()
-        const persisted = state?.data?.recallUsage ?? null
-        if (!usage && !persisted) return null
-        // Persisted totals survive a reload; the in-process counters are the
-        // same numbers during one process, so either source is safe to report.
+        if (!stats && !usage) return null
         return {
-          memoryTokens: usage?.lastTokens ?? 0,
-          memoryItems: usage?.lastItems ?? 0,
-          lastAt: usage?.lastAt ?? persisted?.lastAt ?? 0,
-          totalTokens: persisted?.tokens ?? usage?.totalTokens ?? 0,
-          totalItems: persisted?.items ?? usage?.totalItems ?? 0,
-          lexicalTurns: persisted?.lexical ?? usage?.lexicalTurns ?? 0,
-          turns: persisted?.turns ?? usage?.turns ?? 0,
+          memoryTokens: stats?.last?.tokens ?? usage?.lastTokens ?? 0,
+          memoryItems: stats?.last?.items ?? usage?.lastItems ?? 0,
+          lastAt: stats?.last?.at ?? usage?.lastAt ?? 0,
+          totalTokens: stats?.tokens ?? usage?.totalTokens ?? 0,
+          totalItems: stats?.items ?? usage?.totalItems ?? 0,
+          lexicalTurns: stats?.lexical ?? usage?.lexicalTurns ?? 0,
+          turns: stats?.turns ?? usage?.turns ?? 0,
         }
       })(),
       // Last daily maintenance pass: how many exact duplicates were merged.
@@ -272,7 +280,7 @@ export function createPanelApi(deps) {
       usageDays: await (async () => {
         const { recentDays } = await import('./usage.js')
         return {
-          days: recentDays(state?.data?.recallUsageByDay, 7).map((row) => ({
+          days: recentDays(recallJournal.stats()?.byDay, 7).map((row) => ({
             day: row.day,
             turns: row.turns ?? 0,
             items: row.items ?? 0,
@@ -545,23 +553,22 @@ export function createPanelApi(deps) {
       case 'forget':
         return jsonResponse(await ops.forget({ id: body?.id }))
       case 'explained': {
-        const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []
         const ids = new Set()
-        for (const entry of log) for (const item of entry.items ?? []) if (item.id) ids.add(item.id)
+        for (const entry of recallJournal.read(200)) for (const item of entry.items ?? []) if (item.id) ids.add(item.id)
         return jsonResponse({ ids: [...ids] })
       }
       case 'purge':
         return jsonResponse(await ops.purge({ confirm: body?.confirm }))
       case 'injected': {
         const at = Number(body?.at)
-        const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []
-        const entry = log.find((candidate) => candidate.at === at)
+        const entry = recallJournal.read(200).find((candidate) => candidate.at === at)
         if (!entry) return jsonResponse({ found: false })
         return jsonResponse({ found: true, at: entry.at, query: entry.query, source: entry.source, text: entry.text ?? '' })
       }
       case 'explain': {
         const id = String(body?.id ?? '')
-        const log = Array.isArray(state?.data?.recallLog) ? state.data.recallLog : []
+        const usage = recallJournal.usage()
+        const log = recallJournal.read(200)
         for (let index = log.length - 1; index >= 0; index -= 1) {
           const entry = log[index]
           const hit = (entry.items ?? []).find((item) => item.id === id)
@@ -575,7 +582,9 @@ export function createPanelApi(deps) {
               score: hit.score,
               rank: hit.rank,
               // Heuristic evidence, not a claim: see src/recall-usage.js.
-              usage: hit.usage ?? null,
+              usage: usage && Number(usage.at) === Number(entry.at)
+                ? (Array.isArray(usage.items) ? (usage.items.find((item) => item.id === id)?.signal ?? usage.signal ?? null) : usage.signal ?? null)
+                : null,
             })
           }
         }
