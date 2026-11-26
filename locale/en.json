@@ -243,7 +243,7 @@
   "usage.title": "Usage",
   "usage.modelLine": "Memory engine model: {model}",
   "usage.recalls": "Recalls",
-  "usage.recallsHint": "this process",
+  "usage.recallsHint": "total injections",
   "usage.items": "Items injected",
   "usage.itemsHint": "cumulative",
   "usage.tokens": "Injected tokens",
