@@ -301,3 +301,34 @@ test('turning personal writes off also removes the policy', async () => {
   )
   assert.equal(out.messages.filter((m) => m.source?.tier === 'policy').length, 0)
 })
+
+test('an injected memory reaches the onInjected callback', async () => {
+  // Regression: `createRecall` read every dependency except this one, and
+  // `typeof <unbound> === 'function'` is simply false, so injection worked while
+  // every counter and journal entry silently never happened.
+  const seen = []
+  const client = {
+    bridgeSearch: async () => ({
+      memories: { normal: [{ memory_id: 'm1', content: 'the build uses pnpm workspaces', session_id: 's1', score: 0.9 }] },
+    }),
+  }
+  const recall = createRecall({
+    settings: () => ({ enabled: true, recall: { enabled: true, maxItems: 5, maxChars: 1200, minScore: 0.5 } }),
+    activity: { record() {} },
+    getClient: () => client,
+    warmClient: async () => client,
+    contextOf: () => ({ user: 'dsh', projectKey: 'p1', sessionId: 's1', projectPath: '/tmp' }),
+    log: () => {},
+    onInjected: (info) => seen.push(info),
+  })
+  const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'what package manager does the build use?' }], source: { kind: 'user' } }]
+  const out = await recall.handlePreStep(
+    { agent: { session: { id: 's1', header: { cwd: '/tmp' } } }, messages, turn: 1, step: 1 },
+    async () => ({ kind: 'proceed', messages }),
+  )
+  assert.equal(seen.length, 1, 'the callback fires exactly once')
+  assert.equal(seen[0].items, 1, 'it reports how many memories went in')
+  assert.ok(Array.isArray(seen[0].entries) && seen[0].entries.length === 1, 'it carries the injected entries')
+  assert.match(seen[0].entries[0].preview, /pnpm workspaces/, 'each entry carries a preview for usage scoring')
+  assert.ok(out.messages.length > messages.length, 'the memory message is still injected')
+})

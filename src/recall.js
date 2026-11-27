@@ -373,6 +373,10 @@ export function createRecall(deps) {
   const warmClient = deps.warmClient
   const log = deps.log ?? (() => {})
   const contextOf = deps.contextOf
+  // Must be read out of deps: an unbound name here made `typeof onInjected`
+  // evaluate to "undefined", so every caller's callback was skipped silently
+  // while injection itself kept working.
+  const onInjected = typeof deps.onInjected === 'function' ? deps.onInjected : null
   const injectedTurn = new Map()
   // Sessions that already received the standing personal-write instruction.
   const instructedSession = new Set()
